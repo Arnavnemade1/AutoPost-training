@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forge-training-core"
+version = "0.1.0"
+description = "Reproducible, bounded LoRA training and development evaluation for Forge"
+requires-python = ">=3.11"
+dependencies = ["pydantic==2.12.3"]
+
+[project.optional-dependencies]
+train = [
+  "torch==2.9.0",
+  "transformers==4.57.1",
+  "peft==0.17.1",
+  "accelerate==1.11.0",
+  "tokenizers==0.22.1",
+  "numpy==2.3.4",
+]
+data = ["datasets==4.3.0"]
+test = ["pytest==8.4.2", "ruff==0.14.3"]
+
+[project.scripts]
+forge-train = "forge_training.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: executes real PyTorch optimization and checkpoint reload"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
