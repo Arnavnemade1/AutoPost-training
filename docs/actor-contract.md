@@ -1,14 +1,15 @@
-# Phase 2 actor integration contract
+# Actor integration contract
 
 The implementation is `packages/terse-actors/`. Schemas in `src/contracts.ts` and
-actual RPC scenarios in `tests/integration.test.ts` are executable references.
+actual RPC scenarios in `tests/integration.test.ts` and `tests/workflow.test.ts` are
+executable references.
 All write methods use Terse `@Atomic`, and every mutation assigns a new persisted
 state value. Failed commands do not advance events, receipts, budgets or versions.
 Actors do not opt into interleaved execution.
 
 ## Identity and request envelope
 
-Use campaign ID as the campaign, governance and registry actor ID. Create experiment
+Use campaign ID as the campaign, governance, registry and workflow actor ID. Create experiment
 and world IDs using `scopedId("exp" | "world", campaignId, label)` from `src/core.ts`.
 This binds resource namespaces to campaigns even when labels are reused. IDs contain
 only letters, digits, dots, underscores and hyphens. Labels are at most 40 characters.
@@ -64,8 +65,8 @@ before dispatch; automatic generation is convenient for interactive use only.
 
 A worker failure becomes retryable until its attempt cap, then failed. A worker
 that disappears stays running with an expired lease until reacquired or aborted;
-Phase 3 reconciliation must discover it. Retry/runtime exhaustion can be recovered
-by coordinator abort and settlement. No reservation releases itself on a timeout.
+Phase 3 reconciliation reports it as an expired lease. Retry/runtime exhaustion can be
+recovered by coordinator abort and settlement. No reservation releases itself on a timeout.
 This prevents delayed workers from spending a released reservation.
 
 Campaign-to-experiment/governance/registry reads are acyclic. Experiments validate
@@ -113,16 +114,46 @@ and a new state version. Use fresh action IDs in a fork. Never count inherited
 trajectory entries as newly earned rewards. Tasks and snapshots can only be changed
 by the data role. Current worlds are not connected to a GRPO optimizer.
 
-## Events and next integration
+## Workflow outbox and preflight (Phase 3)
+
+`ResearchWorkflowActor` persists every inter-role message before transport. A queued
+message has a campaign-unique, immutable message ID, a causal `sequence`, the sender's
+key ID, and a fixed route. Routes are not caller-selected:
+
+| Kind | Sender → recipient | Created by |
+| --- | --- | --- |
+| `RESEARCH_ASSIGNMENT`, `CORRECTION` | director → data | `publish` |
+| `EXPERIMENT_PROPOSAL` | data → director | `publish` |
+| `REVIEW_REQUEST` | director → reviewer | `publish` |
+| `PREFLIGHT_REVIEWED` | reviewer → coordinator | `review` (terminal per experiment) |
+| `TRAINING_ASSIGNMENT` | coordinator → worker | `assign` (one per experiment) |
+| `TRAINING_COMPLETED` | worker → evaluator | `publish` |
+| `EVALUATION_COMPLETED` | evaluator → reviewer | `publish` |
+| `CHECKPOINT_REVIEWED` | reviewer → director | `publish` |
+
+`assign` requires a valid reservation grant and an approved preflight review bound to
+the grant's configuration hash. A campaign initialized with `requirePreflight: true`
+issues grants that make `acquireLease` read `getAuthorization` from the workflow actor:
+a worker cannot claim compute until a matching approved assignment exists. Experiment
+reads workflow; workflow never calls other actors, so actor reads remain acyclic.
+
+Only the coordinator records `markSent` with a Relay message ID; a different ID for
+the same message fails with `DELIVERY_CONFLICT`. Only the recipient role acknowledges,
+and only after a send is recorded. A sent or acknowledged message is not evidence
+that work happened: recipients verify the experiment, registry and run artifacts.
+The outbox holds at most 2,000 messages per campaign.
+
+## Events and integration
 
 `getEvents(afterSequence, limit)` reads up to 100 committed events; sequences start
 at 1, monotonically increasing per actor. Every event has a stable event ID,
 campaign/actor IDs, sequence, timestamp, type and payload. There is no global event
 ordering. Poll/reconcile from persisted cursors and deduplicate by event ID.
 
-Phase 3 should add durable dispatch/outbox records and actual Agent Relay delivery,
-then a worker adapter that translates the Phase 1 Python evidence into these actor
-schemas. Pin source artifact bytes and report hashes; do not manufacture evidence
-from console text. A reservation is not a launch, an RPC reply is not a training
-result, and a Relay message is not authoritative state. Reconcile from stored actor
-status after lost messages, worker restarts and late artifact arrival.
+`services/orchestrator/` sends outbox messages through Agent Relay and reconciles
+them; see its README and the [Phase 3 verification](verification/phase3-local.md).
+Its worker adapter translates Phase 1 Python evidence into these actor schemas from
+stored artifact bytes and hashes, never from console text. A reservation is not a
+launch, an RPC reply is not a training result, and a Relay message is not authoritative
+state. Reconcile from stored actor status after lost messages, worker restarts and
+late artifact arrival.

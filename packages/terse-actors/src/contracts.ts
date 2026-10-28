@@ -3,6 +3,7 @@ import { z } from "zod";
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Document = { [key: string]: Json };
 export type ActorName =
+  | "ResearchWorkflowActor"
   | "ResearchCampaignActor"
   | "ExperimentActor"
   | "GovernanceActor"
@@ -45,6 +46,7 @@ export const baselineSchema = z
   })
   .refine((value) => value.numCorrect <= value.numExamples, "Invalid baseline counts");
 export const campaignSchema = z.strictObject({
+  requirePreflight: z.boolean().optional(),
   objective: z.string().min(1).max(2000),
   model,
   benchmark: z.string().min(1).max(100),
@@ -75,6 +77,7 @@ export const proposalSchema = z.strictObject({
 });
 export type Proposal = z.infer<typeof proposalSchema>;
 export const grantClaimsSchema = z.strictObject({
+  requirePreflight: z.boolean().optional(),
   version: z.literal(1),
   projectId: id,
   campaignId: id,

@@ -1,9 +1,9 @@
 # Forge durable coordination
 
-Phase 2 implements five actors on **Terse `durable-actors@0.14.0`**, with real native
-runtime integration tests. It does not yet dispatch Python training jobs or Relay
-messages. The mathematical environment produces rewards; it is not wired to an RL
-optimizer until Phase 6.
+Six actors on **Terse `durable-actors@0.14.0`**, with real native runtime integration
+tests. Phase 2 built five; Phase 3 added `ResearchWorkflowActor`, the durable outbox
+that `services/orchestrator/` delivers through Agent Relay. The mathematical
+environment produces rewards; it is not wired to an RL optimizer until Phase 6.
 
 ## Run
 
@@ -23,10 +23,10 @@ npm test
 npm run demo
 ```
 
-`generate` produces five SDK contracts under ignored `artifacts/generated/`.
+`generate` produces six SDK contracts under ignored `artifacts/generated/`.
 `test` starts an actual native server, calls its HTTP RPC API, kills it with SIGKILL,
-and restarts against the same persistent directory. Tests run serially; the
-integration file is an ordered lifecycle scenario. The demo reserves a budget,
+and restarts against the same persistent directory. Tests run serially; each
+test file is an ordered lifecycle scenario. The demo reserves a budget,
 scores a hand-authored math answer, crashes/restarts, replays the answer, and aborts
 and settles unused compute. Its JSON explicitly labels it a coordination fixture:
 no optimizer runs and no model gain is claimed. Temporary state is deleted on
@@ -41,6 +41,7 @@ normal exit. No signing keys or server secrets are printed.
 | `GovernanceActor` | Immutable objective/policy binding; separately signed, terminal approval or rejection for each checkpoint hash |
 | `ArtifactRegistryActor` | Immutable checksum, URI, provenance and size references, with role restrictions on artifact kinds |
 | `RLWorldActor` | Deterministic decimal answer scoring, integer calculator, versioned actions, duplicate receipts, bounded trajectories and snapshot forks |
+| `ResearchWorkflowActor` | Durable outbox with fixed role routes and causal order; Relay delivery receipts and recipient acknowledgements; terminal preflight reviews; one training assignment per experiment, required by `acquireLease` when the campaign sets `requirePreflight` |
 
 [The integration contract](../../docs/actor-contract.md) describes permissions,
 recovery and next-phase responsibilities. `src/contracts.ts` contains strict Zod

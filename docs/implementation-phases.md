@@ -11,7 +11,7 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after Phase 2
+## Current status after Phase 3
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
@@ -21,9 +21,14 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
 - Phase 2: five real Terse actors, signed roles, serialized budgets, fenced worker
   leases, evidence-gated promotion and deterministic math worlds. Native RPC and
   forced crash/restart verified with 13 tests and a runnable coordination demo.
-- Phases 3–8: planned; no Relay/worker dispatch or autonomous campaign claimed.
-- Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phase 2
-  includes a separate scoped CI workflow; see its verification record for run status.
+- Phase 3: a sixth Terse actor holds the durable outbox and preflight gate; real Agent
+  Relay messages (SDK 14.0.0, local Relaycast engine 12.0.0) dispatch scripted role
+  handlers that drive real tiny-model optimization. Duplicate, forged, lost and
+  post-crash deliveries plus Relay/Terse SIGKILL restarts are verified locally (17 actor
+  tests, 4 end-to-end orchestrator tests). Role decisions are scripted, not autonomous.
+- Phases 4–8: planned; no autonomous experiment selection or campaign is claimed.
+- Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
+  have separate scoped CI workflows; see their verification records for run status.
 
 ## Collaboration boundaries
 
@@ -58,7 +63,8 @@ Initial findings:
   assuming compatibility with newer major releases. Inspect installed signatures
   and execute a real optimization/reload smoke test.
 - Agent Relay's unversioned introduction and versioned 7.1.1 messaging pages describe
-  different interfaces. Select and test one version before integration.
+  different interfaces. Phase 3 selected npm `@agent-relay/sdk@14.0.0` and tested it
+  against `@relaycast/engine@12.0.0` locally; a hosted Relay workspace is unverified.
 - Terse has active lifecycle changes upstream. Persistence and serialized execution
   must be tested using the selected installed version.
 - The event page was not readable through the documentation fetch. Event rules,
@@ -102,8 +108,7 @@ alongside Phase 1.
 
 Implemented under `packages/terse-actors/`. [Actor contract](actor-contract.md) and
 [local verification](verification/phase2-local.md) describe tested behavior and
-limits. The next workstream is Phase 3: actual Relay dispatch, durable delivery
-reconciliation and a worker adapter to the Phase 1 training/evaluation evidence.
+limits. Phase 3 added Relay dispatch, delivery reconciliation and the worker adapter.
 
 ## Phase 3 — Synchronized research agents through Agent Relay
 
@@ -116,6 +121,13 @@ Gate: an actual Relay assignment causes authorized work, duplicate messages caus
 one job, early completion remains discoverable, reconnect recovers pending work.
 
 Suggested owner: orchestration/Relay workstream. Depends on Phase 2 state interface.
+
+Implemented under `services/orchestrator/` with `ResearchWorkflowActor` in
+`packages/terse-actors/`. The [actor contract](actor-contract.md) describes the
+outbox, and [local verification](verification/phase3-local.md) records each gate
+check, injected fault and limitation. Gates were met locally against a loopback
+Relaycast engine, not a hosted Relay workspace. Role handlers are scripted; Phase 4
+replaces the director's fixed choices with evidence-driven selection.
 
 ## Phase 4 — Evidence-driven autonomous experiment selection
 
@@ -190,4 +202,6 @@ readiness precedes its corresponding gate.
 - [Established GSM8K harness task](https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml)
 - [Terse source and issues](https://github.com/TerseAI/durable-actors)
 - [Agent Relay versioned messaging](https://agentrelay.com/docs/7.1.1/sending-messages)
+- [Agent Relay SDK source](https://github.com/AgentWorkforce/relay) and
+  [Relaycast engine source](https://github.com/AgentWorkforce/relaycast)
 - [Event](https://events.ycombinator.com/haunted-hacks-2026)

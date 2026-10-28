@@ -1,9 +1,9 @@
 # Forge architecture
 
 The system separates research decisions, authoritative state, compute, and independent
-verification. The training core and durable actor boundaries are implemented and
-tested independently. This is the target architecture; Relay, worker dispatch,
-independent evidence verification and the UI remain future integrations.
+verification. The training core, durable actors and Relay dispatch to the worker are
+implemented and tested locally. This is the target architecture; autonomous research
+selection, independent evidence verification and the UI remain future integrations.
 
 ```mermaid
 flowchart TD
@@ -39,8 +39,8 @@ flowchart TD
 | Boundary | Location | Responsibility |
 | --- | --- | --- |
 | Training worker | `services/training-core/` | Implemented Python package; pinned models/data, bounded SFT LoRA, development diagnostics, real metrics, artifacts |
-| Research orchestration | `services/orchestrator/` (planned) | Typed director/strategy calls, Relay transport, durable dispatch/reconciliation |
-| Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world and registry actors; [integration contract](actor-contract.md) |
+| Research orchestration | `services/orchestrator/` | Implemented Relay transport, durable dispatch/reconciliation and worker adapter; typed director/strategy calls planned |
+| Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry and workflow-outbox actors; [integration contract](actor-contract.md) |
 | Common contracts | `packages/contracts/` (planned) | Versioned actor/message/event schemas; consume worker-generated JSON Schema |
 | Independent evaluation | `services/evaluator/` (planned) | Established benchmark harness, regression suite, protected final evaluation |
 | Research interface | `apps/web/` (planned) | Research graph, metrics, environments, artifacts, governance, recording state |
@@ -61,8 +61,8 @@ stale worker cannot complete or charge a superseded attempt. Completion is idemp
 Strategy changes create new experiments rather than mutating a running job.
 
 Phase 2 implements signed role-scoped commands, durable receipts and events, and
-authenticated reservation grants. It does not yet implement dispatch/outbox delivery
-or actual worker execution. Campaign RPC reads experiment, registry and governance
+authenticated reservation grants. Phase 3 adds the workflow outbox, Relay delivery
+with reconciliation, a preflight gate on worker leases, and actual worker execution. Campaign RPC reads experiment, registry and governance
 state; those actors never call back into campaigns. Promotion uses immutable
 terminal records to avoid cross-actor evidence changing during its validation.
 

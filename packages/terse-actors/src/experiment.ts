@@ -10,6 +10,7 @@ import {
   type SignedRequest,
 } from "./contracts.js";
 import {
+  actorRead,
   authorize,
   commit,
   digest,
@@ -92,6 +93,23 @@ export class ExperimentActor extends Actor {
     const previous = duplicate(this.state, auth);
     if (previous) return previous;
     scope(this.state, request.campaignId);
+    if (this.state.grant!.claims.requirePreflight) {
+      const approval = z
+        .object({ approved: z.literal(true), configSha256: z.string() })
+        .safeParse(
+          await actorRead("ResearchWorkflowActor", request.campaignId, "getAuthorization", [
+            this.id,
+          ]),
+        );
+      if (
+        !approval.success ||
+        approval.data.configSha256 !== this.state.grant!.claims.proposal.configSha256
+      )
+        fail(
+          "PREFLIGHT_REQUIRED",
+          "A matching reviewed workflow assignment is required before acquiring compute",
+        );
+    }
     const claims = this.state.grant!.claims,
       now = Date.now();
     if (!["ready", "running", "retryable"].includes(this.state.status))

@@ -123,6 +123,7 @@ export class ResearchCampaignActor extends Actor {
       fail("CONCURRENCY_LIMIT", "All experiment slots are reserved");
     }
     const grant = signGrant({
+      ...(spec.requirePreflight ? { requirePreflight: true } : {}),
       version: 1,
       projectId: request.projectId,
       campaignId: this.id,

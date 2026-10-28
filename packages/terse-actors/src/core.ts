@@ -54,6 +54,7 @@ const envelopeSchema = z.strictObject({
   version: z.literal(1),
   projectId: id,
   actorName: z.enum([
+    "ResearchWorkflowActor",
     "ResearchCampaignActor",
     "ExperimentActor",
     "GovernanceActor",
