@@ -42,6 +42,13 @@ def start(name, cmd, url):
     raise TimeoutError(f"{name} did not become ready")
 
 
+def stop(_signal, _frame):
+    raise KeyboardInterrupt
+
+
+signal.signal(signal.SIGTERM, stop)
+
+
 try:
     start(
         "terse",
@@ -64,13 +71,9 @@ try:
         "relaycast",
         [
             "node",
-            "node_modules/@relaycast/engine/dist/bin/serve.js",
-            "--port",
-            "7528",
-            "--db",
+            "services/relay/server.mjs",
             "data/relaycast.db",
-            "--env",
-            "test",
+            "7528",
         ],
         "http://127.0.0.1:7528",
     )

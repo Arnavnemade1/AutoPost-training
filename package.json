@@ -10,17 +10,22 @@
     "start": "next start --hostname 127.0.0.1 --port 3000",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
+    "test:relay": "node scripts/check-relay.mjs",
     "test": ".venv/bin/python -m pytest tests -q",
     "lab": ".venv/bin/python scripts/lab.py",
     "format:check": "prettier --check 'app/**/*.{ts,tsx,css}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' next.config.ts"
   },
   "dependencies": {
+    "@hono/node-server": "2.1.3",
     "@agent-relay/sdk": "14.0.0",
     "@relaycast/engine": "8.10.1",
     "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
+  },
+  "overrides": {
+    "@hono/node-server": "2.1.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
