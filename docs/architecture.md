@@ -2,8 +2,9 @@
 
 The system separates research decisions, authoritative state, compute, and independent
 verification. The training core, durable actors and Relay dispatch to the worker are
-implemented and tested locally. This is the target architecture; autonomous research
-selection, independent evidence verification and the UI remain future integrations.
+implemented and tested locally, including deterministic evidence-driven experiment
+selection. This is the target architecture; independent evidence verification, GRPO and
+the UI remain future integrations.
 
 ```mermaid
 flowchart TD
@@ -39,8 +40,8 @@ flowchart TD
 | Boundary | Location | Responsibility |
 | --- | --- | --- |
 | Training worker | `services/training-core/` | Implemented Python package; pinned models/data, bounded SFT LoRA, development diagnostics, real metrics, artifacts |
-| Research orchestration | `services/orchestrator/` | Implemented Relay transport, durable dispatch/reconciliation and worker adapter; typed director/strategy calls planned |
-| Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry and workflow-outbox actors; [integration contract](actor-contract.md) |
+| Research orchestration | `services/orchestrator/` | Implemented Relay transport, durable dispatch/reconciliation, worker adapter and deterministic evidence-driven director; model-backed proposals optional/planned |
+| Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry, workflow-outbox and research-ledger actors; [integration contract](actor-contract.md) |
 | Common contracts | `packages/contracts/` (planned) | Versioned actor/message/event schemas; consume worker-generated JSON Schema |
 | Independent evaluation | `services/evaluator/` (planned) | Established benchmark harness, regression suite, protected final evaluation |
 | Research interface | `apps/web/` (planned) | Research graph, metrics, environments, artifacts, governance, recording state |
@@ -55,8 +56,10 @@ send/retry from an outbox, acknowledge receipt, and reconcile against authoritat
 experiment status. A sent message does not prove a job started or finished.
 
 The director chooses proposals using development evidence and declared stopping
-rules. Workers accept immutable, validated specs only after proposal approval and
-an atomic compute reservation. Worker leases use a generation/fencing token so a
+rules, and records diagnoses, hypotheses, decisions and rejected alternatives in the
+research ledger, which verifies cited evidence against actor state (Phase 4). Workers
+accept immutable, validated specs only after proposal approval and an atomic compute
+reservation. Worker leases use a generation/fencing token so a
 stale worker cannot complete or charge a superseded attempt. Completion is idempotent.
 Strategy changes create new experiments rather than mutating a running job.
 

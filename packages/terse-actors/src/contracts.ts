@@ -3,6 +3,7 @@ import { z } from "zod";
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Document = { [key: string]: Json };
 export type ActorName =
+  | "ResearchLedgerActor"
   | "ResearchWorkflowActor"
   | "ResearchCampaignActor"
   | "ExperimentActor"

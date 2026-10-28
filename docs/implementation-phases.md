@@ -11,7 +11,7 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after Phase 3
+## Current status after Phase 4
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
@@ -25,10 +25,15 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   Relay messages (SDK 14.0.0, local Relaycast engine 12.0.0) dispatch scripted role
   handlers that drive real tiny-model optimization. Duplicate, forged, lost and
   post-crash deliveries plus Relay/Terse SIGKILL restarts are verified locally (17 actor
-  tests, 4 end-to-end orchestrator tests). Role decisions are scripted, not autonomous.
-- Phases 4–8: planned; no autonomous experiment selection or campaign is claimed.
+  tests, 4 end-to-end orchestrator tests).
+- Phase 4: a deterministic director and a seventh actor, the evidence-checked research
+  ledger. A real Qwen2.5-0.5B campaign chose each next experiment from measured
+  development results with no human selection: 0/16 baseline, then 3/16 and 4/16,
+  then 6/16 for the selected recipe; a further revision scored 4/16 and stopped it.
+  This is a 16-example custom-scorer diagnostic, not a benchmark result.
+- Phases 5–8: planned; no governance approval, promotion or final evaluation claimed.
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
-  have separate scoped CI workflows; see their verification records for run status.
+  CI passed on `3f03a63`; Phase 4 runs in the same scoped workflows.
 
 ## Collaboration boundaries
 
@@ -141,6 +146,13 @@ Gate: a measured result changes a later decision without a human selecting the n
 experiment. A fixed sequence or cosmetic agent conversation does not satisfy this.
 
 Suggested owner: research-director workstream. Depends on Phases 1–3.
+
+Implemented as `ResearchLedgerActor` in `packages/terse-actors/` and the director,
+recipes and campaign loop in `services/orchestrator/`. The director is rule-based; its
+structured decisions could come from a model later, but execution stays authorized by
+deterministic reviewer and campaign checks. See the [actor contract](actor-contract.md)
+and [local verification](verification/phase4-local.md), including the real Qwen
+campaign, its uncertainty and its limits.
 
 ## Phase 5 — Independent enforceable governance
 

@@ -1,9 +1,11 @@
 # Forge durable coordination
 
-Six actors on **Terse `durable-actors@0.14.0`**, with real native runtime integration
+Seven actors on **Terse `durable-actors@0.14.0`**, with real native runtime integration
 tests. Phase 2 built five; Phase 3 added `ResearchWorkflowActor`, the durable outbox
-that `services/orchestrator/` delivers through Agent Relay. The mathematical
-environment produces rewards; it is not wired to an RL optimizer until Phase 6.
+that `services/orchestrator/` delivers through Agent Relay; Phase 4 added
+`ResearchLedgerActor`, the evidence-checked record of research decisions. The
+mathematical environment produces rewards; it is not wired to an RL optimizer until
+Phase 6.
 
 ## Run
 
@@ -23,7 +25,7 @@ npm test
 npm run demo
 ```
 
-`generate` produces six SDK contracts under ignored `artifacts/generated/`.
+`generate` produces seven SDK contracts under ignored `artifacts/generated/`.
 `test` starts an actual native server, calls its HTTP RPC API, kills it with SIGKILL,
 and restarts against the same persistent directory. Tests run serially; each
 test file is an ordered lifecycle scenario. The demo reserves a budget,
@@ -42,6 +44,7 @@ normal exit. No signing keys or server secrets are printed.
 | `ArtifactRegistryActor` | Immutable checksum, URI, provenance and size references, with role restrictions on artifact kinds |
 | `RLWorldActor` | Deterministic decimal answer scoring, integer calculator, versioned actions, duplicate receipts, bounded trajectories and snapshot forks |
 | `ResearchWorkflowActor` | Durable outbox with fixed role routes and causal order; Relay delivery receipts and recipient acknowledgements; terminal preflight reviews; one training assignment per experiment, required by `acquireLease` when the campaign sets `requirePreflight` |
+| `ResearchLedgerActor` | Director-only, append-only diagnoses, hypotheses, decisions and stop rules; verifies cited baseline, evaluation and failure evidence against actor state; one launching decision per experiment; closed by a stop entry |
 
 [The integration contract](../../docs/actor-contract.md) describes permissions,
 recovery and next-phase responsibilities. `src/contracts.ts` contains strict Zod
@@ -78,7 +81,7 @@ future work. Stopping a campaign blocks new work; the coordinator must abort act
 experiments and stop external compute before settling them.
 
 State is deliberately bounded (10,000 journal entries per actor, 4,000 registry
-artifacts, 1,000 world episodes, 32 snapshots, 32 steps per episode). Plan new actors
-before exhausting capacity. Journal compaction, production backups, cancellation of
+artifacts, 1,000 ledger entries, 1,000 world episodes, 32 snapshots, 32 steps per
+episode). Plan new actors before exhausting capacity. Journal compaction, production backups, cancellation of
 external workers, live billing, sealed evaluation, and resumable optimization remain
 separate integrations. This package never stores model weights in actor state.

@@ -105,6 +105,7 @@ export async function prepareJob(
   configPath: string,
   baselinePath: string,
   evaluatorDir: string,
+  timeoutMs = 180000,
 ): Promise<TrainingJob> {
   const validated = await pythonJson(python, [
     "-m",
@@ -114,23 +115,17 @@ export async function prepareJob(
     configPath,
   ]);
   if (!(await exists(baselinePath)))
-    await pythonJson(python, [
-      "-m",
-      "forge_training",
-      "evaluate",
-      "--config",
-      configPath,
-      "--output",
-      baselinePath,
-    ]);
+    await pythonJson(
+      python,
+      ["-m", "forge_training", "evaluate", "--config", configPath, "--output", baselinePath],
+      { timeoutMs },
+    );
   const config = validated.config as Document;
   const baseline = await readJson(baselinePath);
-  if (
-    baseline.campaign_id !== config.campaign_id ||
-    baseline.experiment_id !== config.experiment_id ||
-    baseline.checkpoint_sha256 !== null
-  )
-    throw new Error("Baseline does not belong to this configuration");
+  // One frozen baseline serves every experiment of a campaign; protocol equality is
+  // checked against each run's own baseline evaluation in `evidence`.
+  if (baseline.campaign_id !== config.campaign_id || baseline.checkpoint_sha256 !== null)
+    throw new Error("Baseline does not belong to this campaign's untrained model");
   return {
     jobId,
     configPath,
@@ -157,10 +152,15 @@ export class TrainingBridge {
   constructor(
     readonly python: string,
     readonly dispatcher: RelayDispatcher,
+    readonly timeouts = { runMs: 420000, evaluationMs: 300000 },
   ) {}
   register(job: TrainingJob): void {
     if (this.jobs.has(job.jobId)) throw new Error("Job ID is immutable");
     this.jobs.set(job.jobId, structuredClone(job));
+  }
+  get(jobId: string): TrainingJob | undefined {
+    const job = this.jobs.get(jobId);
+    return job && structuredClone(job);
   }
   private job(message: WorkflowMessage): TrainingJob {
     const job = this.jobs.get(String(message.body.jobId));
@@ -187,6 +187,7 @@ export class TrainingBridge {
       { campaignId, actors } = this.dispatcher;
     const state = await this.snapshot(actors.worker, message.experimentId);
     if (state.grantId !== message.body.grantId) throw new Error("GRANT_MISMATCH");
+    if (state.status === "failed") throw new Error("EXPERIMENT_FAILED: no attempts remain");
     const proposal = state.proposal as Document;
     if (proposal.configSha256 !== job.configSha256) throw new Error("CONFIG_MISMATCH");
     const model = job.config.model as Document;
@@ -282,7 +283,7 @@ export class TrainingBridge {
           throw new Error("DATASET_MISMATCH");
         await pythonJson(this.python, ["-m", "forge_training", "run", "--config", job.configPath], {
           signal: abort.signal,
-          timeoutMs: 420000,
+          timeoutMs: this.timeouts.runMs,
         });
       }
       const evidence = await this.evidence(job);
@@ -354,7 +355,7 @@ export class TrainingBridge {
           "--output",
           reportPath,
         ],
-        { timeoutMs: 300000 },
+        { timeoutMs: this.timeouts.evaluationMs },
       );
     }
     const reproduced = await readJson(reportPath);

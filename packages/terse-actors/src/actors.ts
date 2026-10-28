@@ -4,3 +4,4 @@ export { GovernanceActor } from "./governance.js";
 export { ArtifactRegistryActor } from "./registry.js";
 export { RLWorldActor } from "./world.js";
 export { ResearchWorkflowActor } from "./workflow.js";
+export { ResearchLedgerActor } from "./ledger.js";

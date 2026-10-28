@@ -1,15 +1,15 @@
 # Actor integration contract
 
 The implementation is `packages/terse-actors/`. Schemas in `src/contracts.ts` and
-actual RPC scenarios in `tests/integration.test.ts` and `tests/workflow.test.ts` are
-executable references.
+actual RPC scenarios in `tests/integration.test.ts`, `tests/workflow.test.ts` and
+`tests/ledger.test.ts` are executable references.
 All write methods use Terse `@Atomic`, and every mutation assigns a new persisted
 state value. Failed commands do not advance events, receipts, budgets or versions.
 Actors do not opt into interleaved execution.
 
 ## Identity and request envelope
 
-Use campaign ID as the campaign, governance, registry and workflow actor ID. Create experiment
+Use campaign ID as the campaign, governance, registry, workflow and ledger actor ID. Create experiment
 and world IDs using `scopedId("exp" | "world", campaignId, label)` from `src/core.ts`.
 This binds resource namespaces to campaigns even when labels are reused. IDs contain
 only letters, digits, dots, underscores and hyphens. Labels are at most 40 characters.
@@ -128,6 +128,7 @@ key ID, and a fixed route. Routes are not caller-selected:
 | `PREFLIGHT_REVIEWED` | reviewer → coordinator | `review` (terminal per experiment) |
 | `TRAINING_ASSIGNMENT` | coordinator → worker | `assign` (one per experiment) |
 | `TRAINING_COMPLETED` | worker → evaluator | `publish` |
+| `TRAINING_FAILED` | worker → director | `publish` |
 | `EVALUATION_COMPLETED` | evaluator → reviewer | `publish` |
 | `CHECKPOINT_REVIEWED` | reviewer → director | `publish` |
 
@@ -142,6 +143,27 @@ the same message fails with `DELIVERY_CONFLICT`. Only the recipient role acknowl
 and only after a send is recorded. A sent or acknowledged message is not evidence
 that work happened: recipients verify the experiment, registry and run artifacts.
 The outbox holds at most 2,000 messages per campaign.
+
+## Research ledger (Phase 4)
+
+`ResearchLedgerActor` is the append-only record of research reasoning. Only the
+director writes. Each entry has an immutable ID, kind, summary, parent entries,
+evidence references and a JSON body, plus the author key and a sequence:
+
+- `diagnosis`, `decision` and `stop` entries must cite at least one piece of evidence;
+  `hypothesis` entries must name a parent. Parents must already exist.
+- Evidence is verified inside the record transaction: `baseline` must equal the
+  campaign's frozen baseline hash; `evaluation` must match an `evaluated` experiment's
+  recorded report hash; `failure` must name a `failed` experiment of this campaign.
+- `decision` bodies list `launch` (at most four campaign-scoped experiments, each
+  launched by at most one decision) and `rejected` alternatives with reasons.
+  `getLaunch(experimentId)` returns the launching decision and its author.
+- A `stop` entry names its rule and closes the ledger to further entries.
+
+Recording a decision authorizes nothing. Proposals, preflight review, reservations
+and leases still apply; the orchestrator's reviewer requires a matching ledger launch
+before approving compute. Ledger reads campaign and experiment actors; neither reads
+the ledger. The ledger holds at most 1,000 entries.
 
 ## Events and integration
 

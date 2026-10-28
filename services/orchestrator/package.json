@@ -8,7 +8,8 @@
     "test": "bun test --timeout 120000",
     "format": "prettier --write src scripts tests",
     "format:check": "prettier --check src scripts tests",
-    "demo": "bun scripts/demo.ts"
+    "demo": "bun scripts/demo.ts",
+    "research": "bun scripts/research.ts"
   },
   "dependencies": {
     "@agent-relay/sdk": "14.0.0",
