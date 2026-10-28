@@ -3,8 +3,8 @@
 The system separates research decisions, authoritative state, compute, and independent
 verification. The training core, durable actors and Relay dispatch to the worker are
 implemented and tested locally, including deterministic evidence-driven experiment
-selection. This is the target architecture; independent evidence verification, GRPO and
-the UI remain future integrations.
+selection and evidence-bound checkpoint governance. This is the target architecture;
+GRPO, separately hosted evaluation and the UI remain future integrations.
 
 ```mermaid
 flowchart TD
@@ -43,7 +43,7 @@ flowchart TD
 | Research orchestration | `services/orchestrator/` | Implemented Relay transport, durable dispatch/reconciliation, worker adapter and deterministic evidence-driven director; model-backed proposals optional/planned |
 | Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry, workflow-outbox and research-ledger actors; [integration contract](actor-contract.md) |
 | Common contracts | `packages/contracts/` (planned) | Versioned actor/message/event schemas; consume worker-generated JSON Schema |
-| Independent evaluation | `services/evaluator/` (planned) | Established benchmark harness, regression suite, protected final evaluation |
+| Independent evaluation | `services/orchestrator/src/governance.ts`; `services/evaluator/` (planned) | Implemented: byte-level artifact verification, held-out regression suite, evidence-bound governance decisions. Planned: established benchmark harness and protected final evaluation |
 | Research interface | `apps/web/` (planned) | Research graph, metrics, environments, artifacts, governance, recording state |
 | Capture/export | `scripts/record/`, `scripts/render-video/` (planned) | Faithful source recording, playable accelerated exports, recording manifests |
 

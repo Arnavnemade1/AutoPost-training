@@ -1,5 +1,6 @@
 import { AgentRelay } from "@agent-relay/sdk";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   clients,
@@ -9,6 +10,7 @@ import {
 import { digest, document } from "../../../packages/terse-actors/src/core.js";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
 import { POLICY_VERSION } from "../src/director.js";
+import { GovernanceReviewer, type RegressionSuite } from "../src/governance.js";
 import { reconcile } from "../src/reconcile.js";
 import { RelayDispatcher, registerParticipants } from "../src/relay.js";
 import { ResearchCampaign, type ResearchProfile } from "../src/research.js";
@@ -23,7 +25,32 @@ const QWEN = {
 };
 
 /** Builds the campaign template and allowed training partition for a profile. */
-async function provision(name: string, output: string, python: string): Promise<ResearchProfile> {
+/** Writes JSONL records and a training-core manifest whose hash covers the exact bytes. */
+async function writeDataset(directory: string, name: string, lines: string[], manifest: Document) {
+  await mkdir(directory, { recursive: true });
+  const records = `${lines.join("\n")}\n`;
+  await writeFile(join(directory, `${name}.jsonl`), records, { flag: "wx" });
+  await writeFile(
+    join(directory, `${name}.manifest.json`),
+    JSON.stringify({
+      ...manifest,
+      content_sha256: createHash("sha256").update(records).digest("hex"),
+      num_examples: lines.length,
+    }),
+    { flag: "wx" },
+  );
+  return {
+    records: join(directory, `${name}.jsonl`),
+    manifest: join(directory, `${name}.manifest.json`),
+  };
+}
+const regressionPolicy = { maxDropBps: 0, maxDevRegressions: 0 };
+
+async function provision(
+  name: string,
+  output: string,
+  python: string,
+): Promise<{ profile: ResearchProfile; regression: RegressionSuite }> {
   if (name === "fixture") {
     const fixture = join(output, "fixture");
     await pythonJson(python, [
@@ -37,7 +64,28 @@ async function provision(name: string, output: string, python: string): Promise<
       templatePath,
       JSON.stringify({ ...template, campaign_id: "research-fixture", experiment_id: "baseline" }),
     );
-    return {
+    // Held-out synthetic problems for the regression suite; never in any training recipe.
+    const regression = await writeDataset(
+      join(fixture, "regression"),
+      "regression",
+      [7, 8].map((i) =>
+        JSON.stringify({
+          id: `regression-${i}`,
+          question: `What is ${i} plus 1?`,
+          answer: `#### ${i + 1}`,
+        }),
+      ),
+      {
+        schema_version: 1,
+        dataset_id: "regression",
+        purpose: "development",
+        source: "forge-offline-fixture",
+        source_revision: "generator-v1",
+        source_split: "synthetic",
+        license: "CC0-1.0",
+      },
+    );
+    const profile: ResearchProfile = {
       name,
       campaignId: "research-fixture",
       templatePath,
@@ -51,9 +99,11 @@ async function provision(name: string, output: string, python: string): Promise<
       maxExperiments: 4,
       timeouts: { runMs: 420000, evaluationMs: 300000 },
     };
+    return { profile, regression: { ...regression, ...regressionPolicy } };
   }
   if (name !== "qwen") throw new Error("Profile must be 'fixture' or 'qwen'");
-  const data = join(output, "data", "gsm8k");
+  const raw = join(output, "data", "gsm8k-raw"),
+    data = join(output, "data", "gsm8k");
   // Official GSM8K train file only, from the pinned revision; the test split is never read.
   await pythonJson(
     python,
@@ -62,16 +112,33 @@ async function provision(name: string, output: string, python: string): Promise<
       "forge_training",
       "prepare-gsm8k",
       "--output",
-      data,
+      raw,
       "--revision",
       GSM8K_REVISION,
       "--train-size",
       "128",
       "--dev-size",
-      "16",
+      "32",
     ],
     { timeoutMs: 600000 },
   );
+  // Same seed-42 shuffle as Phase 4: the first 16 held-out rows remain the development
+  // set; the next 16 become the regression suite. Both are disjoint from training.
+  const read = async (file: string) =>
+    (await readFile(join(raw, file), "utf8")).trimEnd().split("\n");
+  const devManifest = JSON.parse(await readFile(join(raw, "development.manifest.json"), "utf8"));
+  const heldOut = await read("development.jsonl");
+  await writeDataset(
+    data,
+    "train",
+    await read("train.jsonl"),
+    JSON.parse(await readFile(join(raw, "train.manifest.json"), "utf8")),
+  );
+  await writeDataset(data, "development", heldOut.slice(0, 16), devManifest);
+  const regression = await writeDataset(data, "regression", heldOut.slice(16), {
+    ...devManifest,
+    dataset_id: "gsm8k-regression",
+  });
   const templatePath = join(output, "template.json");
   await writeFile(
     templatePath,
@@ -116,7 +183,7 @@ async function provision(name: string, output: string, python: string): Promise<
       2,
     ),
   );
-  return {
+  const profile: ResearchProfile = {
     name,
     campaignId: "research-qwen-gsm8k",
     templatePath,
@@ -127,15 +194,21 @@ async function provision(name: string, output: string, python: string): Promise<
     maxExperiments: 4,
     timeouts: { runMs: 3600000, evaluationMs: 1800000 },
   };
+  return { profile, regression: { ...regression, ...regressionPolicy } };
 }
 
 /**
  * Real Relaycast, Terse and Python optimization under the deterministic director policy.
  * No human selects experiments after start; all roles run in this one process.
  */
-export async function runResearch(output: string, python: string, name: string): Promise<Document> {
+export async function runResearch(
+  output: string,
+  python: string,
+  name: string,
+  options: { tamperFirstReviewedCheckpoint?: boolean } = {},
+): Promise<Document> {
   await mkdir(output, { recursive: true });
-  const profile = await provision(name, output, python);
+  const { profile, regression } = await provision(name, output, python);
   const baselinePath = join(output, "frozen-baseline.json");
   await pythonJson(
     python,
@@ -208,7 +281,49 @@ export async function runResearch(output: string, python: string, name: string):
       baselinePath,
       baselineSha256,
       directorKeyId: authority.identities.director.keyId,
+      governance: new GovernanceReviewer(
+        python,
+        dispatcher,
+        {
+          objectiveSha256: digest(spec),
+          policyVersion: "v1",
+          regression,
+          limits: profile.limits,
+          source: profile.source,
+          template: await readJson(profile.templatePath),
+        },
+        join(output, "governance"),
+        profile.timeouts.evaluationMs,
+      ),
+      maxReviews: 2,
+      faults: options,
     });
+    // Verification probe after the campaign: every promotion path must refuse a veto.
+    const vetoProbe = async () => {
+      const results = [];
+      for (const record of research.vetoed()) {
+        const attempt = async (role: "director" | "coordinator") => {
+          try {
+            await actors[role].command(
+              "ResearchCampaignActor",
+              profile.campaignId,
+              profile.campaignId,
+              "promote",
+              { experimentId: record.experimentId },
+            );
+            return "PROMOTED";
+          } catch (error) {
+            return String(error instanceof Error ? error.message : error).split(":")[0];
+          }
+        };
+        results.push({
+          label: record.label,
+          director: await attempt("director"),
+          coordinator: await attempt("coordinator"),
+        });
+      }
+      return results;
+    };
     const started = Date.now();
     const outcome = await research.run();
     const read = (
@@ -276,7 +391,10 @@ export async function runResearch(output: string, python: string, name: string):
       reservedMicroUsd: campaign!.reservedMicroUsd,
       bestCheckpointPromoted: campaign!.best,
       reconciliation: await reconcile(dispatcher),
-      governance: "deferred to Phase 5; no checkpoint decision recorded",
+      governance: outcome.governance,
+      promoted: outcome.promoted,
+      faultsInjected: outcome.faultsInjected,
+      vetoEnforcement: await vetoProbe(),
       humanSelectedExperiments: false,
       modelImprovementClaimed: false,
     });
@@ -294,8 +412,11 @@ if (import.meta.main) {
   if (!python) throw new Error("Set FORGE_PYTHON to the absolute training-core virtualenv Python");
   const name = process.argv[2] ?? "fixture";
   const output = resolve(
-    process.argv[3] ?? join(import.meta.dir, "../artifacts", `research-${name}-${Date.now()}`),
+    (process.argv[3]?.startsWith("--") ? undefined : process.argv[3]) ??
+      join(import.meta.dir, "../artifacts", `research-${name}-${Date.now()}`),
   );
-  const report = await runResearch(output, python, name);
+  const report = await runResearch(output, python, name, {
+    tamperFirstReviewedCheckpoint: process.argv.includes("--inject-tamper"),
+  });
   console.log(JSON.stringify({ output, ...report }, null, 2));
 }

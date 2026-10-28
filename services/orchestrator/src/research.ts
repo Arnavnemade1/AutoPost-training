@@ -1,3 +1,4 @@
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Document, Role } from "../../../packages/terse-actors/src/contracts.js";
@@ -5,6 +6,7 @@ import { digest, document, scopedId } from "../../../packages/terse-actors/src/c
 import type { WorkflowMessage } from "../../../packages/terse-actors/src/workflow.js";
 import {
   POLICY_VERSION,
+  compare,
   diagnose,
   initialDecision,
   measure,
@@ -17,6 +19,7 @@ import {
   type PolicyLimits,
   type Recipe,
 } from "./director.js";
+import type { GovernanceReviewer } from "./governance.js";
 import { materialize, verifyRecipe, type SourcePartition } from "./recipes.js";
 import { settleAtReservedBound } from "./reconcile.js";
 import { participantRoles, type ParticipantRole, type RelayDispatcher } from "./relay.js";
@@ -51,6 +54,26 @@ export interface ResearchContext {
   baselinePath: string;
   baselineSha256: string;
   directorKeyId: string;
+  /** Phase 5: independent review of the development-selected candidates before promotion. */
+  governance?: GovernanceReviewer;
+  maxReviews?: number;
+  /** Labeled failure injection: alter the first reviewed checkpoint after registration. */
+  faults?: { tamperFirstReviewedCheckpoint?: boolean };
+}
+export interface GovernanceRecord {
+  label: string;
+  experimentId: string;
+  decision: string;
+  reasonCodes: string[];
+  evidenceSha256: string;
+  promotion: string | null;
+}
+export interface CampaignOutcome {
+  rule: string;
+  selected: string | null;
+  promoted: string | null;
+  governance: GovernanceRecord[];
+  faultsInjected: string[];
 }
 
 /**
@@ -65,7 +88,11 @@ export class ResearchCampaign {
   private readonly launched = new Set<string>();
   private round = 1;
   private lastEntry = "diagnosis";
-  private closed: { rule: string; selected: string | null } | null = null;
+  private closed: CampaignOutcome | null = null;
+  private promotion: { decision: Decision & { kind: "stop" }; queue: Measurement[] } | null = null;
+  private readonly governance: GovernanceRecord[] = [];
+  private readonly faults: string[] = [];
+  private promoted: string | null = null;
   constructor(readonly ctx: ResearchContext) {}
 
   private get campaignId() {
@@ -78,7 +105,7 @@ export class ResearchCampaign {
     return scopedId("exp", this.campaignId, label);
   }
 
-  async run(): Promise<{ rule: string; selected: string | null }> {
+  async run(): Promise<CampaignOutcome> {
     this.template = await readJson(this.ctx.profile.templatePath);
     const baseline = measure(
       "baseline",
@@ -108,7 +135,7 @@ export class ResearchCampaign {
     await this.pump();
     if (!this.closed) {
       // A rejected preflight never reaches a worker; close explicitly instead of hanging.
-      await this.apply({
+      await this.finish({
         kind: "stop",
         rule: "STALLED",
         selected: [...this.history.measured].sort((a, b) => b.correct - a.correct)[0] ?? null,
@@ -183,29 +210,15 @@ export class ResearchCampaign {
   private async apply(decision: Decision): Promise<void> {
     const parents = [this.lastEntry];
     if (decision.kind === "stop") {
-      await this.record({
-        entryId: "stop",
-        kind: "stop",
-        summary: decision.summary,
-        parents,
-        evidence: this.evidence(),
-        body: document({
-          rule: decision.rule,
-          policyVersion: POLICY_VERSION,
-          selected: this.summary(decision.selected),
-          rejected: decision.rejected,
-        }),
-      });
-      await this.actor("director").command(
-        "ResearchCampaignActor",
-        this.campaignId,
-        this.campaignId,
-        "stop",
-        { reason: `${decision.rule}: ${decision.summary}`.slice(0, 1000) },
-        "stop-campaign",
-      );
-      this.closed = { rule: decision.rule, selected: decision.selected?.label ?? null };
-      return;
+      if (this.ctx.governance && !this.promotion && decision.selected) {
+        // Review in development rank order; a veto falls back to the next candidate.
+        this.promotion = {
+          decision,
+          queue: [...this.history.measured].sort(compare).slice(0, this.ctx.maxReviews ?? 2),
+        };
+        return this.nextReview();
+      }
+      return this.finish(decision);
     }
     const hypotheses: string[] = [];
     for (const candidate of decision.launch) {
@@ -247,6 +260,126 @@ export class ResearchCampaign {
     this.history.round = decision.launch;
     this.history.revisions += decision.launch.filter((c) => c.operator !== "explore").length;
     await this.advance();
+  }
+
+  vetoed(): GovernanceRecord[] {
+    return this.governance.filter((g) => g.decision === "rejected");
+  }
+  private async finish(decision: Decision & { kind: "stop" }): Promise<void> {
+    const outcome = this.promoted
+      ? ` Promoted ${this.promoted} after independent approval.`
+      : this.ctx.governance
+        ? " No candidate was promoted."
+        : "";
+    await this.record({
+      entryId: "stop",
+      kind: "stop",
+      summary: `${decision.summary}${outcome}`.slice(0, 2000),
+      parents: [this.lastEntry],
+      evidence: this.evidence(),
+      body: document({
+        rule: decision.rule,
+        policyVersion: POLICY_VERSION,
+        selected: this.summary(decision.selected),
+        rejected: decision.rejected,
+        promoted: this.promoted,
+        governance: this.governance,
+      }),
+    });
+    await this.actor("director").command(
+      "ResearchCampaignActor",
+      this.campaignId,
+      this.campaignId,
+      "stop",
+      { reason: `${decision.rule}: ${decision.summary}`.slice(0, 1000) },
+      "stop-campaign",
+    );
+    this.closed = {
+      rule: decision.rule,
+      selected: decision.selected?.label ?? null,
+      promoted: this.promoted,
+      governance: this.governance,
+      faultsInjected: this.faults,
+    };
+  }
+
+  /** Director: request independent review of the next-ranked candidate, or finish. */
+  private async nextReview(): Promise<void> {
+    const candidate = this.promotion!.queue.shift();
+    if (!candidate) return this.finish(this.promotion!.decision);
+    if (this.ctx.faults?.tamperFirstReviewedCheckpoint && !this.faults.length) {
+      const job = this.ctx.bridge.get(candidate.label)!;
+      const target = join(String(job.config.output_dir), "checkpoint", "adapter_config.json");
+      await appendFile(target, "\n");
+      this.faults.push(`INJECTED_CHECKPOINT_TAMPER:${candidate.label}`);
+    }
+    await this.ctx.dispatcher.publish(
+      "director",
+      `${candidate.label}-governance-request`,
+      candidate.experimentId!,
+      "REVIEW_REQUEST",
+      { stage: "checkpoint", jobId: candidate.label, label: candidate.label },
+    );
+  }
+
+  /** Director: promote an approved candidate; record a corrective decision after a veto. */
+  private async onGovernance(message: WorkflowMessage, label: string): Promise<void> {
+    if (this.governance.some((g) => g.label === label)) return;
+    const body = message.body;
+    const record: GovernanceRecord = {
+      label,
+      experimentId: message.experimentId,
+      decision: String(body.decision),
+      reasonCodes: (body.reasonCodes as string[]) ?? [],
+      evidenceSha256: String(body.evidenceSha256),
+      promotion: null,
+    };
+    this.governance.push(record);
+    if (record.decision === "approved") {
+      try {
+        await this.actor("director").command(
+          "ResearchCampaignActor",
+          this.campaignId,
+          this.campaignId,
+          "promote",
+          { experimentId: message.experimentId },
+          `promote-${label}`,
+        );
+        record.promotion = "PROMOTED";
+        this.promoted = label;
+      } catch (error) {
+        // Lower-ranked candidates cannot clear an improvement bar this one missed.
+        record.promotion = String(error instanceof Error ? error.message : error).split(":")[0];
+      }
+      return this.finish(this.promotion!.decision);
+    }
+    const next = this.promotion!.queue[0]?.label ?? null;
+    const entryId = `governance-veto-${label}`;
+    await this.record({
+      entryId,
+      kind: "decision",
+      summary: `Governance vetoed ${label} (${record.reasonCodes.join(", ")}). ${
+        next
+          ? `Corrective action: review the next-ranked candidate ${next}.`
+          : "No candidate remains to review."
+      }`,
+      parents: [this.lastEntry],
+      evidence: this.evidence(),
+      body: document({
+        policyVersion: POLICY_VERSION,
+        action: next ? "review-next-ranked" : "stop-without-promotion",
+        governanceEvidenceSha256: record.evidenceSha256,
+        rejected: [
+          {
+            option: label,
+            reason: `Vetoed (${record.reasonCodes.join(", ")}); evidence ${record.evidenceSha256}`,
+          },
+        ],
+        launch: [],
+      }),
+    });
+    this.lastEntry = entryId;
+    return this.nextReview();
   }
 
   /** Launch the next candidate of the round, or decide once every candidate is terminal. */
@@ -345,7 +478,9 @@ export class ResearchCampaign {
           { jobId: label, label, configSha256: body.configSha256 },
         );
       case "reviewer:REVIEW_REQUEST":
-        return this.preflight(message);
+        return body.stage === "checkpoint"
+          ? this.checkpointReview(message)
+          : this.preflight(message);
       case "coordinator:PREFLIGHT_REVIEWED":
         return this.authorize(message);
       case "worker:TRAINING_ASSIGNMENT":
@@ -369,6 +504,7 @@ export class ResearchCampaign {
           },
         );
       case "director:CHECKPOINT_REVIEWED":
+        if (body.stage === "checkpoint") return this.onGovernance(message, label);
         if (this.history.measured.some((m) => m.label === label)) return;
         this.history.measured.push(await this.measurement(message.experimentId, label));
         return this.advance();
@@ -485,6 +621,35 @@ export class ResearchCampaign {
           : "Ledger launch, recomputed recipe and data selection, frozen protocol, limits and validated configuration all match",
       },
       `review-${label}`,
+    );
+  }
+
+  /** Reviewer: independent governance of a selected checkpoint; terminal decision. */
+  private async checkpointReview(message: WorkflowMessage): Promise<void> {
+    const label = String(message.body.jobId);
+    const launch = (await this.actor("reviewer").read(
+      "ResearchLedgerActor",
+      this.campaignId,
+      "getLaunch",
+      [message.experimentId],
+    ))!;
+    const outcome = await this.ctx.governance!.review(
+      this.ctx.bridge.get(label)!,
+      message.experimentId,
+      (launch.launch as Document).recipe as unknown as Recipe,
+    );
+    await this.ctx.dispatcher.publish(
+      "reviewer",
+      `${label}-governance`,
+      message.experimentId,
+      "CHECKPOINT_REVIEWED",
+      {
+        stage: "checkpoint",
+        jobId: label,
+        decision: outcome.decision,
+        reasonCodes: outcome.reasonCodes,
+        evidenceSha256: outcome.evidenceSha256,
+      },
     );
   }
 
