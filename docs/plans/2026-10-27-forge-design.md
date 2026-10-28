@@ -1,0 +1,15 @@
+# Forge implementation contract
+
+The supplied PRD is the product source of truth. Forge is a local-first research instrument, with honest capability reporting. Real Qwen2.5-0.5B-Instruct LoRA updates and separately reloaded checkpoints precede any improvement claim. The initial benchmark is a clearly labeled GSM8K development subset and a one-shot held-out test subset, not a full official leaderboard evaluation.
+
+Three approaches were considered: a cloud-only GPU control plane, a replay-only UI, and a working local-first system. Local-first is selected because this machine has an Apple M3 with 16 GB memory and both sponsor runtimes support local execution. It produces real evidence without requiring paid compute. Cloud-only adds account dependencies; a replay-only UI fails the central requirement.
+
+Terse 0.14.0 owns campaign reservations, immutable objectives, experiment transitions, governance approvals, artifact references and independent math environments. GPU work runs in a separate Python process. Agent Relay 14.0.0 and Relaycast Engine 8.10.1 carry typed assignments and findings through a local messaging bridge. A persistent event journal reconciles notifications. The read model never overrides actor-owned state.
+
+The director examines measured development failures and chooses broad or targeted SFT, then revises learning rate and sampling based on evidence. A configured OpenAI key may enable model-directed proposals through strict structured validation. The local director is explicitly identified as deterministic, not misrepresented as LLM research.
+
+The interface is an instrument console: graphite, mint, restrained amber and coral semantics, IBM Plex Sans and Mono, a custom Forge mark, crisp boundaries and generous hierarchy. Overview exposes measured outcomes, a research graph, communication, experiment ledger and governance. Experiments, environments, governance, artifacts and connections are full working views. Drawers reveal source evidence and reproducibility. Light mode has a separately authored palette. Mobile stacks panels and preserves every action.
+
+Unknown results display a meaningful empty state. Historical runs are labeled as replay. Disconnected services never report healthy. Cancellation is cooperative and releases reservations; errors preserve artifacts. Final test metrics cannot be used to choose a candidate. Governance failures cannot be promoted. A controlled adversarial probe is explicitly labeled.
+
+Verification covers optimization and weight hashes, independent checkpoint reload, sealed selection, actor durability, concurrent reservations, duplicate environment actions, stale versions, Relay message delivery and reconciliation, reject-before/after-artifact orderings, cancellation, API validation, export integrity, browser interactions, desktop/mobile and light/dark pixels. Record actual execution where browser capture is available, retain raw evidence and use FFmpeg for accelerated versions. An unavailable recording must be reported, never fabricated.
