@@ -1,8 +1,11 @@
 """Authoritative Terse state. Model optimization runs outside actors."""
+
 import hashlib
 import json
+import time
 from decimal import Decimal, InvalidOperation
 from durable_actors import Actor, persisted
+from durable_actors.client import Client
 
 
 def encode(value: object) -> str:
@@ -13,10 +16,22 @@ class ResearchCampaignActor(Actor):
     state: str = persisted("")
 
     def initialize(self, config_json: str) -> str:
+        if self.state and json.loads(self.state)["config"] != json.loads(config_json):
+            raise ValueError("Campaign configuration is immutable")
         if not self.state:
-            self.state = encode({"config": json.loads(config_json), "status": "initialized", "reservations": {},
-                "consumed_seconds": 0, "best_checkpoint": None, "selection_frozen": False,
-                "final_claimed": False, "decisions": [], "version": 0})
+            self.state = encode(
+                {
+                    "config": json.loads(config_json),
+                    "status": "initialized",
+                    "reservations": {},
+                    "consumed_seconds": 0,
+                    "best_checkpoint": None,
+                    "selection_frozen": False,
+                    "final_claimed": False,
+                    "decisions": [],
+                    "version": 0,
+                }
+            )
         return self.state
 
     def snapshot(self) -> str:
@@ -24,7 +39,20 @@ class ResearchCampaignActor(Actor):
 
     def transition(self, status: str, decision: str) -> str:
         s = json.loads(self.state)
-        allowed = {"baseline", "diagnosing", "researching", "training", "evaluating", "reviewing", "finalizing", "completed", "failed", "cancelled"}
+        if s["status"] == status and s["decisions"] and s["decisions"][-1]["reason"] == decision:
+            return self.state
+        allowed = {
+            "baseline",
+            "diagnosing",
+            "researching",
+            "training",
+            "evaluating",
+            "reviewing",
+            "finalizing",
+            "completed",
+            "failed",
+            "cancelled",
+        }
         if status not in allowed or s["status"] in {"completed", "cancelled"}:
             raise ValueError("Invalid campaign transition")
         s["status"] = status
@@ -44,7 +72,11 @@ class ResearchCampaignActor(Actor):
         reserved = sum(r["seconds"] for r in s["reservations"].values() if r["status"] == "reserved")
         if reserved + s["consumed_seconds"] + seconds > s["config"]["max_seconds"]:
             raise ValueError("Compute budget exhausted")
-        s["reservations"][experiment_id] = {"seconds": seconds, "status": "reserved"}
+        s["reservations"][experiment_id] = {
+            "seconds": seconds,
+            "status": "reserved",
+            "reserved_at": time.time(),
+        }
         self.state = encode(s)
         return self.state
 
@@ -54,6 +86,8 @@ class ResearchCampaignActor(Actor):
         if r is None:
             raise ValueError("Reservation required")
         if r["status"] == "settled":
+            if r["actual_seconds"] != seconds:
+                raise ValueError("Compute settlement is immutable")
             return self.state
         if seconds < 0 or seconds > r["seconds"]:
             raise ValueError("Usage outside reservation")
@@ -85,14 +119,26 @@ class ExperimentActor(Actor):
     state: str = persisted("")
 
     def initialize(self, spec_json: str) -> str:
+        if self.state and json.loads(self.state)["spec"] != json.loads(spec_json):
+            raise ValueError("Experiment configuration is immutable")
         if not self.state:
-            self.state = encode({"spec": json.loads(spec_json), "status": "proposed", "metrics": [], "result": None})
+            self.state = encode(
+                {"spec": json.loads(spec_json), "status": "proposed", "metrics": [], "result": None}
+            )
         return self.state
 
     def update(self, status: str, payload_json: str) -> str:
         s = json.loads(self.state)
-        transitions = {"proposed": ["approved", "rejected"], "approved": ["training", "failed", "cancelled"],
-            "training": ["evaluating", "failed", "cancelled"], "evaluating": ["completed", "failed", "cancelled"]}
+        if status == s["status"]:
+            if s["result"] != json.loads(payload_json):
+                raise ValueError("Experiment update conflicts with an existing receipt")
+            return self.state
+        transitions = {
+            "proposed": ["approved", "rejected"],
+            "approved": ["training", "failed", "cancelled"],
+            "training": ["evaluating", "failed", "cancelled"],
+            "evaluating": ["completed", "failed", "cancelled"],
+        }
         if status != s["status"] and status not in transitions.get(s["status"], []):
             raise ValueError("Invalid experiment transition")
         s["status"] = status
@@ -107,6 +153,8 @@ class ExperimentActor(Actor):
             raise ValueError("Experiment is not training")
         if not any(x["step"] == m["step"] for x in s["metrics"]):
             s["metrics"] = [*s["metrics"], m]
+        elif next(x for x in s["metrics"] if x["step"] == m["step"]) != m:
+            raise ValueError("Conflicting metric for an existing optimizer step")
         self.state = encode(s)
         return self.state
 
@@ -144,8 +192,13 @@ class GovernanceActor(Actor):
                 reasons.append("ARTIFACT_INTEGRITY_FAILURE")
             if e.get("regression_drop", 1) > p["max_regression_drop"]:
                 reasons.append("REGRESSION_THRESHOLD_EXCEEDED")
-        result = {"id": e["id"], "decision": "rejected" if reasons else "approved", "reason_codes": reasons,
-            "evidence": e, "policy_version": "forge-policy-v1"}
+        result = {
+            "id": e["id"],
+            "decision": "rejected" if reasons else "approved",
+            "reason_codes": reasons,
+            "evidence": e,
+            "policy_version": "forge-policy-v1",
+        }
         reviews = json.loads(self.reviews)
         if e["id"] in reviews and reviews[e["id"]] != result:
             raise ValueError("Review evidence is immutable")
@@ -159,31 +212,68 @@ class GovernanceActor(Actor):
             raise ValueError("Checkpoint promotion denied: independent approval required")
         if review["evidence"].get("sha256") != sha256:
             raise ValueError("Checkpoint promotion denied: checksum mismatch")
+        # Acyclic authority read: governance -> registry. A review arriving before
+        # the files is preserved, but cannot authorize a premature promotion.
+        with Client() as client:
+            registry = json.loads(client.invoke("ArtifactRegistryActor", self.id, "snapshot", []))
+        evidence = review["evidence"]
+        checkpoint = registry.get(evidence.get("checkpoint_artifact_id", ""))
+        evaluation = registry.get(evidence.get("evaluation_artifact_id", ""))
+        if not checkpoint or checkpoint.get("kind") != "checkpoint" or checkpoint.get("sha256") != sha256:
+            raise ValueError("Checkpoint promotion denied: registered weights are required")
+        if (
+            not evaluation
+            or evaluation.get("kind") != "evaluation"
+            or evaluation.get("sha256") != evidence.get("evaluation_sha256")
+        ):
+            raise ValueError("Checkpoint promotion denied: registered evaluation is required")
         self.promoted = checkpoint_id
         return checkpoint_id
 
     def snapshot(self) -> str:
-        return encode({"policy": json.loads(self.policy) if self.policy else {}, "reviews": json.loads(self.reviews), "promoted": self.promoted})
+        return encode(
+            {
+                "policy": json.loads(self.policy) if self.policy else {},
+                "reviews": json.loads(self.reviews),
+                "promoted": self.promoted,
+            }
+        )
 
 
 class RLWorldActor(Actor):
     state: str = persisted("")
-    hidden_answer: str = persisted("")
+
+    def _public(self, state: dict[str, object]) -> str:
+        return encode({k: v for k, v in state.items() if k != "_answer"})
 
     def reset(self, episode_id: str, task: str, answer: str, seed: int) -> str:
         if self.state:
             s = json.loads(self.state)
             if s["episode_id"] == episode_id:
-                return self.state
+                if s["task"] != task or s["seed"] != seed or s.get("_answer") != answer:
+                    raise ValueError("Episode reset conflict")
+                return self._public(s)
             if not s["terminated"]:
                 raise ValueError("Active episode cannot be overwritten")
-        self.hidden_answer = answer
-        self.state = encode({"episode_id": episode_id, "task": task, "seed": seed, "version": 0,
-            "terminated": False, "reward": None, "actions": [], "reward_version": "exact-answer-v1"})
-        return self.state
+        self.state = encode(
+            {
+                "episode_id": episode_id,
+                "task": task,
+                "seed": seed,
+                "version": 0,
+                "terminated": False,
+                "reward": None,
+                "actions": [],
+                "reward_version": "exact-answer-v1",
+                "_answer": answer,
+            }
+        )
+        return self._public(json.loads(self.state))
 
     def observe(self) -> str:
-        return self.state
+        if not self.state:
+            raise ValueError("Environment is not initialized")
+        return self._public(json.loads(self.state))
 
     def step(self, action_json: str) -> str:
         a, s = json.loads(action_json), json.loads(self.state)
@@ -193,20 +283,23 @@ class RLWorldActor(Actor):
         if existing:
             if existing["answer"] != a["answer"]:
                 raise ValueError("Action ID conflict")
-            return self.state
+            return self._public(s)
         if a["expected_version"] != s["version"]:
             raise ValueError("State version conflict")
         if s["terminated"]:
             raise ValueError("Episode terminated")
         try:
-            correct = Decimal(a["answer"].replace(",", "").strip()) == Decimal(self.hidden_answer)
+            correct = Decimal(a["answer"].replace(",", "").strip()) == Decimal(s["_answer"])
         except (InvalidOperation, ValueError):
             correct = False
         s["reward"], s["terminated"], s["version"] = int(correct), True, s["version"] + 1
-        s["actions"] = [*s["actions"], {"action_id": a["action_id"], "answer": a["answer"], "reward": s["reward"]}]
-        s["checksum"] = hashlib.sha256(encode(s).encode()).hexdigest()
+        s["actions"] = [
+            *s["actions"],
+            {"action_id": a["action_id"], "answer": a["answer"], "reward": s["reward"]},
+        ]
+        s["checksum"] = hashlib.sha256(self._public(s).encode()).hexdigest()
         self.state = encode(s)
-        return self.state
+        return self._public(s)
 
 
 class ArtifactRegistryActor(Actor):

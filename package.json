@@ -4,28 +4,31 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/verify-relay-native.mjs",
     "dev": "next dev --hostname 127.0.0.1 --port 3000",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 3000",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
     "test": ".venv/bin/python -m pytest tests -q",
-    "lab": ".venv/bin/python scripts/lab.py"
+    "lab": ".venv/bin/python scripts/lab.py",
+    "format:check": "prettier --check 'app/**/*.{ts,tsx,css}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' next.config.ts"
   },
   "dependencies": {
+    "@agent-relay/sdk": "14.0.0",
+    "@relaycast/engine": "8.10.1",
     "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "@agent-relay/sdk": "14.0.0",
-    "@relaycast/engine": "8.10.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "eslint": "^9.39.0",
-    "eslint-config-next": "16.4.3"
+    "eslint-config-next": "16.4.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
   }
 }

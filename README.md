@@ -4,6 +4,11 @@ Forge is being built to coordinate research agents that diagnose a model's failu
 propose and run post-training experiments, evaluate results, and select a checkpoint
 under independent governance and a bounded compute budget.
 
+The isolated command-center workstream adds a live dashboard, GRPO, governance,
+independent final evaluation and recording. See [command-center setup and trust
+boundaries](docs/command-center.md). The status below describes the original
+training/orchestrator profile.
+
 **Current implementation:** a tested LoRA training/development-evaluation worker,
 seven durable Terse actors (campaigns, experiments, governance, artifacts, math worlds,
 a message outbox and a research ledger), Agent Relay dispatch between research roles,

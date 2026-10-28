@@ -1,4 +1,5 @@
 """Transactional read model and durable event journal. Terse owns critical state."""
+
 import json
 import os
 import sqlite3
@@ -24,7 +25,9 @@ def db():
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)")
-    c.execute("CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL, timestamp TEXT NOT NULL,payload TEXT NOT NULL)")
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL, timestamp TEXT NOT NULL,payload TEXT NOT NULL)"
+    )
     c.execute("CREATE INDEX IF NOT EXISTS events_campaign ON events(campaign_id,timestamp)")
     return c
 
@@ -32,13 +35,30 @@ def db():
 def save(snapshot):
     with LOCK, db() as c:
         snapshot["updated_at"] = now()
-        c.execute("INSERT INTO campaigns VALUES(?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot", (snapshot["id"], json.dumps(snapshot)))
+        c.execute(
+            "INSERT INTO campaigns VALUES(?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot",
+            (snapshot["id"], json.dumps(snapshot)),
+        )
 
 
 def get(campaign_id):
     with db() as c:
         r = c.execute("SELECT snapshot FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
         return json.loads(r[0]) if r else None
+
+
+def patch(campaign_id, update):
+    """Serialize read-modify-write across API, recorder and worker processes."""
+    with db() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT snapshot FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        if not row:
+            raise KeyError(campaign_id)
+        snapshot = json.loads(row[0])
+        update(snapshot)
+        snapshot["updated_at"] = now()
+        connection.execute("UPDATE campaigns SET snapshot=? WHERE id=?", (json.dumps(snapshot), campaign_id))
+    return snapshot
 
 
 def campaigns():
@@ -54,8 +74,15 @@ def campaigns():
 
 
 def event(campaign_id, kind, text, agent="director", **details):
-    e = {"id": uuid.uuid4().hex, "campaign_id": campaign_id, "timestamp": now(), "kind": kind,
-         "text": text, "agent": agent, **details}
+    e = {
+        "id": uuid.uuid4().hex,
+        "campaign_id": campaign_id,
+        "timestamp": now(),
+        "kind": kind,
+        "text": text,
+        "agent": agent,
+        **details,
+    }
     with LOCK, db() as c:
         c.execute("INSERT INTO events VALUES(?,?,?,?)", (e["id"], campaign_id, e["timestamp"], json.dumps(e)))
         folder = ARTIFACTS / campaign_id
@@ -69,7 +96,9 @@ def event(campaign_id, kind, text, agent="director", **details):
 
 def events(campaign_id, after=None):
     with db() as c:
-        rows = c.execute("SELECT payload FROM events WHERE campaign_id=? ORDER BY timestamp,rowid", (campaign_id,)).fetchall()
+        rows = c.execute(
+            "SELECT payload FROM events WHERE campaign_id=? ORDER BY timestamp,rowid", (campaign_id,)
+        ).fetchall()
     result = []
     for row in rows:
         try:

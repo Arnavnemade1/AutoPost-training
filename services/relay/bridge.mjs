@@ -32,8 +32,9 @@ const server = createServer(async (req, res) => {
     if (processed.has(m.id)) return res.end(JSON.stringify(processed.get(m.id)));
     const result = await agents[m.sender].sendMessage({ to: `@${m.recipient}`, text: JSON.stringify(m), idempotencyKey: m.id });
     // Read from the recipient's durable inbox, so a late listener can reconcile it.
-    const inbox = await agents[m.recipient].inbox.get();
-    const receipt = { message_id: result.messageId, delivered: true, recipient: m.recipient, transport: 'Agent Relay', inbox_checked: !!inbox };
+    const delivered = await agents[m.recipient].messages.get(result.messageId);
+    if (delivered.text !== JSON.stringify(m) || delivered.from.name !== m.sender) throw new Error('Recipient readback did not match the dispatched assignment');
+    const receipt = { message_id: result.messageId, delivered: true, recipient: m.recipient, transport: 'Agent Relay', recipient_readback_verified: true };
     processed.set(m.id, receipt);
     res.end(JSON.stringify(receipt));
   } catch (error) {

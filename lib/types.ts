@@ -1,18 +1,181 @@
-export type View = 'overview' | 'experiments' | 'environments' | 'governance' | 'artifacts' | 'connections';
-export type Agent = 'director' | 'data' | 'trainer' | 'evaluator' | 'governance';
-export type Prediction = { id: string; question: string; output: string; answer: string; expected: string; correct: boolean; environment_id?: string };
-export type Evaluation = { score: number; n: number; correct: number; ci95: number[]; predictions: Prediction[]; split: string; seconds: number; dataset_revision: string; scoring: string; decoding: { max_new_tokens: number; do_sample: boolean } };
-export type Metric = { step: number; loss: number; elapsed: number; learning_rate: number };
-export type Review = { id: string; decision: 'approved' | 'rejected'; reason_codes: string[]; timestamp: string; evidence: Record<string, unknown>; policy_version: string };
-export type Experiment = { id: string; strategy: string; hypothesis: string; status: string; created_at: string; max_steps: number; metrics: Metric[]; proposal: {learning_rate:number; lora_rank:number; focus:string; director:string}; evaluation?: Evaluation; review?: Review; training?: {weights_changed:boolean; sha256:string; before_hash:string; after_hash:string; seconds:number} };
-export type Artifact = { id: string; name: string; kind: string; path: string; sha256: string; bytes: number; created_at: string };
-export type Environment = { id: string; episode_id: string; task: string; seed: number; version: number; terminated: boolean; reward: number | null; actions: {action_id:string; answer:string; reward:number}[]; reward_version: string; checksum: string };
-export type Config = {name:string; objective:string; model_id:string; benchmark:string; max_seconds:number; train_steps:number; max_experiments:number; dev_samples:number; final_samples:number; seed:number; strategies:string[]};
-export type Campaign = { id: string; name: string; status: string; created_at: string; updated_at: string; config: Config; director?: string; experiments: Experiment[]; reviews: Review[]; artifacts: Artifact[]; environments: Environment[]; baseline?: Evaluation; best?: {id:string; evaluation:Evaluation; sha256:string}; final?: {baseline:Evaluation; checkpoint:Evaluation; improvement_pp:number; checkpoint_id:string; valid_improvement:boolean}; actor?: {consumed_seconds:number; reservations:Record<string,{seconds:number;status:string}>; selection_frozen:boolean; best_checkpoint:string|null}; progress?: {stage:string;done:number;total:number}; elapsed_seconds?: number; error?: string; cancel_requested?: boolean; recording?: {status:string} };
-export type Event = {id:string; timestamp:string; kind:string; text:string; agent:Agent; recipient?:Agent; category?:string; relay_id?:string; experiment_id?:string; metric?:Metric};
-export type Health = {ok:boolean; worker:string; version:string; services: Record<string,{connected:boolean;mode:string;model?:string}>};
-export const TERMINAL = ['completed','failed','cancelled','interrupted'];
-export const agentNames: Record<Agent,string> = {director:'Research director',data:'Data researcher',trainer:'Training engineer',evaluator:'Experiment evaluator',governance:'Governance council'};
-export const strategyName = (s:string) => s === 'targeted_sft' ? 'Targeted SFT' : 'Broad SFT';
-export const percent = (n?:number) => n === undefined ? '—' : `${(n*100).toFixed(1)}%`;
-export const duration = (s:number) => s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s/60)}m ${Math.floor(s%60)}s` : `${(s/3600).toFixed(2)}h`;
+export type View =
+  | "overview"
+  | "experiments"
+  | "environments"
+  | "governance"
+  | "results"
+  | "artifacts"
+  | "connections";
+export type ResultFilter = "all" | "improved" | "regressed";
+export type Agent =
+  | "director"
+  | "data"
+  | "trainer"
+  | "evaluator"
+  | "governance";
+export type Prediction = {
+  id: string;
+  question: string;
+  output: string;
+  answer: string;
+  expected: string;
+  correct: boolean;
+  environment_id?: string;
+};
+export type Evaluation = {
+  score: number;
+  n: number;
+  correct: number;
+  ci95: number[];
+  predictions: Prediction[];
+  split: string;
+  seconds: number;
+  dataset_revision: string;
+  scoring: string;
+  decoding: { max_new_tokens: number; do_sample: boolean };
+};
+export type Metric = {
+  step: number;
+  loss: number;
+  elapsed: number;
+  learning_rate: number;
+};
+export type Review = {
+  id: string;
+  decision: "approved" | "rejected";
+  reason_codes: string[];
+  timestamp: string;
+  evidence: Record<string, unknown>;
+  policy_version: string;
+};
+export type Experiment = {
+  id: string;
+  strategy: string;
+  hypothesis: string;
+  status: string;
+  created_at: string;
+  max_steps: number;
+  metrics: Metric[];
+  proposal: {
+    learning_rate: number;
+    lora_rank: number;
+    focus: string;
+    director: string;
+  };
+  evaluation?: Evaluation;
+  review?: Review;
+  training?: {
+    weights_changed: boolean;
+    sha256: string;
+    before_hash: string;
+    after_hash: string;
+    seconds: number;
+  };
+};
+export type Artifact = {
+  id: string;
+  name: string;
+  kind: string;
+  path: string;
+  sha256: string;
+  bytes: number;
+  created_at: string;
+};
+export type Environment = {
+  id: string;
+  episode_id: string;
+  task: string;
+  seed: number;
+  version: number;
+  terminated: boolean;
+  reward: number | null;
+  actions: { action_id: string; answer: string; reward: number }[];
+  reward_version: string;
+  checksum: string;
+};
+export type Config = {
+  name: string;
+  objective: string;
+  model_id: string;
+  benchmark: string;
+  max_seconds: number;
+  train_steps: number;
+  max_experiments: number;
+  dev_samples: number;
+  final_samples: number;
+  seed: number;
+  strategies: string[];
+};
+export type Campaign = {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  config: Config;
+  director?: string;
+  experiments: Experiment[];
+  reviews: Review[];
+  artifacts: Artifact[];
+  environments: Environment[];
+  baseline?: Evaluation;
+  best?: { id: string; evaluation: Evaluation; sha256: string };
+  final?: {
+    baseline: Evaluation;
+    checkpoint: Evaluation;
+    improvement_pp: number;
+    checkpoint_id: string;
+    valid_improvement: boolean;
+  };
+  actor?: {
+    consumed_seconds: number;
+    reservations: Record<string, { seconds: number; status: string }>;
+    selection_frozen: boolean;
+    best_checkpoint: string | null;
+  };
+  progress?: { stage: string; done: number; total: number };
+  elapsed_seconds?: number;
+  compute_seconds?: number;
+  error?: string;
+  cancel_requested?: boolean;
+  recording?: { status: string };
+};
+export type Event = {
+  id: string;
+  timestamp: string;
+  kind: string;
+  text: string;
+  agent: Agent;
+  recipient?: Agent;
+  category?: string;
+  relay_id?: string;
+  experiment_id?: string;
+  metric?: Metric;
+};
+export type Health = {
+  ok: boolean;
+  worker: string;
+  version: string;
+  services: Record<
+    string,
+    { connected: boolean; mode: string; model?: string }
+  >;
+};
+export const TERMINAL = ["completed", "failed", "cancelled", "interrupted"];
+export const agentNames: Record<Agent, string> = {
+  director: "Research director",
+  data: "Data researcher",
+  trainer: "Training engineer",
+  evaluator: "Experiment evaluator",
+  governance: "Governance council",
+};
+export const strategyName = (s: string) =>
+  s === "grpo" ? "GRPO" : s === "targeted_sft" ? "Targeted SFT" : "Broad SFT";
+export const percent = (n?: number) =>
+  n === undefined ? "—" : `${(n * 100).toFixed(1)}%`;
+export const duration = (s: number) =>
+  s < 60
+    ? `${Math.round(s)}s`
+    : s < 3600
+      ? `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`
+      : `${(s / 3600).toFixed(2)}h`;
