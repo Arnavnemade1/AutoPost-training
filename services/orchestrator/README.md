@@ -69,6 +69,13 @@ lost completion reply is verified and reported under a fresh lease. A partial ru
 directory from a crashed attempt is preserved and refused (`PARTIAL_RUN_DIRECTORY`).
 Relay messages select allowlisted job IDs; they never carry commands or paths.
 
+Retries must advance the actor's attempt state. Exhausted runtime or attempt limits
+close an expired job as failed so the coordinator can settle its reservation. Errors
+before a new attempt leave the message pending and propagate instead of spinning.
+Recipe preparation verifies the source partition checksum, supports absolute and
+relative template paths, and reuses identical files after an interrupted delivery;
+conflicting files remain untouched.
+
 ## Research policy
 
 `director-rules-v1` is deterministic; it makes no model calls. Proposals and decisions

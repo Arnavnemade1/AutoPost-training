@@ -31,6 +31,7 @@ export async function pythonJson(
   options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<Document> {
   if (!isAbsolute(python)) throw new Error("Python executable must be an absolute, trusted path");
+  if (options.signal?.aborted) throw new Error("Python worker cancelled before launch");
   return await new Promise((resolve, reject) => {
     const child = spawn(python, args, {
       env: {
@@ -50,6 +51,7 @@ export async function pythonJson(
       aborted = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {
+      if (aborted) return;
       aborted = true;
       child.kill("SIGTERM");
       killTimer ??= setTimeout(() => child.kill("SIGKILL"), 7000);
@@ -57,9 +59,15 @@ export async function pythonJson(
     const timer = setTimeout(abort, options.timeoutMs ?? 180000);
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.signal?.aborted) abort();
-    child.stdout.on("data", (value) => {
-      stdout += String(value);
-      if (stdout.length > 8_000_000) abort();
+    // Decode across chunk boundaries, and wait for pipe closure before parsing JSON.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    let outputBytes = 0;
+    child.stdout.on("data", (value: string) => {
+      if (aborted) return;
+      outputBytes += Buffer.byteLength(value);
+      if (outputBytes > 8_000_000) return abort();
+      stdout += value;
     });
     child.stderr.on("data", (value) => {
       stderr = (stderr + String(value)).slice(-4000);
@@ -73,7 +81,7 @@ export async function pythonJson(
       cleanup();
       reject(error);
     });
-    child.once("exit", (code) => {
+    child.once("close", (code) => {
       cleanup();
       if (aborted || code !== 0) {
         reject(new Error(`Python worker ${aborted ? "cancelled" : `exited ${code}`}: ${stderr}`));
@@ -473,5 +481,70 @@ export class TrainingBridge {
       manifestSha256,
       checkpointBytes,
     };
+  }
+}
+
+/** Retry only after an attempt advances; policy exhaustion must release the reservation. */
+export async function trainWithRetries(
+  bridge: Pick<TrainingBridge, "train">,
+  dispatcher: RelayDispatcher,
+  message: WorkflowMessage,
+): Promise<void> {
+  const { actors, campaignId } = dispatcher;
+  const snapshot = async () =>
+    (await actors.worker.read("ExperimentActor", message.experimentId, "getSnapshot"))!;
+  let previous = await snapshot();
+  for (;;) {
+    try {
+      return await bridge.train(message);
+    } catch (error) {
+      let state = await snapshot();
+      const lease = state.lease as Document | null;
+      const leaseExpired = !lease || Number(lease.expiresAtMs) <= Date.now();
+      if (
+        ["ready", "retryable", "running"].includes(String(state.status)) &&
+        leaseExpired &&
+        /\b(?:RUNTIME_LIMIT|RETRY_LIMIT):/.test(String(error))
+      ) {
+        // A refused acquireLease does not mutate actor state. Close the exhausted job
+        // explicitly, after confirming there is no live worker lease, so sweep can settle it.
+        const campaign = (await actors.coordinator.read(
+          "ResearchCampaignActor",
+          campaignId,
+          "getSnapshot",
+        ))!;
+        const reservation = (campaign.reservations as Document)[message.experimentId] as Document;
+        await actors.coordinator.command(
+          "ExperimentActor",
+          message.experimentId,
+          campaignId,
+          "abort",
+          { grant: reservation.grant, reason: String(error).slice(0, 1000) },
+          `abort-exhausted-${message.body.jobId}`,
+        );
+        state = await snapshot();
+      }
+      if (state.status === "failed")
+        return dispatcher.publish(
+          "worker",
+          `${message.body.jobId}-failed`,
+          message.experimentId,
+          "TRAINING_FAILED",
+          { jobId: message.body.jobId, reason: String(state.failure ?? error) },
+        );
+      const attempted = Number(state.attempts) > Number(previous.attempts);
+      const completed = ["completed", "evaluated"].includes(String(state.status));
+      if (
+        (attempted &&
+          (state.status === "retryable" || (state.status === "running" && leaseExpired))) ||
+        (completed && state.status !== previous.status)
+      ) {
+        previous = state;
+        continue;
+      }
+      // Configuration/transport failures before a new attempt cannot consume retries.
+      // Leave the message pending for reconciliation instead of spinning in place.
+      throw error;
+    }
   }
 }
