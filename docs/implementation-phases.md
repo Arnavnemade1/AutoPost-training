@@ -11,15 +11,19 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after the first build
+## Current status after Phase 2
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
 - Phase 1: working LoRA worker, independent reload/evaluation, preserved evidence,
   35 passing tests, lint/format checks, and dependency checks. A real four-step Qwen
   run succeeded mechanically but showed no development improvement (0/8 to 0/8).
-- Phases 2–8: planned; no live integration or completed autonomous campaign claimed.
-- GitHub CI: workflow prepared, not run. No push or deployment has been performed.
+- Phase 2: five real Terse actors, signed roles, serialized budgets, fenced worker
+  leases, evidence-gated promotion and deterministic math worlds. Native RPC and
+  forced crash/restart verified with 13 tests and a runnable coordination demo.
+- Phases 3–8: planned; no Relay/worker dispatch or autonomous campaign claimed.
+- Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phase 2
+  includes a separate scoped CI workflow; see its verification record for run status.
 
 ## Collaboration boundaries
 
@@ -95,6 +99,11 @@ and missing-event orderings. Do not store weights in actors.
 
 Suggested owner: durable-state workstream. Depends on Phase 0 contracts; can develop
 alongside Phase 1.
+
+Implemented under `packages/terse-actors/`. [Actor contract](actor-contract.md) and
+[local verification](verification/phase2-local.md) describe tested behavior and
+limits. The next workstream is Phase 3: actual Relay dispatch, durable delivery
+reconciliation and a worker adapter to the Phase 1 training/evaluation evidence.
 
 ## Phase 3 — Synchronized research agents through Agent Relay
 
