@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
 import type { DataSelection, PolicyLimits, Recipe } from "./director.js";
 
@@ -15,6 +15,27 @@ function lines(text: string): string[] {
   return text.slice(0, -1).split("\n");
 }
 
+async function readSource(source: SourcePartition) {
+  const records = await readFile(source.records, "utf8");
+  const manifest = JSON.parse(await readFile(source.manifest, "utf8")) as Document;
+  if (sha256(records) !== manifest.content_sha256)
+    throw new Error("Source partition checksum mismatch");
+  if (manifest.purpose !== "train" || manifest.num_examples !== lines(records).length)
+    throw new Error("Invalid source training partition manifest");
+  return { records, manifest };
+}
+
+/** Redelivery may finish a partial recipe, but may never change existing evidence. */
+async function writeRecipeFile(path: string, contents: string): Promise<void> {
+  try {
+    await writeFile(path, contents, { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if ((await readFile(path, "utf8")) !== contents)
+      throw new Error(`RECIPE_FILE_CONFLICT: existing recipe file differs: ${path}`);
+  }
+}
+
 /**
  * Deterministic selection over exact source lines, preserving source order. `concise`
  * keeps the shorter half of solutions by character length (ties keep source order).
@@ -22,6 +43,7 @@ function lines(text: string): string[] {
 export function selectRecords(source: string, data: DataSelection): string {
   const rows = lines(source);
   if (data === "full") return source;
+  if (data !== "concise") throw new Error("Unknown data selection");
   const keep = new Set(
     rows
       .map((line, index) => ({ index, length: String(JSON.parse(line).answer).length }))
@@ -34,6 +56,7 @@ export function selectRecords(source: string, data: DataSelection): string {
 
 export function withinLimits(recipe: Recipe, limits: PolicyLimits): boolean {
   return (
+    (recipe.data === "full" || recipe.data === "concise") &&
     Number.isInteger(recipe.maxSteps) &&
     recipe.maxSteps >= 1 &&
     recipe.maxSteps <= limits.maxSteps &&
@@ -56,23 +79,23 @@ export async function materialize(options: {
   recipe: Recipe;
 }): Promise<string> {
   const { directory, template, source, recipe } = options;
+  const original = await readSource(source);
   const data = join(directory, "data");
   await mkdir(data, { recursive: true });
-  const records = selectRecords(await readFile(source.records, "utf8"), recipe.data);
-  const sourceManifest = JSON.parse(await readFile(source.manifest, "utf8")) as Document;
-  await writeFile(join(data, "train.jsonl"), records, { flag: "wx" });
-  await writeFile(
+  const records = selectRecords(original.records, recipe.data);
+  await writeRecipeFile(join(data, "train.jsonl"), records);
+  await writeRecipeFile(
     join(data, "train.manifest.json"),
     JSON.stringify({
-      ...sourceManifest,
-      dataset_id: `${sourceManifest.dataset_id}-${recipe.data}`,
+      ...original.manifest,
+      dataset_id: `${original.manifest.dataset_id}-${recipe.data}`,
       content_sha256: sha256(records),
       num_examples: lines(records).length,
     }),
-    { flag: "wx" },
   );
   // Template paths are relative to the template; rebase them onto the experiment directory.
-  const rebase = (path: string) => relative(directory, join(dirname(options.templatePath), path));
+  const rebase = (path: string) =>
+    relative(directory, resolve(dirname(options.templatePath), path));
   const development = template.development as Document;
   const model = template.model as Document;
   const config = {
@@ -94,7 +117,7 @@ export async function materialize(options: {
     output_dir: "run",
   };
   const path = join(directory, "experiment.json");
-  await writeFile(path, JSON.stringify(config, null, 2), { flag: "wx" });
+  await writeRecipeFile(path, JSON.stringify(config, null, 2));
   return path;
 }
 
@@ -122,7 +145,7 @@ export async function verifyRecipe(options: {
   const problems: string[] = [];
   const { recipe, validatedConfig } = options;
   if (!withinLimits(recipe, options.limits)) problems.push("recipe outside policy limits");
-  const expected = selectRecords(await readFile(options.source.records, "utf8"), recipe.data);
+  const expected = selectRecords((await readSource(options.source)).records, recipe.data);
   if ((await readFile(options.trainingRecordsPath, "utf8")) !== expected)
     problems.push("training records are not the recipe's selection from the allowed partition");
   const training = validatedConfig.training as Document;

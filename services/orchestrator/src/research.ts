@@ -26,6 +26,7 @@ import {
   prepareJob,
   pythonJson,
   readJson,
+  trainWithRetries,
   type TrainingBridge,
 } from "./worker.js";
 
@@ -348,7 +349,7 @@ export class ResearchCampaign {
       case "coordinator:PREFLIGHT_REVIEWED":
         return this.authorize(message);
       case "worker:TRAINING_ASSIGNMENT":
-        return this.train(message);
+        return trainWithRetries(this.ctx.bridge, this.ctx.dispatcher, message);
       case "evaluator:TRAINING_COMPLETED":
         return this.ctx.bridge.evaluate(message);
       case "reviewer:EVALUATION_COMPLETED":
@@ -519,33 +520,6 @@ export class ResearchCampaign {
       { messageId: `${label}-train`, jobId: label, ...reservation },
       `assign-${label}`,
     );
-  }
-
-  /** Worker: bounded retries; a terminal failure is reported to the director. */
-  private async train(message: WorkflowMessage): Promise<void> {
-    for (;;) {
-      try {
-        return await this.ctx.bridge.train(message);
-      } catch (error) {
-        const state = (await this.actor("worker").read(
-          "ExperimentActor",
-          message.experimentId,
-          "getSnapshot",
-        ))!;
-        if (state.status === "retryable") continue;
-        if (state.status !== "failed") throw error;
-        return this.ctx.dispatcher.publish(
-          "worker",
-          `${message.body.jobId}-failed`,
-          message.experimentId,
-          "TRAINING_FAILED",
-          {
-            jobId: message.body.jobId,
-            reason: String(state.failure ?? (error instanceof Error ? error.message : error)),
-          },
-        );
-      }
-    }
   }
 
   /** Director: read the measurement from authoritative records, verifying file bytes. */
