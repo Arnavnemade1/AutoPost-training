@@ -243,15 +243,19 @@ test("outbox order, receipts and reviews survive a native runtime SIGKILL", asyn
     .sort((a, b) => Number(a.sequence) - Number(b.sequence))
     .map((row) => (row.message as Document).messageId);
   expect(order).toEqual(["m1", "preflight-rejected", "preflight-approved", "assign-approved"]);
+  const experiment = await c.owner.read(E, exp("approved"), "getSnapshot");
   const closed = runtime.closed.catch(() => undefined);
   process.kill(runtime.connection.pid, "SIGKILL");
   await closed;
   runtime = await launch(authority, dataDir);
   c = clients(authority, runtime);
   expect(await snapshot()).toEqual(before);
-  await expect(
-    command("worker", E, exp("approved"), "acquireLease", { leaseMs: 1000 }),
-  ).rejects.toThrow("LEASE_HELD");
+  // Compare stored state, not lease liveness: a slow restart can outlast the lease.
+  expect(await c.owner.read(E, exp("approved"), "getSnapshot")).toEqual(experiment);
+  expect(await c.owner.read(F, campaign, "getAuthorization", [exp("approved")])).toMatchObject({
+    approved: true,
+    configSha256: hash("approved"),
+  });
   const events = (await c.owner.read(F, campaign, "getEvents", [0, 100]))!.events as Document[];
   expect(events.map((row) => row.sequence)).toEqual(events.map((_, i) => i + 1));
   expect(events.map((row) => row.type)).toEqual([
