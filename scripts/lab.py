@@ -24,13 +24,13 @@ def healthy(url):
         return False
 
 
-def start(name, cmd, url):
+def start(name, cmd, url, env=None):
     if healthy(url):
         print(f"{name}: using existing service", flush=True)
         return
     log = (ROOT / "data" / f"{name}.log").open("a")
     logs.append(log)
-    child = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=log, start_new_session=True)
+    child = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=log, start_new_session=True, env=env)
     children.append(child)
     for _ in range(90):
         if child.poll() is not None:
@@ -67,17 +67,26 @@ try:
         [str(ROOT / ".venv/bin/durable-actors"), "generate", "--out-dir", "services/actors/generated"],
         check=True,
     )
+    # Agent Relay: the local engine by default; a hosted workspace when .env (or the shell)
+    # sets FORGE_RELAY_WORKSPACE_KEY. The key goes only to the bridge's environment.
+    relay_env = os.environ | {k: v for k, v in settings.items() if k.startswith("FORGE_RELAY_") and v}
+    if not relay_env.get("FORGE_RELAY_WORKSPACE_KEY"):
+        start(
+            "relaycast",
+            [
+                "node",
+                "services/relay/server.mjs",
+                "data/relaycast.db",
+                "7528",
+            ],
+            "http://127.0.0.1:7528",
+        )
     start(
-        "relaycast",
-        [
-            "node",
-            "services/relay/server.mjs",
-            "data/relaycast.db",
-            "7528",
-        ],
-        "http://127.0.0.1:7528",
+        "relay-bridge",
+        ["node", "services/relay/bridge.mjs"],
+        "http://127.0.0.1:7529/health",
+        env=relay_env,
     )
-    start("relay-bridge", ["node", "services/relay/bridge.mjs"], "http://127.0.0.1:7529/health")
     start(
         "api",
         [sys.executable, "-m", "uvicorn", "services.api:app", "--host", "127.0.0.1", "--port", "8000"],
