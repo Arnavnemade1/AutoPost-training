@@ -4,16 +4,19 @@ Forge is being built to coordinate research agents that diagnose a model's failu
 propose and run post-training experiments, evaluate results, and select a checkpoint
 under independent governance and a bounded compute budget.
 
-**Current implementation:** a tested LoRA training/development-evaluation worker,
-seven durable Terse actors (campaigns, experiments, governance, artifacts, math worlds,
-a message outbox and a research ledger), Agent Relay dispatch between research roles,
-a deterministic director that picks each next experiment from measured development
-results, and an independent reviewer that verifies artifacts, data, protocol and
-regressions from bytes before any promotion. In a local Qwen2.5-0.5B campaign the
+**Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
+rewards are Terse math-world transitions, seven durable Terse actors (campaigns,
+experiments, governance, artifacts, math worlds, a message outbox and a research
+ledger), Agent Relay dispatch between research roles, a deterministic director that
+picks each next experiment from measured development results, and an independent
+reviewer that verifies artifacts, data, rewards, protocol and regressions from bytes
+and actor journals before any promotion. In a local Qwen2.5-0.5B SFT campaign the
 selected candidate moved a 16-example development diagnostic from 0/16 to 6/16, scored
 6/16 versus 0/16 on a held-out regression set, and was approved and promoted. These are
 small custom-scorer results, mostly answer-format learning, not a benchmark claim.
-GRPO, dashboard and sealed final evaluation remain later phases.
+A Qwen GRPO campaign continuing that checkpoint found no improvement: its best
+development candidate (7/16) regressed on held-out problems (6/16 to 4/16) and was
+vetoed. Dashboard and sealed final evaluation remain later phases.
 
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
 - [Architecture and trust boundaries](docs/architecture.md)
@@ -22,6 +25,7 @@ GRPO, dashboard and sealed final evaluation remain later phases.
 - [Durable actor setup, tests and demo](packages/terse-actors/README.md)
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
+- [Phase 6 verification](docs/verification/phase6-local.md)
 - [Phase 5 verification](docs/verification/phase5-local.md)
 - [Infrastructure performance](docs/verification/performance-local.md)
 - [Phase 4 verification](docs/verification/phase4-local.md)

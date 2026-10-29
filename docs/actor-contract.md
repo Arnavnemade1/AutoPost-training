@@ -117,7 +117,18 @@ without a second trajectory entry. Consumers must deduplicate rewards by
 Snapshots restore into a fresh episode with parent lineage, copied trajectory prefix,
 and a new state version. Use fresh action IDs in a fork. Never count inherited
 trajectory entries as newly earned rewards. Tasks and snapshots can only be changed
-by the data role. Current worlds are not connected to a GRPO optimizer.
+by the data role. `rewardCommitment` accepts the reward secret explicitly, so a trusted
+task service need not place it in its process environment.
+
+Since Phase 6 the worlds drive GRPO. The orchestrator's world gateway resets one
+single-step episode per completion (data role, answer commitment) and submits the
+policy's answer (worker role). Worlds and episodes are named by job, lease generation,
+lane and rollout (`scopedId("world", campaign, "<job>-a<generation>-l<lane>-w<n>")`,
+episode `<job>-a<generation>-u<update>-r<index>`), with request IDs `reset-<episode>` and
+`step-<episode>`, so retries replay receipts and a new attempt never reuses an episode.
+Lanes run concurrently; a world is retired after 1,000 episodes. Consumers verify a run
+from the journals: one `ENVIRONMENT_TRANSITION` per rollout with the recorded reward,
+state version and hash, the matching `ENVIRONMENT_RESET` task, and no other transitions.
 
 ## Workflow outbox and preflight (Phase 3)
 

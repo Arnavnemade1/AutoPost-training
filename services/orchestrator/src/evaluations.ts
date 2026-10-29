@@ -5,26 +5,36 @@ import type { Document } from "../../../packages/terse-actors/src/contracts.js";
 import { digest } from "../../../packages/terse-actors/src/core.js";
 import { exists, fileHash, pythonJson, readJson } from "./worker.js";
 
-export interface UntrainedEvaluation {
+export interface StartingEvaluation {
   path: string;
   sha256: string;
   cached: boolean;
 }
 
+/** An adapter a campaign's training continues from, identified by its directory hash. */
+export interface StartingAdapter {
+  path: string;
+  sha256: string;
+}
+
 /**
- * An untrained-model evaluation depends only on its campaign and experiment labels, the
- * model, the development data and the evaluation protocol, which includes the training
- * core's source hash and runtime versions. Identical inputs give the same predictions, so
- * the report is computed once and reused by key. The cache trusts the local filesystem.
+ * An evaluation of a campaign's starting policy (the untrained model, or an adapter its
+ * training continues from) depends only on its campaign and experiment labels, the model,
+ * that adapter, the development data and the evaluation protocol, which includes the
+ * training core's source hash and runtime versions. Identical inputs give the same
+ * predictions, so the report is computed once and reused by key. The cache trusts the
+ * local filesystem.
  */
-export async function untrainedEvaluation(options: {
+export async function startingEvaluation(options: {
   python: string;
   configPath: string;
   output: string;
   cacheDir: string | null;
   timeoutMs: number;
-}): Promise<UntrainedEvaluation> {
+  start?: StartingAdapter | null;
+}): Promise<StartingEvaluation> {
   const { python, configPath, output, cacheDir, timeoutMs } = options;
+  const start = options.start ?? null;
   const identity = await pythonJson(python, [
     "-m",
     "forge_training",
@@ -32,11 +42,14 @@ export async function untrainedEvaluation(options: {
     "--config",
     configPath,
   ]);
-  const cached = cacheDir && join(cacheDir, `${digest({ kind: "untrained", ...identity })}.json`);
+  const key = start
+    ? { kind: "starting", checkpoint: start.sha256, ...identity }
+    : { kind: "untrained", ...identity };
+  const cached = cacheDir && join(cacheDir, `${digest(key)}.json`);
   if (cached && (await exists(cached))) {
     const report = await readJson(cached);
     if (
-      report.checkpoint_sha256 !== null ||
+      report.checkpoint_sha256 !== (start?.sha256 ?? null) ||
       report.campaign_id !== identity.campaign_id ||
       report.experiment_id !== identity.experiment_id ||
       digest(report.model) !== digest(identity.model) ||
@@ -49,7 +62,16 @@ export async function untrainedEvaluation(options: {
   }
   await pythonJson(
     python,
-    ["-m", "forge_training", "evaluate", "--config", configPath, "--output", output],
+    [
+      "-m",
+      "forge_training",
+      "evaluate",
+      "--config",
+      configPath,
+      ...(start ? ["--checkpoint", start.path, "--expected-hash", start.sha256] : []),
+      "--output",
+      output,
+    ],
     { timeoutMs },
   );
   if (cached) {
@@ -63,8 +85,8 @@ export async function untrainedEvaluation(options: {
 
 export interface BatchChoice {
   templatePath: string;
-  baseline: UntrainedEvaluation;
-  reference: UntrainedEvaluation | null;
+  baseline: StartingEvaluation;
+  reference: StartingEvaluation | null;
   requested: number;
   used: number;
   identicalPredictions: number | null;
@@ -83,12 +105,20 @@ export async function chooseEvaluationBatch(options: {
   directory: string;
   cacheDir: string | null;
   timeoutMs: number;
+  start?: StartingAdapter | null;
 }): Promise<BatchChoice> {
-  const { python, templatePath, directory, cacheDir, timeoutMs } = options;
+  const { python, templatePath, directory, cacheDir, timeoutMs, start } = options;
   const template = await readJson(templatePath);
   const requested = Number((template.evaluation as Document | undefined)?.batch_size ?? 1);
   const evaluate = (configPath: string, name: string) =>
-    untrainedEvaluation({ python, configPath, output: join(directory, name), cacheDir, timeoutMs });
+    startingEvaluation({
+      python,
+      configPath,
+      output: join(directory, name),
+      cacheDir,
+      timeoutMs,
+      start,
+    });
   const baseline = await evaluate(templatePath, `frozen-baseline-batch${requested}.json`);
   const report = await readJson(baseline.path);
   const numExamples = Number(report.num_examples);

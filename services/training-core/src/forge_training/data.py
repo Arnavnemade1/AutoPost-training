@@ -8,37 +8,52 @@ import unicodedata
 from pathlib import Path
 
 from .artifacts import file_sha256, write_json
-from .config import DatasetManifest, DatasetSpec, Example
+from .config import DatasetManifest, DatasetSpec, Example, Task
 
 
 def question_key(question: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", question).casefold().split())
 
 
-def load_dataset(spec: DatasetSpec, purpose: str) -> tuple[list[Example], DatasetManifest]:
+def _load(spec: DatasetSpec, purpose: str, kind: str) -> tuple[list, DatasetManifest]:
     path = Path(spec.records)
     manifest = DatasetManifest.model_validate_json(Path(spec.manifest).read_text())
     if manifest.purpose != purpose:
         raise ValueError(f"Expected {purpose} data, got {manifest.purpose}")
+    if manifest.record_kind != kind:
+        raise ValueError(f"Expected {kind} records, got {manifest.record_kind}")
     if file_sha256(path) != manifest.content_sha256:
         raise ValueError(f"Dataset checksum mismatch: {path}")
+    record = Example if kind == "example" else Task
     rows = []
     for index, line in enumerate(path.read_text().splitlines(), 1):
         if not line.strip():
             raise ValueError(f"Blank JSONL record at {path}:{index}")
-        rows.append(Example.model_validate_json(line))
+        # Strict records: a task line that carries an answer field is rejected.
+        rows.append(record.model_validate_json(line))
     if len(rows) != manifest.num_examples:
         raise ValueError("Dataset count does not match manifest")
     if len({row.id for row in rows}) != len(rows):
         raise ValueError("Duplicate example IDs within dataset")
     if len({question_key(row.question) for row in rows}) != len(rows):
         raise ValueError("Duplicate normalized questions within dataset")
-    if any(not question_key(row.question) or not row.answer.strip() for row in rows):
+    if any(not question_key(row.question) for row in rows):
+        raise ValueError("Whitespace-only questions or answers are not allowed")
+    if kind == "example" and any(not row.answer.strip() for row in rows):
         raise ValueError("Whitespace-only questions or answers are not allowed")
     return rows, manifest
 
 
-def verify_separation(train: list[Example], development: list[Example]) -> None:
+def load_dataset(spec: DatasetSpec, purpose: str) -> tuple[list[Example], DatasetManifest]:
+    return _load(spec, purpose, "example")
+
+
+def load_tasks(spec: DatasetSpec) -> tuple[list[Task], DatasetManifest]:
+    """Answer-free training prompts for reward-driven optimization."""
+    return _load(spec, "train", "task")
+
+
+def verify_separation(train: list[Example | Task], development: list[Example]) -> None:
     if {row.id for row in train} & {row.id for row in development}:
         raise ValueError("Train/development example IDs overlap")
     if {question_key(row.question) for row in train} & {
@@ -50,12 +65,13 @@ def verify_separation(train: list[Example], development: list[Example]) -> None:
 def write_dataset(
     output: Path,
     name: str,
-    rows: list[Example],
+    rows: list[Example] | list[Task],
     *,
     source: str,
     revision: str,
     source_split: str,
     license_name: str,
+    purpose: str | None = None,
 ) -> None:
     path = output / f"{name}.jsonl"
     with path.open("x", encoding="utf-8") as stream:
@@ -63,13 +79,14 @@ def write_dataset(
             stream.write(row.model_dump_json() + "\n")
     manifest = DatasetManifest(
         dataset_id=name,
-        purpose=name,
+        purpose=purpose or name,
         source=source,
         source_revision=revision,
         source_split=source_split,
         license=license_name,
         content_sha256=file_sha256(path),
         num_examples=len(rows),
+        record_kind="task" if rows and isinstance(rows[0], Task) else "example",
     )
     write_json(output / f"{name}.manifest.json", manifest.model_dump())
 

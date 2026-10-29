@@ -118,22 +118,25 @@ def main() -> int:
                 result = evaluate(config, args.checkpoint, args.expected_hash)
                 write_json(args.output, result)
             else:
-                from .data import load_dataset
-                from .training import train
-
                 validate_inputs(config, check_output=False)
-                rows, _ = load_dataset(config.train, "train")
-                result = train(
-                    config,
-                    rows,
-                    Path(config.output_dir),
-                    EventLog(
-                        Path(config.output_dir) / "events.jsonl",
-                        config.campaign_id,
-                        config.experiment_id,
-                        producer="optimizer",
-                    ),
+                events = EventLog(
+                    Path(config.output_dir) / "events.jsonl",
+                    config.campaign_id,
+                    config.experiment_id,
+                    producer="optimizer",
                 )
+                if config.training.method == "grpo":
+                    from .data import load_tasks
+                    from .grpo import train_grpo
+
+                    tasks, _ = load_tasks(config.train)
+                    result = train_grpo(config, tasks, Path(config.output_dir), events)
+                else:
+                    from .data import load_dataset
+                    from .training import train
+
+                    rows, _ = load_dataset(config.train, "train")
+                    result = train(config, rows, Path(config.output_dir), events)
         print(json.dumps(result, indent=2, allow_nan=False))
         del lock
         return 0

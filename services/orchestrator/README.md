@@ -5,7 +5,9 @@ between director, data researcher, reviewer, coordinator, worker and evaluator r
 (Phase 3). A worker adapter runs the Phase 1 Python trainer only for a Relay-delivered,
 preflight-approved assignment that matches a local job allowlist. A deterministic
 research director chooses each experiment from measured development results and
-records its reasoning in the Terse research ledger (Phase 4).
+records its reasoning in the Terse research ledger (Phase 4). GRPO jobs score every
+completion through a world gateway whose rewards are `RLWorldActor` transitions, and
+every consumer re-checks those rewards against the worlds' journals (Phase 6).
 
 ## Run
 
@@ -23,7 +25,13 @@ FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm test
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run demo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen
+FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture-grpo
+FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen-grpo \
+  --start-adapter /absolute/path/to/approved/sft/checkpoint
 ```
+
+Use the npm scripts: they run the pinned Bun 1.4.2. A different global Bun cannot read
+the actors' persisted state (hydration fails with "Unable to deserialize data").
 
 `test` and `demo` start a loopback Relaycast engine (`scripts/relay-server.mjs`, under
 Node) and the native Terse runtime, create an offline random tiny GPT-2 fixture, and run
@@ -41,12 +49,24 @@ split is never read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on App
 model and dataset in the local Hugging Face cache and takes tens of minutes. Neither
 profile provisions paid compute.
 
+`fixture-grpo` runs the same campaign with method `grpo` on an offline tiny model
+warm-started on the answer format (about 40 seconds); `--from-sft` first trains a short
+SFT adapter on the campaign's own base model and continues it with GRPO. `qwen-grpo`
+requires `--start-adapter <dir>`, an approved SFT checkpoint to continue: from the raw
+instruct model about 1 in 32 sampled answers earns the reward, too little signal to
+learn from. A campaign that continues an adapter evaluates that adapter as its frozen
+baseline and regression reference, so promotion requires beating it. The Qwen profile
+uses one completion per loss micro-batch and gradient checkpointing. Set
+`PYTORCH_MPS_HIGH_WATERMARK_RATIO` (with a lower `PYTORCH_MPS_LOW_WATERMARK_RATIO`) to
+cap Apple GPU memory so a job fails rather than swapping; both are passed to Python.
+
 ## Components
 
 | File | Responsibility |
 | --- | --- |
 | `src/relay.ts` | Registers role participants; sends unsent outbox messages with idempotency keys; recipients consume their Relay channel, verify sender, channel and exact bytes against the durable message, then acknowledge |
-| `src/worker.ts` | Allowlisted training jobs; fenced lease renewed at a third of the campaign's `maxLeaseMs`; runs reuse the frozen baseline; evidence checks of the Python run bundle; evaluator reproduction in a separate process |
+| `src/worker.ts` | Allowlisted training jobs; fenced lease renewed at a third of the campaign's `maxLeaseMs`; runs reuse the frozen baseline; GRPO jobs get a world gateway per lease generation; evidence checks of the Python run bundle and, for GRPO, of rewards against world journals with step replay; evaluator reproduction in a separate process |
+| `src/worlds.ts` | World gateway: loopback endpoint with a per-job token; one data-role reset and one worker-role step per completion, in concurrent lanes, with request IDs that make retries replay receipts; `verifyWorldRollouts` checks a run's rewards against each world's journal |
 | `src/evaluations.ts` | Untrained-model evaluations cached by campaign, experiment label, model, data and protocol; batched evaluation adopted only if it matches batch size 1 |
 | `src/reconcile.ts` | Reports unsent, unacknowledged, unannounced-completion and expired-lease work from actor state; settles unmeasured local cost at the reserved bound |
 | `src/director.ts` | Pure decision policy: diagnosis, two exploratory recipes, measured ranking, revision operator, stop rules |
@@ -111,6 +131,8 @@ while execution stays authorized by the deterministic checks below.
 2. Explore two recipes through the campaign's `sft_lora` method: the full training
    partition, and the shorter half of solutions. The diagnosis orders them; both run
    if budget allows. (GRPO, the other campaign strategy, arrives in Phase 6.)
+   A campaign whose method is `grpo` uses the same rules: its recipes select tasks
+   from the same partition and train with world rewards on their answer-free projection.
 3. Rank measured candidates by correct answers, then fewer format failures, then
    fewer truncations. Losers become rejected alternatives with measured reasons.
 4. Revise the selected recipe according to what it measured: regression lowers the
@@ -139,6 +161,8 @@ evaluator message. It:
   frozen set;
 - checks the evaluation report against the frozen protocol, dataset, counts and
   checkpoint;
+- for GRPO candidates, re-reads every world journal: each recorded reward must be exactly
+  one transition of this job, with the same reward, state and task (`REWARD_PROVENANCE`);
 - checks for regressions: no development example the baseline answered may become
   wrong, and the candidate may not score below the untrained model on a held-out
   regression suite that no recipe can train on (`maxDropBps: 0`).
@@ -155,7 +179,9 @@ the first reviewed checkpoint after registration, to exercise the veto path.
 ## Trust and limits
 
 This local harness holds every role's Relay token and Terse signing key in one process.
-Deployed roles need separate processes and credentials. Relay channels are routing,
+Deployed roles need separate processes and credentials. The world gateway in particular
+holds the data role's key, the reward secret and the worker key in this process; a
+deployment needs a separate trusted task service. Relay channels are routing,
 not authorization. Recipients poll; Relay inbox acknowledgements and push subscriptions
 are not used. Only the local Relaycast engine has been exercised, not a hosted Relay
 workspace. Evaluator reproduction and governance review share host, code and process
@@ -166,4 +192,5 @@ ledger keeps its record. Selecting among candidates on a small development set c
 overfit it. See the
 [Phase 3](../../docs/verification/phase3-local.md),
 [Phase 4](../../docs/verification/phase4-local.md) and
-[Phase 5](../../docs/verification/phase5-local.md) verification records.
+[Phase 5](../../docs/verification/phase5-local.md) and
+[Phase 6](../../docs/verification/phase6-local.md) verification records.

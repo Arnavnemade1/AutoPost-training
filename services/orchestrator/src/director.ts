@@ -3,8 +3,9 @@ import { digest } from "../../../packages/terse-actors/src/core.js";
 
 /**
  * Deterministic research policy. Every choice is a function of measured development
- * evidence and declared limits; it never authorizes compute. Both recipes use the
- * campaign's `sft_lora` method and differ in training data and optimization schedule.
+ * evidence and declared limits; it never authorizes compute. Recipes use the campaign's
+ * training method (`sft_lora` or reward-driven `grpo`) and differ in training data and
+ * optimization schedule.
  */
 export const POLICY_VERSION = "director-rules-v1";
 
@@ -21,6 +22,7 @@ export interface Measurement {
   predictionsSha256: string;
 }
 export type DataSelection = "full" | "concise";
+export type Method = "sft_lora" | "grpo";
 export interface Recipe {
   data: DataSelection;
   learningRate: number;
@@ -154,7 +156,7 @@ function why(loser: Measurement, winner: Measurement): string {
   return `Tied on all measured criteria; ${winner.label} wins the deterministic label tie-break`;
 }
 
-const hypotheses: Record<DataSelection, Record<Diagnosis["primary"], string>> = {
+const sftHypotheses: Record<DataSelection, Record<Diagnosis["primary"], string>> = {
   concise: {
     none: "Concise solutions preserve accuracy with shorter outputs.",
     length:
@@ -170,6 +172,31 @@ const hypotheses: Record<DataSelection, Record<Diagnosis["primary"], string>> = 
   },
 };
 
+/** GRPO: rewards are 1 only for a world-verified final answer, 0 otherwise. */
+const grpoHypotheses: Record<DataSelection, Record<Diagnosis["primary"], string>> = {
+  concise: {
+    none: "Rewarding verified answers on short problems preserves accuracy.",
+    length:
+      "On problems with the shortest solutions, sampled completions finish with a verified '#### N' more often, so groups carry reward signal.",
+    format:
+      "Short problems make a rewarded final-answer line likely enough to reinforce the required format.",
+    reasoning:
+      "Short problems give the densest correctness reward but may not exercise multi-step reasoning; included as a contrast.",
+  },
+  full: {
+    none: "Rewarding verified answers on all problems preserves accuracy.",
+    length:
+      "All problems, rewarded only for verified final answers, push completions to finish within the limit; included as a contrast.",
+    format: "Rewarding only verified final answers reinforces completions that end with '#### N'.",
+    reasoning:
+      "World-verified correctness rewards over all problems target wrong answers directly.",
+  },
+};
+const hypotheses: Record<Method, typeof sftHypotheses> = {
+  sft_lora: sftHypotheses,
+  grpo: grpoHypotheses,
+};
+
 function label(round: number, operator: Operator, data: DataSelection): string {
   return `r${round}-${operator}-${data}`;
 }
@@ -180,6 +207,7 @@ export function initialDecision(
   base: Recipe,
   costMicroUsd: number,
   history: Pick<History, "remainingMicroUsd" | "experimentsRemaining">,
+  method: Method = "sft_lora",
 ): Decision {
   const diagnosis = diagnose(baseline);
   if (diagnosis.primary === "none")
@@ -209,7 +237,7 @@ export function initialDecision(
     recipe: { ...base, data },
     operator: "explore",
     parent: null,
-    hypothesis: hypotheses[data][diagnosis.primary],
+    hypothesis: hypotheses[method][data][diagnosis.primary],
   }));
   return {
     kind: "launch",
@@ -222,7 +250,7 @@ export function initialDecision(
     summary: `${diagnosis.summary} Explore ${candidates
       .slice(0, affordable)
       .map((c) => c.recipe.data)
-      .join(" and ")} solution recipes.`,
+      .join(" and ")} ${method === "grpo" ? "world-rewarded task" : "solution"} recipes.`,
   };
 }
 

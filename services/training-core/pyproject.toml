@@ -17,6 +17,9 @@ train = [
   "accelerate==1.11.0",
   "tokenizers==0.22.1",
   "numpy==2.3.4",
+  # GRPO: TRL 0.24.0 is the release built against Transformers 4.57.
+  "trl==0.24.0",
+  "datasets==4.3.0",
 ]
 data = ["datasets==4.3.0"]
 test = ["pytest==8.4.2", "ruff==0.14.3"]

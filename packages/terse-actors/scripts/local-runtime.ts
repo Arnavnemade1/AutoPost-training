@@ -52,6 +52,8 @@ export async function launch(
   authority: LocalAuthority,
   dataDir: string,
   quiet = true,
+  /** Restart on a previous runtime's port so existing clients reconnect transparently. */
+  port?: number,
 ): Promise<LocalActorRuntime> {
   await mkdir(dataDir, { recursive: true });
   const previous = { ...process.env };
@@ -76,6 +78,7 @@ export async function launch(
       apiKey: authority.transportKey,
       startupTimeoutMs: 60_000,
       quiet,
+      ...(port === undefined ? {} : { port }),
     });
   } finally {
     for (const name of Object.keys(process.env)) delete process.env[name];

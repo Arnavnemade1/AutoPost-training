@@ -15,7 +15,8 @@ import { GovernanceReviewer, type RegressionSuite } from "../src/governance.js";
 import { reconcile } from "../src/reconcile.js";
 import { RelayDispatcher, registerParticipants } from "../src/relay.js";
 import { ResearchCampaign, type ResearchProfile } from "../src/research.js";
-import { TrainingBridge, pythonJson, readJson } from "../src/worker.js";
+import { TrainingBridge, exists, pythonJson, readJson } from "../src/worker.js";
+import { verifyWorldRollouts, type WorldGateway } from "../src/worlds.js";
 import { launchRelay } from "./local-relay.js";
 
 const limits = { maxRevisions: 2, maxFailures: 2 };
@@ -46,11 +47,44 @@ async function writeDataset(directory: string, name: string, lines: string[], ma
   };
 }
 const regressionPolicy = { maxDropBps: 0, maxDevRegressions: 0 };
+/** Every GRPO setting is stated, so the reviewer pins all of them (unset defaults are not). */
+function grpoSettings(overrides: Document): Document {
+  return {
+    num_generations: 4,
+    max_completion_tokens: 256,
+    max_prompt_tokens: 1024,
+    temperature: 1.0,
+    top_p: 1.0,
+    beta: 0.0,
+    epsilon: 0.2,
+    loss_type: "dapo",
+    scale_rewards: "group",
+    reward_version: "exact-numeric-v1",
+    action_parser: "final_answer_v1",
+    max_rollouts: 4096,
+    snapshot_every: 1,
+    gradient_checkpointing: false,
+    request_timeout_seconds: 120,
+    ...overrides,
+  };
+}
+
+/** The adapter a GRPO campaign continues from: a directory and its content hash. */
+async function adapterAt(python: string, path: string): Promise<Document> {
+  // The training core resolves symlinks in config paths; record the path it will see.
+  const adapter = await pythonJson(python, [
+    "-c",
+    "import sys,json; from pathlib import Path; from forge_training.artifacts import directory_sha256; p = Path(sys.argv[1]).resolve(); print(json.dumps({'path': str(p), 'sha256': directory_sha256(p)}))",
+    path,
+  ]);
+  return { path: String(adapter.path), sha256: String(adapter.sha256) };
+}
 
 async function provision(
   name: string,
   output: string,
   python: string,
+  options: { startAdapter?: string; fromSft?: boolean } = {},
 ): Promise<{ profile: ResearchProfile; regression: RegressionSuite }> {
   if (name === "fixture") {
     const fixture = join(output, "fixture");
@@ -108,7 +142,85 @@ async function provision(
     };
     return { profile, regression: { ...regression, ...regressionPolicy } };
   }
-  if (name !== "qwen") throw new Error("Profile must be 'fixture' or 'qwen'");
+  if (name === "fixture-grpo") {
+    // Offline tiny model warm-started on the answer format, so world rewards vary within
+    // groups (services/training-core fixtures.py). Mechanics only, never benchmark evidence.
+    const fixture = join(output, "fixture");
+    await pythonJson(python, [
+      "-c",
+      "import sys,json; from pathlib import Path; from forge_training.fixtures import make_grpo_fixture; print(json.dumps({'config':str(make_grpo_fixture(Path(sys.argv[1])))}))",
+      fixture,
+    ]);
+    const { grpo, ...config } = await readJson(join(fixture, "experiment.json"));
+    // The template is the baseline-evaluation config: supervised method, allowed partition
+    // with answers. Each GRPO experiment trains on that partition's answer-free projection.
+    const templatePath = join(fixture, "template.json");
+    await writeFile(
+      templatePath,
+      JSON.stringify({
+        ...config,
+        campaign_id: "research-fixture-grpo",
+        experiment_id: "baseline",
+        train: { records: "data/train.jsonl", manifest: "data/train.manifest.json" },
+        training: { ...(config.training as Document), method: "sft_lora" },
+      }),
+    );
+    let start: Document | null = null;
+    if (options.fromSft) {
+      // SFT then GRPO, in miniature: a short supervised run on this campaign's own base
+      // model teaches the answer format; GRPO then continues that adapter.
+      const sftPath = join(fixture, "parent-sft.json");
+      await writeFile(
+        sftPath,
+        JSON.stringify({
+          ...config,
+          campaign_id: "research-fixture-grpo-parent",
+          experiment_id: "parent-sft",
+          train: { records: "data/train.jsonl", manifest: "data/train.manifest.json" },
+          training: { ...(config.training as Document), method: "sft_lora", max_steps: 4 },
+          output_dir: "parent-sft",
+        }),
+      );
+      await pythonJson(python, ["-m", "forge_training", "run", "--config", sftPath], {
+        timeoutMs: 300000,
+      });
+      start = await adapterAt(python, join(fixture, "parent-sft", "checkpoint"));
+    }
+    const profile: ResearchProfile = {
+      name,
+      campaignId: "research-fixture-grpo",
+      templatePath,
+      source: {
+        records: join(fixture, "data/train.jsonl"),
+        manifest: join(fixture, "data/train.manifest.json"),
+      },
+      base: { data: "full", learningRate: 0.01, maxSteps: 6 },
+      limits: { ...limits, minLearningRate: 0.001, maxLearningRate: 0.1, maxSteps: 24 },
+      costMicroUsd: 100000,
+      maxExperiments: 4,
+      timeouts: { runMs: 420000, evaluationMs: 300000 },
+      method: {
+        method: "grpo",
+        grpo: grpoSettings({ ...(grpo as Document), ...(start ? { init_adapter: start } : {}) }),
+      },
+    };
+    return {
+      profile,
+      regression: {
+        records: join(fixture, "data/regression.jsonl"),
+        manifest: join(fixture, "data/regression.manifest.json"),
+        ...regressionPolicy,
+      },
+    };
+  }
+  if (name !== "qwen" && name !== "qwen-grpo")
+    throw new Error("Profile must be 'fixture', 'fixture-grpo', 'qwen' or 'qwen-grpo'");
+  const grpo = name === "qwen-grpo";
+  // GRPO from the raw instruct model sees almost no reward (about 1 in 32 sampled answers
+  // has a correct final line), so the profile continues an adapter that writes the format.
+  const start = grpo && options.startAdapter ? await adapterAt(python, options.startAdapter) : null;
+  if (grpo && !start)
+    throw new Error("qwen-grpo needs --start-adapter <approved SFT checkpoint directory>");
   const raw = join(output, "data", "gsm8k-raw"),
     data = join(output, "data", "gsm8k");
   // Official GSM8K train file only, from the pinned revision; the test split is never read.
@@ -152,7 +264,7 @@ async function provision(
     JSON.stringify(
       {
         schema_version: 1,
-        campaign_id: "research-qwen-gsm8k",
+        campaign_id: grpo ? "research-qwen-grpo" : "research-qwen-gsm8k",
         experiment_id: "baseline",
         model: { source: "hub", model_status: "instruct", ...QWEN },
         train: { records: "data/gsm8k/train.jsonl", manifest: "data/gsm8k/train.manifest.json" },
@@ -160,19 +272,37 @@ async function provision(
           records: "data/gsm8k/development.jsonl",
           manifest: "data/gsm8k/development.manifest.json",
         },
-        training: {
-          method: "sft_lora",
-          learning_rate: 0.0002,
-          max_steps: 32,
-          batch_size: 1,
-          gradient_accumulation_steps: 1,
-          max_sequence_length: 1024,
-          lora_rank: 8,
-          lora_alpha: 16,
-          target_modules: ["q_proj", "v_proj"],
-          max_seconds: 1500,
-          max_training_tokens: 200000,
-        },
+        training: grpo
+          ? {
+              // The template itself is the supervised baseline-evaluation config.
+              method: "sft_lora",
+              // Continuing an adapter that already scores: a moderate step size protects it.
+              learning_rate: 0.00005,
+              max_steps: 16,
+              // Low memory: one completion per loss micro-batch keeps the vocabulary-sized
+              // logits small; eight micro-batches make an update of 2 prompts x 4 samples.
+              batch_size: 1,
+              gradient_accumulation_steps: 8,
+              max_sequence_length: 1024,
+              lora_rank: 8,
+              lora_alpha: 16,
+              target_modules: ["q_proj", "v_proj"],
+              max_seconds: 3000,
+              max_training_tokens: 1000000,
+            }
+          : {
+              method: "sft_lora",
+              learning_rate: 0.0002,
+              max_steps: 32,
+              batch_size: 1,
+              gradient_accumulation_steps: 1,
+              max_sequence_length: 1024,
+              lora_rank: 8,
+              lora_alpha: 16,
+              target_modules: ["q_proj", "v_proj"],
+              max_seconds: 1500,
+              max_training_tokens: 200000,
+            },
         evaluation: {
           scorer: "forge_numeric_v1",
           max_new_tokens: 256,
@@ -191,17 +321,45 @@ async function provision(
       2,
     ),
   );
-  const profile: ResearchProfile = {
-    name,
-    campaignId: "research-qwen-gsm8k",
-    templatePath,
-    source: { records: join(data, "train.jsonl"), manifest: join(data, "train.manifest.json") },
-    base: { data: "full", learningRate: 0.0002, maxSteps: 32 },
-    limits: { ...limits, minLearningRate: 0.00002, maxLearningRate: 0.002, maxSteps: 128 },
-    costMicroUsd: 100000,
-    maxExperiments: 4,
-    timeouts: { runMs: 3600000, evaluationMs: 1800000 },
+  const source = {
+    records: join(data, "train.jsonl"),
+    manifest: join(data, "train.manifest.json"),
   };
+  const timeouts = { runMs: 3600000, evaluationMs: 1800000 };
+  const profile: ResearchProfile = grpo
+    ? {
+        name,
+        campaignId: "research-qwen-grpo",
+        templatePath,
+        source,
+        base: { data: "full", learningRate: 0.00005, maxSteps: 16 },
+        limits: { ...limits, minLearningRate: 0.00001, maxLearningRate: 0.001, maxSteps: 64 },
+        costMicroUsd: 100000,
+        maxExperiments: 3,
+        timeouts,
+        method: {
+          method: "grpo",
+          grpo: grpoSettings({
+            max_rollouts: 1024,
+            // Fewer adapter files; gradient checkpointing trades compute for memory.
+            snapshot_every: 4,
+            gradient_checkpointing: true,
+            request_timeout_seconds: 300,
+            init_adapter: start,
+          }),
+        },
+      }
+    : {
+        name,
+        campaignId: "research-qwen-gsm8k",
+        templatePath,
+        source,
+        base: { data: "full", learningRate: 0.0002, maxSteps: 32 },
+        limits: { ...limits, minLearningRate: 0.00002, maxLearningRate: 0.002, maxSteps: 128 },
+        costMicroUsd: 100000,
+        maxExperiments: 4,
+        timeouts,
+      };
   return { profile, regression: { ...regression, ...regressionPolicy } };
 }
 
@@ -213,10 +371,20 @@ export async function runResearch(
   output: string,
   python: string,
   name: string,
-  options: { tamperFirstReviewedCheckpoint?: boolean; cacheDir?: string | null } = {},
+  options: {
+    tamperFirstReviewedCheckpoint?: boolean;
+    cacheDir?: string | null;
+    startAdapter?: string;
+    fromSft?: boolean;
+  } = {},
 ): Promise<Document> {
   await mkdir(output, { recursive: true });
-  const provisioned = await provision(name, output, python);
+  const provisioned = await provision(name, output, python, options);
+  // A GRPO campaign continuing an adapter is measured against that starting policy.
+  const startAdapter = (provisioned.profile.method?.grpo?.init_adapter ?? null) as Document | null;
+  const start = startAdapter
+    ? { path: String(startAdapter.path), sha256: String(startAdapter.sha256) }
+    : null;
   const { regression } = provisioned;
   const cacheDir = options.cacheDir ?? null;
   // Frozen untrained baseline, at the requested batch size only if it matches batch size 1.
@@ -226,10 +394,12 @@ export async function runResearch(
     directory: output,
     cacheDir,
     timeoutMs: provisioned.profile.timeouts.evaluationMs,
+    start,
   });
   const profile: ResearchProfile = { ...provisioned.profile, templatePath: batch.templatePath };
   const baselinePath = batch.baseline.path,
     baselineSha256 = batch.baseline.sha256;
+  const method = profile.method?.method ?? "sft_lora";
   const baseline = await readJson(baselinePath);
   // Resolved model identity: local fixture paths become absolute, exactly as workers see them.
   const template = (
@@ -238,11 +408,13 @@ export async function runResearch(
   const model = template.model as Document;
   const spec = {
     requirePreflight: true,
-    objective: `Improve development accuracy of ${model.model_id} on ${name === "qwen" ? "GSM8K-train-derived development math" : "an offline synthetic fixture"} within budget; a valid campaign may find no improvement`,
+    objective: `Improve development accuracy of ${model.model_id}${start ? ` from adapter ${start.sha256}` : ""} on ${name.startsWith("qwen") ? "GSM8K-train-derived development math" : "an offline synthetic fixture"} within budget; a valid campaign may find no improvement`,
     model: { modelId: model.model_id, revision: model.revision },
-    benchmark: name === "qwen" ? "gsm8k-train-development-forge_numeric_v1" : "offline-fixture",
+    benchmark: name.startsWith("qwen")
+      ? "gsm8k-train-development-forge_numeric_v1"
+      : "offline-fixture",
     policyVersion: "v1",
-    allowedStrategies: ["sft_lora"],
+    allowedStrategies: [method],
     maxBudgetMicroUsd: profile.costMicroUsd * profile.maxExperiments,
     maxConcurrent: 1,
     maxExperiments: profile.maxExperiments,
@@ -277,7 +449,17 @@ export async function runResearch(
       actors.owner.command(actor, profile.campaignId, profile.campaignId, "initialize", payload);
     await owner("ResearchCampaignActor", spec);
     await owner("GovernanceActor", { objectiveSha256: digest(spec), policyVersion: "v1" });
-    const bridge = new TrainingBridge(python, dispatcher, { ...profile.timeouts, leaseMs: 60000 });
+    // Reward-driven jobs: this process is also the trusted task service (holds the reward
+    // secret and the data role's key) that scores rollouts against the world actors.
+    const gateways: WorldGateway[] = [];
+    const bridge = new TrainingBridge(
+      python,
+      dispatcher,
+      { ...profile.timeouts, leaseMs: 60000 },
+      method === "grpo"
+        ? { rewardSecret: authority.rewardSecret, onGateway: (gateway) => gateways.push(gateway) }
+        : undefined,
+    );
     const research = new ResearchCampaign({
       output,
       python,
@@ -297,6 +479,7 @@ export async function runResearch(
           limits: profile.limits,
           source: profile.source,
           template: await readJson(profile.templatePath),
+          method: profile.method,
         },
         join(output, "governance"),
         profile.timeouts.evaluationMs,
@@ -351,9 +534,31 @@ export async function runResearch(
         [experimentId],
       ))!.launch as Document;
       const evaluation = state.evaluation as Document | null;
+      const job = bridge.get(String(launchRecord.label));
+      const runDir = job && String(job.config.output_dir);
+      let rewards: Document | null = null;
+      if (job?.world && runDir && (await exists(join(runDir, "manifest.json")))) {
+        // Re-read from the world journals, not from any message.
+        const world = await verifyWorldRollouts({
+          reader: actors.owner,
+          campaignId: profile.campaignId,
+          jobId: job.jobId,
+          runDir,
+        });
+        const training = await readJson(join(runDir, "training.json"));
+        rewards = document({
+          ...world,
+          updates: training.optimizer_steps,
+          firstUpdateRewardMean: training.first_update_reward_mean,
+          lastUpdateRewardMean: training.last_update_reward_mean,
+          lineage: training.lineage,
+        });
+      }
       experiments.push({
         label: launchRecord.label,
         experimentId,
+        strategy: (state.proposal as Document | null)?.strategy ?? null,
+        rewards,
         operator: launchRecord.operator,
         parent: launchRecord.parent,
         recipe: launchRecord.recipe,
@@ -369,7 +574,9 @@ export async function runResearch(
       (a, b) => Number(a.sequence) - Number(b.sequence),
     );
     const report = document({
-      phase: 4,
+      phase: method === "grpo" ? 6 : 5,
+      method,
+      startingAdapter: start,
       profile: name,
       policyVersion: POLICY_VERSION,
       campaignId: profile.campaignId,
@@ -410,6 +617,7 @@ export async function runResearch(
         frozenBaselineCached: batch.baseline.cached,
         reusedFrozenBaselineInRuns: true,
       },
+      worldGateways: gateways.map((gateway) => ({ ...gateway.stats })),
       humanSelectedExperiments: false,
       modelImprovementClaimed: false,
     });
@@ -430,8 +638,11 @@ if (import.meta.main) {
     (process.argv[3]?.startsWith("--") ? undefined : process.argv[3]) ??
       join(import.meta.dir, "../artifacts", `research-${name}-${Date.now()}`),
   );
+  const flag = process.argv.indexOf("--start-adapter");
   const report = await runResearch(output, python, name, {
     tamperFirstReviewedCheckpoint: process.argv.includes("--inject-tamper"),
+    fromSft: process.argv.includes("--from-sft"),
+    startAdapter: flag > 0 ? process.argv[flag + 1] : undefined,
     cacheDir:
       process.env.FORGE_EVALUATION_CACHE ?? join(import.meta.dir, "../artifacts/cache/evaluations"),
   });
