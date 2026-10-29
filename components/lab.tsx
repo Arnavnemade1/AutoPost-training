@@ -90,7 +90,7 @@ export function Lab() {
     [error, setError] = useState(""),
     [newCampaign, setNewCampaign] = useState(false),
     [menu, setMenu] = useState(false),
-    [theme, setTheme] = useState("dark"),
+    [theme, setTheme] = useState("light"),
     [experiment, setExperiment] = useState<Experiment | null>(null),
     [environment, setEnvironment] = useState<Environment | null>(null),
     [artifact, setArtifact] = useState<Artifact | null>(null),
@@ -143,7 +143,7 @@ export function Lab() {
   }, [refresh]);
   useEffect(() => {
     const stored = localStorage.getItem("forge-theme");
-    const value = stored || "dark";
+    const value = stored || "light";
     document.documentElement.dataset.theme = value;
     requestAnimationFrame(() => setTheme(value));
   }, []);
