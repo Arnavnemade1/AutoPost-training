@@ -1,6 +1,7 @@
 export type View =
   | "briefing"
   | "chat"
+  | "production"
   | "terse"
   | "overview"
   | "experiments"
@@ -66,6 +67,7 @@ export type Experiment = {
     director: string;
   };
   evaluation?: Evaluation;
+  production?: Evaluation | null;
   review?: Review;
   training?: {
     weights_changed: boolean;
@@ -154,14 +156,22 @@ export type Campaign = {
   artifacts: Artifact[];
   environments: Environment[];
   baseline?: Evaluation;
-  best?: { id: string; evaluation: Evaluation; sha256: string };
+  best?: {
+    id: string;
+    evaluation: Evaluation;
+    sha256: string;
+    production?: Evaluation | null;
+  };
   final?: {
     baseline: Evaluation;
     checkpoint: Evaluation;
     improvement_pp: number;
     checkpoint_id: string;
     valid_improvement: boolean;
+    production?: ProductionVerdict;
   };
+  production?: CampaignProduction;
+  production_baseline?: Evaluation;
   actor?: {
     consumed_seconds: number;
     reservations: Record<string, { seconds: number; status: string }>;
@@ -225,3 +235,86 @@ export const duration = (s: number) =>
     : s < 3600
       ? `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`
       : `${(s / 3600).toFixed(2)}h`;
+
+export type DetectorKind =
+  | "arithmetic_slip"
+  | "missing_final_answer"
+  | "truncated"
+  | "user_reported";
+export type DetectorAudit = {
+  labeled: number;
+  actually_wrong: number;
+  true_positives: number;
+  false_positives: number;
+  missed: number;
+  precision: number | null;
+  recall: number | null;
+};
+export type DetectorCategory = {
+  kind: DetectorKind;
+  label: string;
+  count: number;
+};
+export type ProductionTrace = {
+  id: string;
+  prompt: string;
+  output: string;
+  finish_reason: string | null;
+  feedback?: { rating?: number; correction?: string };
+  timestamp?: string;
+};
+export type ProductionSignal = {
+  kind: DetectorKind;
+  evidence: {
+    equation?: string;
+    computed?: string;
+    tail?: string;
+    finish_reason?: string;
+    rating?: number;
+    correction?: string;
+  };
+};
+export type ProductionScanSummary = {
+  id: string;
+  name: string;
+  created_at: string;
+  source: "simulated" | "upload";
+  source_sha256: string;
+  traces: number;
+  flagged: number;
+  malformed: number;
+  excluded_sealed_overlap: string[];
+  categories: DetectorCategory[];
+  audit: DetectorAudit | null;
+};
+export type ProductionScan = Omit<ProductionScanSummary, "malformed"> & {
+  malformed: { line: number; reason: string }[];
+  findings: { trace: ProductionTrace; signals: ProductionSignal[] }[];
+};
+export type ImprovementClaim = "validated" | "uncertain" | "none";
+export type ProductionVerdict = {
+  baseline: { correct: number; n: number };
+  checkpoint: { correct: number; n: number };
+  fixed_ids: string[];
+  improvement_pp: number;
+  paired_bootstrap_95_pp: number[];
+  improved_examples: number;
+  regressed_examples: number;
+  improvement_claim: ImprovementClaim;
+  valid_improvement: boolean;
+};
+export type CampaignProduction = {
+  scan_id: string;
+  name: string;
+  traces: number;
+  flagged: number;
+  categories: DetectorCategory[];
+  audit: DetectorAudit | null;
+  train: { id: string; trace_id: string; kinds: DetectorKind[] }[];
+  held_out: {
+    id: string;
+    trace_id: string;
+    kinds: DetectorKind[];
+    question: string;
+  }[];
+};

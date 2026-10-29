@@ -13,6 +13,13 @@ export function Icon({
         <path d="M4 4h16v13H9l-5 4V4zM8 8h8m-8 4h5" />
       </>
     ),
+    production: (
+      <>
+        <path d="M3 6h14M3 12h6M3 18h6" />
+        <circle cx="15.5" cy="15" r="3.5" />
+        <path d="M18 17.5l3 3" />
+      </>
+    ),
     terse: (
       <>
         <path d="M12 3l9 5v8l-9 5-9-5V8l9-5zm0 10v8M3 8l9 5 9-5" />
@@ -157,6 +164,12 @@ export function Icon({
         <circle cx="12" cy="12" r="9" />
         <circle cx="12" cy="12" r="5" />
         <circle cx="12" cy="12" r="1" />
+      </>
+    ),
+    lock: (
+      <>
+        <rect x="5" y="11" width="14" height="10" rx="2" />
+        <path d="M8 11V8a4 4 0 018 0v3" />
       </>
     ),
     record: (

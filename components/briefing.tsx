@@ -1,5 +1,12 @@
 "use client";
-import { Campaign, Event, Experiment, agentNames, duration } from "@/lib/types";
+import {
+  Campaign,
+  Event,
+  Experiment,
+  TERMINAL,
+  agentNames,
+  duration,
+} from "@/lib/types";
 import { Icon } from "./icon";
 import { Empty, PanelHeader, Status } from "./views";
 
@@ -21,6 +28,90 @@ const reason: Record<string, string> = {
 };
 const count = (value?: { correct: number; n: number }) =>
   value ? `${value.correct} / ${value.n}` : "Awaiting";
+const claim = {
+  validated: "Validated improvement: the 95% paired interval is above zero.",
+  uncertain:
+    "A higher score, but within uncertainty. No validated improvement is claimed.",
+  none: "No improvement on these failures. No validated improvement is claimed.",
+};
+const signed = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}`;
+
+function ProductionCheck({ campaign: c }: { campaign: Campaign }) {
+  const p = c.production;
+  if (!p) return null;
+  const verdict = c.final?.production;
+  const base = c.production_baseline;
+  const best = c.best?.production || undefined;
+  const n = p.held_out.length;
+  const stopped = TERMINAL.includes(c.status) && !verdict;
+  const before = verdict?.baseline ?? base;
+  const after = verdict?.checkpoint ?? best;
+  const fixed = verdict
+    ? verdict.fixed_ids.length
+    : base && best
+      ? best.predictions.filter(
+          (a) =>
+            a.correct &&
+            base.predictions.some((b) => b.id === a.id && !b.correct),
+        ).length
+      : null;
+  return (
+    <section
+      className="briefing-final briefing-production panel"
+      aria-label="Held-out production failures"
+    >
+      <div>
+        <span>
+          Production failures · {p.train.length} trained on ·{" "}
+          {p.held_out.length} held out
+        </span>
+        <h2>
+          {!n ? (
+            "No held-out failures to measure"
+          ) : before && after ? (
+            <>
+              Original {count(before)} <Icon name="arrow" size={20} /> Candidate{" "}
+              {count(after)}
+            </>
+          ) : before ? (
+            <>Before {count(before)}</>
+          ) : stopped ? (
+            "Held-out failures were not measured"
+          ) : (
+            `Measuring the ${n} held-out failures before training`
+          )}
+        </h2>
+      </div>
+      <p>
+        {!n ? (
+          `None of the ${p.flagged} flagged answers had a reference answer to hold out, so before and after cannot be compared. Source: ${p.name}.`
+        ) : verdict ? (
+          <>
+            <strong>
+              {verdict.fixed_ids.length} of {verdict.baseline.n} held-out
+              failures fixed.
+            </strong>{" "}
+            {claim[verdict.improvement_claim]} 95% paired interval{" "}
+            {signed(verdict.paired_bootstrap_95_pp[0])} to{" "}
+            {signed(verdict.paired_bootstrap_95_pp[1])} percentage points.
+          </>
+        ) : fixed !== null ? (
+          <>
+            <strong>
+              {fixed} of {best?.n} fixed by {c.best?.id}.
+            </strong>{" "}
+            A development-stage reading. The verdict comes with the final
+            evaluation.
+          </>
+        ) : before && !stopped ? (
+          `Candidate not measured yet: each approved checkpoint is measured on the same ${n} failures. Source: ${p.name}.`
+        ) : (
+          `${n} held-out production failures, never trained on, measured before and after. Source: ${p.name}.`
+        )}
+      </p>
+    </section>
+  );
+}
 
 export function Briefing({
   campaign: c,
@@ -150,6 +241,7 @@ export function Briefing({
           </p>
         </section>
       )}
+      <ProductionCheck campaign={c} />
       <div className="briefing-desks">
         <section className="panel briefing-desk">
           <PanelHeader

@@ -20,6 +20,7 @@ import { NewCampaign } from "./new-campaign";
 import { Results } from "./results";
 import { Briefing } from "./briefing";
 import { AgentChat } from "./agent-chat";
+import { ProductionView } from "./production";
 import { TerseView } from "./terse-view";
 import {
   ArtifactDetail,
@@ -39,6 +40,7 @@ import {
 const navigation: { id: View; label: string; group: string }[] = [
   { id: "briefing", label: "Training briefing", group: "Workspace" },
   { id: "chat", label: "Agent chat", group: "Workspace" },
+  { id: "production", label: "Production failures", group: "Workspace" },
   { id: "terse", label: "Durable actors", group: "Workspace" },
   { id: "overview", label: "Overview", group: "Workspace" },
   { id: "experiments", label: "Experiments", group: "Workspace" },
@@ -51,6 +53,8 @@ const navigation: { id: View; label: string; group: string }[] = [
 const descriptions: Record<View, string> = {
   briefing: "The task, the measurements, and what each research role can see.",
   chat: "The research team's real assignments, decisions and handoffs.",
+  production:
+    "Failures found in real traffic without an answer key, audited against reviewer labels.",
   terse:
     "Read the persisted coordination state and replay versioned training worlds.",
   overview: "Your autonomous research organization, at a glance.",
@@ -203,6 +207,14 @@ export function Lab() {
     selectedRef.current = id;
     setLoading(true);
     await refresh();
+  }
+  function openCampaign(c: Campaign) {
+    setSelected(c.id);
+    selectedRef.current = c.id;
+    setCampaign(c);
+    setEvents([]);
+    navigate("briefing");
+    void refresh();
   }
   function toggleTheme() {
     const value = theme === "dark" ? "light" : "dark";
@@ -409,7 +421,7 @@ export function Lab() {
         </header>
         <main
           id="main-content"
-          className={`main-content ${["briefing", "chat", "terse"].includes(view) ? "briefing-mode" : ""}`}
+          className={`main-content ${["briefing", "chat", "production", "terse"].includes(view) ? "briefing-mode" : ""}`}
         >
           <div className="page-heading">
             <div>
@@ -478,7 +490,7 @@ export function Lab() {
             </div>
           ) : (
             <>
-              {campaign && view !== "connections" && (
+              {campaign && !["connections", "production"].includes(view) && (
                 <section
                   className="campaign-bar"
                   aria-label="Current research campaign"
@@ -821,6 +833,11 @@ export function Lab() {
                     </section>
                   )}
                 </>
+              ) : view === "production" ? (
+                <ProductionView
+                  campaignRunning={live}
+                  onCampaign={openCampaign}
+                />
               ) : view === "chat" ? (
                 <AgentChat
                   key={campaign?.id}
@@ -921,12 +938,7 @@ export function Lab() {
           onClose={() => setNewCampaign(false)}
           onCreated={(c) => {
             setNewCampaign(false);
-            setSelected(c.id);
-            selectedRef.current = c.id;
-            setCampaign(c);
-            setEvents([]);
-            setView("briefing");
-            void refresh();
+            openCampaign(c);
           }}
         />
       )}
