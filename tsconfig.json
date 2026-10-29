@@ -30,6 +30,7 @@
     ".venv",
     "services",
     "packages",
+    "apps",
     "data",
     "artifacts"
   ]

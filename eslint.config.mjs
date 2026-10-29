@@ -9,6 +9,7 @@ export default defineConfig([
     "node_modules/**",
     "services/**",
     "packages/**",
+    "apps/**",
     "data/**",
     "artifacts/**",
     ".venv/**",
