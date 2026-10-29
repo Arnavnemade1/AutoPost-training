@@ -31,11 +31,12 @@ export class GovernanceActor extends Actor {
       z.strictObject({ objectiveSha256: hash, policyVersion: id }),
     );
     if (request.campaignId !== this.id) fail("CAMPAIGN_SCOPE", "Wrong governance authority");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     if (this.state.campaignId) fail("POLICY_IMMUTABLE", "Governance policy is already initialized");
     const result = { ...auth.payload, campaignId: this.id };
     this.state = commit(
+      this.db,
       { ...this.state, ...result },
       auth,
       "GOVERNANCE_INITIALIZED",
@@ -57,7 +58,7 @@ export class GovernanceActor extends Actor {
     );
     if (request.campaignId !== this.id || this.state.campaignId !== this.id)
       fail("CAMPAIGN_SCOPE", "Unknown governance authority");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const review = { ...auth.payload, reviewerKeyId: auth.keyId };
     if (
@@ -69,6 +70,7 @@ export class GovernanceActor extends Actor {
       fail("DECISION_FINAL", "Checkpoint decisions are terminal and cannot be overwritten");
     const result = document(review);
     this.state = commit(
+      this.db,
       { ...this.state, decisions: { ...this.state.decisions, [review.checkpointSha256]: review } },
       auth,
       review.decision === "approved" ? "CHECKPOINT_APPROVED" : "CHECKPOINT_REJECTED",
@@ -93,6 +95,6 @@ export class GovernanceActor extends Actor {
     });
   }
   async getEvents(after: number, limit: number): Promise<Document> {
-    return events(this.state, after, limit);
+    return events(this.db, this.state.version, after, limit);
   }
 }

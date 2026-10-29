@@ -174,10 +174,9 @@ export interface DomainEvent {
   type: string;
   payload: Document;
 }
+/** Persisted with domain state; events and receipts are rows in actor SQLite (core.ts). */
 export interface Journal {
   version: number;
-  receipts: Record<string, { fingerprint: string; result: Document }>;
-  events: DomainEvent[];
 }
 export interface CampaignState extends Journal {
   spec: CampaignSpec | null;

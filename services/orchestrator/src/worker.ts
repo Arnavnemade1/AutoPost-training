@@ -43,6 +43,12 @@ export async function pythonJson(
         TOKENIZERS_PARALLELISM: "false",
         OMP_NUM_THREADS: "1",
         MKL_NUM_THREADS: "1",
+        // Host-wide model-job lock settings (services/training-core locking.py).
+        ...Object.fromEntries(
+          ["FORGE_MODEL_LOCK", "FORGE_MODEL_LOCK_TIMEOUT"]
+            .filter((name) => process.env[name])
+            .map((name) => [name, process.env[name]]),
+        ),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -160,7 +166,10 @@ export class TrainingBridge {
   constructor(
     readonly python: string,
     readonly dispatcher: RelayDispatcher,
-    readonly timeouts = { runMs: 420000, evaluationMs: 300000 },
+    readonly timeouts: { runMs: number; evaluationMs: number; leaseMs?: number } = {
+      runMs: 420000,
+      evaluationMs: 300000,
+    },
   ) {}
   register(job: TrainingJob): void {
     if (this.jobs.has(job.jobId)) throw new Error("Job ID is immutable");
@@ -205,7 +214,7 @@ export class TrainingBridge {
     )
       throw new Error("PROPOSAL_MISMATCH");
     if (state.status !== "completed" && state.status !== "evaluated") {
-      await this.optimize(job, message, proposal);
+      await this.optimize(job, message, proposal, Number(state.maxLeaseMs));
       if (afterComplete) await afterComplete();
     }
     const evidence = await this.evidence(job),
@@ -239,37 +248,47 @@ export class TrainingBridge {
       },
     );
   }
-  private async optimize(job: TrainingJob, message: WorkflowMessage, proposal: Document) {
+  private async optimize(
+    job: TrainingJob,
+    message: WorkflowMessage,
+    proposal: Document,
+    maxLeaseMs: number,
+  ) {
     const { campaignId, actors } = this.dispatcher,
       runDir = String(job.config.output_dir);
+    // Every renewal is a durable actor write; renew at a third of the campaign's lease.
+    const leaseMs = Math.min(this.timeouts.leaseMs ?? 60000, maxLeaseMs || 10000);
     const lease = await actors.worker.command(
       "ExperimentActor",
       message.experimentId,
       campaignId,
       "acquireLease",
-      { leaseMs: 10000 },
+      { leaseMs },
     );
     const abort = new AbortController();
     let heartbeatFailure: unknown;
     let renewing = false;
     let inflight: Promise<void> = Promise.resolve();
-    const timer = setInterval(() => {
-      if (renewing) return;
-      renewing = true;
-      inflight = actors.worker
-        .command("ExperimentActor", message.experimentId, campaignId, "renewLease", {
-          generation: lease.generation,
-          leaseMs: 10000,
-        })
-        .then(() => undefined)
-        .catch((error) => {
-          heartbeatFailure = error;
-          abort.abort();
-        })
-        .finally(() => {
-          renewing = false;
-        });
-    }, 2000);
+    const timer = setInterval(
+      () => {
+        if (renewing) return;
+        renewing = true;
+        inflight = actors.worker
+          .command("ExperimentActor", message.experimentId, campaignId, "renewLease", {
+            generation: lease.generation,
+            leaseMs,
+          })
+          .then(() => undefined)
+          .catch((error) => {
+            heartbeatFailure = error;
+            abort.abort();
+          })
+          .finally(() => {
+            renewing = false;
+          });
+      },
+      Math.max(500, Math.floor(leaseMs / 3)),
+    );
     try {
       // A completed bundle from a lost completion reply is reconciled, never rerun.
       if (!(await exists(join(runDir, "manifest.json")))) {
@@ -289,10 +308,22 @@ export class TrainingBridge {
           (datasets.development as Document).content_sha256 !== proposal.developmentDatasetSha256
         )
           throw new Error("DATASET_MISMATCH");
-        await pythonJson(this.python, ["-m", "forge_training", "run", "--config", job.configPath], {
-          signal: abort.signal,
-          timeoutMs: this.timeouts.runMs,
-        });
+        // The run reuses the campaign's frozen untrained evaluation instead of repeating it.
+        await pythonJson(
+          this.python,
+          [
+            "-m",
+            "forge_training",
+            "run",
+            "--config",
+            job.configPath,
+            "--frozen-baseline",
+            job.baselinePath,
+            "--frozen-baseline-sha256",
+            job.baselineSha256,
+          ],
+          { signal: abort.signal, timeoutMs: this.timeouts.runMs },
+        );
       }
       const evidence = await this.evidence(job);
       clearInterval(timer);

@@ -58,7 +58,7 @@ export class ResearchLedgerActor extends Actor {
     const auth = authorize(request, actorName, this.id, "record", ["director"], entrySchema);
     if (request.campaignId !== this.id)
       fail("CAMPAIGN_SCOPE", "Ledger belongs to another campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const entry = auth.payload;
     if (this.state.closedBy) fail("LEDGER_CLOSED", "A stop decision already closed this ledger");
@@ -94,6 +94,7 @@ export class ResearchLedgerActor extends Actor {
     };
     const result = document({ entryId: entry.entryId, sequence: stored.sequence });
     this.state = commit(
+      this.db,
       {
         ...this.state,
         entries: { ...this.state.entries, [entry.entryId]: stored },
@@ -155,6 +156,6 @@ export class ResearchLedgerActor extends Actor {
     });
   }
   async getEvents(after: number, limit: number): Promise<Document> {
-    return events(this.state, after, limit);
+    return events(this.db, this.state.version, after, limit);
   }
 }

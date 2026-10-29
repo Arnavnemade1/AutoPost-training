@@ -28,6 +28,7 @@ GRPO, dashboard and sealed final evaluation remain later phases.
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Phase 5 verification](docs/verification/phase5-local.md)
+- [Infrastructure performance](docs/verification/performance-local.md)
 - [Phase 4 verification](docs/verification/phase4-local.md)
 - [Phase 3 verification](docs/verification/phase3-local.md)
 - [Phase 2 verification](docs/verification/phase2-local.md)

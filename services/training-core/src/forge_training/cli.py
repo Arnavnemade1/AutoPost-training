@@ -8,15 +8,21 @@ import signal
 import sys
 from pathlib import Path
 
+# Commands that load model weights; the host runs at most one at a time.
+MODEL_COMMANDS = frozenset({"run", "_train", "evaluate", "smoke"})
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="forge-train")
     commands = parser.add_subparsers(dest="command", required=True)
     schema = commands.add_parser("schema")
     schema.add_argument("--kind", choices=("experiment", "evaluation"), default="experiment")
-    for name in ("validate", "run", "_train"):
+    for name in ("validate", "run", "_train", "protocol"):
         command = commands.add_parser(name)
         command.add_argument("--config", type=Path, required=True)
+        if name == "run":
+            command.add_argument("--frozen-baseline", type=Path)
+            command.add_argument("--frozen-baseline-sha256")
     evaluation = commands.add_parser("evaluate")
     evaluation.add_argument("--config", type=Path, required=True)
     evaluation.add_argument("--checkpoint", type=Path)
@@ -39,6 +45,10 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, terminate)
     try:
+        from .locking import acquire_model_lock
+
+        # Held until this process exits; waiting happens before any phase deadline starts.
+        lock = acquire_model_lock(args.command) if args.command in MODEL_COMMANDS else None
         if args.command == "schema":
             from .config import ExperimentConfig
             from .reports import EvaluationReport
@@ -79,7 +89,25 @@ def main() -> int:
                     "config": config.model_dump(),
                 }
             elif args.command == "run":
-                result = run_experiment(args.config)
+                if bool(args.frozen_baseline) != bool(args.frozen_baseline_sha256):
+                    raise ValueError(
+                        "--frozen-baseline and --frozen-baseline-sha256 must be provided together"
+                    )
+                result = run_experiment(
+                    args.config, args.frozen_baseline, args.frozen_baseline_sha256
+                )
+            elif args.command == "protocol":
+                from .data import load_dataset
+                from .evaluation import evaluation_protocol
+
+                _, manifest = load_dataset(config.development, "development")
+                result = {
+                    "campaign_id": config.campaign_id,
+                    "experiment_id": config.experiment_id,
+                    "model": config.model.model_dump(),
+                    "dataset": manifest.model_dump(),
+                    "protocol": evaluation_protocol(config),
+                }
             elif args.command == "evaluate":
                 from .evaluation import evaluate
 
@@ -107,6 +135,7 @@ def main() -> int:
                     ),
                 )
         print(json.dumps(result, indent=2, allow_nan=False))
+        del lock
         return 0
     except (Exception, KeyboardInterrupt) as error:
         print(

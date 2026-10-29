@@ -6,6 +6,7 @@ import { canonical, digest } from "../../../packages/terse-actors/src/core.js";
 import type { PolicyLimits, Recipe } from "./director.js";
 import { verifyRecipe, type SourcePartition } from "./recipes.js";
 import type { RelayDispatcher } from "./relay.js";
+import { untrainedEvaluation } from "./evaluations.js";
 import { exists, fileHash, pythonJson, readJson, type TrainingJob } from "./worker.js";
 
 /** Held-out development-role data that no recipe may train on. */
@@ -45,6 +46,7 @@ export class GovernanceReviewer {
     readonly policy: GovernancePolicy,
     readonly directory: string,
     readonly timeoutMs: number,
+    readonly cacheDir: string | null = null,
   ) {}
 
   async review(job: TrainingJob, experimentId: string, recipe: Recipe): Promise<GovernanceOutcome> {
@@ -245,8 +247,26 @@ export class GovernanceReviewer {
         );
       return output;
     };
-    if (!this.baselineRegression)
-      this.baselineRegression = await readJson(await evaluate("regression-baseline.json", []));
+    if (!this.baselineRegression) {
+      // The untrained model's regression score is shared by every candidate and cached.
+      const baselineConfig = join(this.directory, "regression-baseline-config.json");
+      if (!(await exists(baselineConfig)))
+        await writeFile(
+          baselineConfig,
+          JSON.stringify({ ...config, experiment_id: "regression-baseline" }),
+          { flag: "wx" },
+        );
+      const output = join(this.directory, "regression-baseline.json");
+      if (!(await exists(output)))
+        await untrainedEvaluation({
+          python: this.python,
+          configPath: baselineConfig,
+          output,
+          cacheDir: this.cacheDir,
+          timeoutMs: this.timeoutMs,
+        });
+      this.baselineRegression = await readJson(output);
+    }
     const candidatePath = await evaluate(`${job.jobId}-regression.json`, [
       "--checkpoint",
       checkpointPath,

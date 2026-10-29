@@ -24,7 +24,7 @@ export class ArtifactRegistryActor extends Actor {
     );
     if (request.campaignId !== this.id)
       fail("CAMPAIGN_SCOPE", "Registry belongs to another campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const allowed = {
       worker: ["checkpoint", "trajectory", "report"],
@@ -40,6 +40,7 @@ export class ArtifactRegistryActor extends Actor {
     const artifact = { ...auth.payload, registeredBy: auth.keyId };
     const result = document(artifact);
     this.state = commit(
+      this.db,
       { ...this.state, artifacts: { ...this.state.artifacts, [artifact.artifactId]: artifact } },
       auth,
       "ARTIFACT_REGISTERED",
@@ -59,6 +60,6 @@ export class ArtifactRegistryActor extends Actor {
     return artifact ? document(artifact) : null;
   }
   async getEvents(after: number, limit: number): Promise<Document> {
-    return events(this.state, after, limit);
+    return events(this.db, this.state.version, after, limit);
   }
 }

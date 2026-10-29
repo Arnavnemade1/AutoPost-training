@@ -69,7 +69,7 @@ export class RLWorldActor extends Actor {
       z.strictObject({ episodeId: id, task: taskSchema }),
     );
     requireScopedId("world", request.campaignId, this.id);
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     if (this.state.episode && this.state.episode.campaignId !== request.campaignId)
       fail("WORLD_SCOPE", "World campaign is immutable");
@@ -92,6 +92,7 @@ export class RLWorldActor extends Actor {
     };
     const result = observation(episode);
     this.state = commit(
+      this.db,
       { ...this.state, episode, usedEpisodes: [...this.state.usedEpisodes, episode.episodeId] },
       auth,
       "ENVIRONMENT_RESET",
@@ -121,7 +122,7 @@ export class RLWorldActor extends Actor {
         action: actionSchema,
       }),
     );
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return { ...previous, replayed: true };
     const episode = current(this.state, request.campaignId),
       input = auth.payload;
@@ -193,13 +194,20 @@ export class RLWorldActor extends Actor {
       [input.actionId]: { fingerprint: actionFingerprint, transition },
     };
     const result = document({ transition, replayed: false });
-    this.state = commit({ ...this.state, episode: next }, auth, "ENVIRONMENT_TRANSITION", result, {
-      episodeId: next.episodeId,
-      actionId: input.actionId,
-      stateVersion: next.stateVersion,
-      reward,
-      stateSha256: transition.stateSha256,
-    });
+    this.state = commit(
+      this.db,
+      { ...this.state, episode: next },
+      auth,
+      "ENVIRONMENT_TRANSITION",
+      result,
+      {
+        episodeId: next.episodeId,
+        actionId: input.actionId,
+        stateVersion: next.stateVersion,
+        reward,
+        stateSha256: transition.stateSha256,
+      },
+    );
     return result;
   }
 
@@ -213,7 +221,7 @@ export class RLWorldActor extends Actor {
       ["data"],
       z.strictObject({ snapshotId: id }),
     );
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const episode = current(this.state, request.campaignId);
     if (this.state.snapshots[auth.payload.snapshotId])
@@ -225,6 +233,7 @@ export class RLWorldActor extends Actor {
       stateSha256: digest(observation(episode)),
     };
     this.state = commit(
+      this.db,
       {
         ...this.state,
         snapshots: { ...this.state.snapshots, [auth.payload.snapshotId]: structuredClone(episode) },
@@ -247,7 +256,7 @@ export class RLWorldActor extends Actor {
       ["data"],
       z.strictObject({ snapshotId: id, newEpisodeId: id }),
     );
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const old = current(this.state, request.campaignId);
     const snapshot = this.state.snapshots[auth.payload.snapshotId];
@@ -264,6 +273,7 @@ export class RLWorldActor extends Actor {
     };
     const result = observation(episode);
     this.state = commit(
+      this.db,
       { ...this.state, episode, usedEpisodes: [...this.state.usedEpisodes, episode.episodeId] },
       auth,
       "ENVIRONMENT_RESTORED",
@@ -283,6 +293,6 @@ export class RLWorldActor extends Actor {
     });
   }
   async getEvents(after: number, limit: number): Promise<Document> {
-    return events(this.state, after, limit);
+    return events(this.db, this.state.version, after, limit);
   }
 }

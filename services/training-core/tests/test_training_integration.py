@@ -11,7 +11,7 @@ import pytest
 
 from forge_training.artifacts import file_sha256
 from forge_training.config import load_config
-from forge_training.evaluation import compare
+from forge_training.evaluation import compare, completion_tokens, evaluate
 from forge_training.fixtures import make_smoke_fixture
 from forge_training.training import collate_completion, encode_completion
 from forge_training.worker import run_experiment, run_phase, verify_run
@@ -265,3 +265,78 @@ def test_runtime_changes_fail_before_training(config_file, config, monkeypatch):
         worker.run_experiment(config_file)
     assert (Path(config.output_dir) / "failure.json").exists()
     assert not (Path(config.output_dir) / "training.json").exists()
+
+
+def reuse_config(directory: Path, name: str, **changes) -> Path:
+    config = json.loads((directory / "experiment.json").read_text())
+    config.update(experiment_id=name, output_dir=f"run-{name}", **changes)
+    path = directory / f"{name}.json"
+    path.write_text(json.dumps(config))
+    return path
+
+
+@pytest.mark.integration
+def test_frozen_baseline_is_reused_by_hash_and_verified(actual_run):
+    directory, _ = actual_run
+    frozen = directory / "run/baseline.json"
+    result = run_experiment(reuse_config(directory, "reuse"), frozen, file_sha256(frozen))
+    output = directory / "run-reuse"
+    assert result["baseline_source"] == {"kind": "frozen", "sha256": file_sha256(frozen)}
+    assert (output / "baseline.json").read_bytes() == frozen.read_bytes()
+    assert not (output / "baseline.log").exists()
+    assert verify_run(output)["status"] == "verified"
+    events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
+    assert [e["payload"]["role"] for e in events if e["type"] == "EVALUATION_STARTED"] == [
+        "candidate"
+    ]
+    assert any(event["type"] == "EVALUATION_REUSED" for event in events)
+    # A swapped baseline file no longer matches the hash the run recorded.
+    copy = directory / "run-reuse-copy"
+    shutil.copytree(output, copy)
+    (copy / "baseline.json").write_bytes((directory / "run/candidate.json").read_bytes())
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        verify_run(copy)
+
+
+@pytest.mark.integration
+def test_mismatched_frozen_baselines_are_refused(actual_run, tmp_path):
+    directory, _ = actual_run
+    frozen = directory / "run/baseline.json"
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        run_experiment(reuse_config(directory, "badhash"), frozen, "0" * 64)
+    other = json.loads(frozen.read_text())
+    other["protocol"]["seed"] += 1
+    changed = tmp_path / "other-protocol.json"
+    changed.write_text(json.dumps(other))
+    with pytest.raises(ValueError, match="differs from this run"):
+        run_experiment(reuse_config(directory, "badprotocol"), changed, file_sha256(changed))
+
+
+def test_completion_tokens_keep_eos_and_drop_batch_padding():
+    assert completion_tokens([5, 6, 1, 0, 0], 1) == [5, 6, 1]
+    assert completion_tokens([5, 6, 7], 1) == [5, 6, 7]
+
+
+@pytest.mark.integration
+def test_batched_evaluation_is_part_of_the_protocol(actual_run):
+    directory, result = actual_run
+    config = json.loads((directory / "experiment.json").read_text())
+    config["evaluation"]["batch_size"] = 2
+    path = directory / "batched.json"
+    path.write_text(json.dumps(config))
+    report = evaluate(load_config(path), directory / "run/checkpoint", result["checkpoint_sha256"])
+    assert report["protocol"]["evaluation"]["batch_size"] == 2
+    assert report["num_examples"] == 2
+    limit = config["evaluation"]["max_new_tokens"]
+    assert all(0 < sample["generated_tokens"] <= limit for sample in report["samples"])
+    protocol = json.loads(
+        subprocess.run(
+            [sys.executable, "-m", "forge_training", "protocol", "--config", str(path)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        ).stdout
+    )
+    assert protocol["protocol"] == report["protocol"]
+    assert protocol["dataset"] == report["dataset"]

@@ -29,6 +29,11 @@ def evaluation_protocol(config: ExperimentConfig) -> dict:
     }
 
 
+def completion_tokens(tokens: list[int], eos_token_id: int) -> list[int]:
+    """A sequence ends at its first EOS (kept); later positions are batch padding."""
+    return tokens[: tokens.index(eos_token_id) + 1] if eos_token_id in tokens else tokens
+
+
 def evaluate(
     config: ExperimentConfig, checkpoint: Path | None = None, expected_hash: str | None = None
 ):
@@ -58,21 +63,32 @@ def evaluate(
     if checkpoint is not None:
         model = PeftModel.from_pretrained(model, str(checkpoint), is_trainable=False)
     model.eval()
-    samples = []
+    tokenizer.padding_side = "left"
+    context_limit = getattr(model.config, "max_position_embeddings", None)
+    prompts = []
     for row in rows:
+        prompt = prompt_for(tokenizer, row.question)
+        prompt_length = len(tokenizer(prompt, add_special_tokens=False)["input_ids"])
+        if prompt_length > config.evaluation.max_prompt_tokens:
+            raise ValueError(f"Development prompt exceeds token limit (no truncation): {row.id}")
+        if context_limit and prompt_length + config.evaluation.max_new_tokens > context_limit:
+            raise ValueError(f"Evaluation would exceed model context window: {row.id}")
+        prompts.append(prompt)
+    samples = []
+    size = config.evaluation.batch_size
+    for start in range(0, len(rows), size):
         remaining = config.evaluation.max_seconds - (time.monotonic() - started)
         if remaining <= 0:
             raise TimeoutError(
                 "Development evaluation time limit reached; no partial score emitted"
             )
-        prompt = prompt_for(tokenizer, row.question)
-        inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
-        prompt_length = inputs["input_ids"].shape[-1]
-        if prompt_length > config.evaluation.max_prompt_tokens:
-            raise ValueError(f"Development prompt exceeds token limit (no truncation): {row.id}")
-        context_limit = getattr(model.config, "max_position_embeddings", None)
-        if context_limit and prompt_length + config.evaluation.max_new_tokens > context_limit:
-            raise ValueError(f"Evaluation would exceed model context window: {row.id}")
+        inputs = tokenizer(
+            prompts[start : start + size],
+            return_tensors="pt",
+            padding=True,
+            add_special_tokens=False,
+        )
+        width = inputs["input_ids"].shape[-1]
         inputs = {name: tensor.to(config.device) for name, tensor in inputs.items()}
         with torch.inference_mode():
             generated = model.generate(
@@ -86,22 +102,24 @@ def evaluate(
             )
         if time.monotonic() - started > config.evaluation.max_seconds:
             raise TimeoutError("Evaluation deadline expired; incomplete generation is not scored")
-        output = generated[0, prompt_length:]
-        prediction = tokenizer.decode(output, skip_special_tokens=True)
-        correct, diagnosis = score(prediction, row.answer)
-        samples.append(
-            {
-                "id": row.id,
-                "question": row.question,
-                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-                "reference_answer": str(extract_answer(row.answer)),
-                "prediction": prediction,
-                "correct": correct,
-                "diagnosis": diagnosis,
-                "generated_tokens": len(output),
-                "hit_generation_limit": len(output) == config.evaluation.max_new_tokens,
-            }
-        )
+        for offset, row in enumerate(rows[start : start + size]):
+            prompt = prompts[start + offset]
+            output = completion_tokens(generated[offset, width:].tolist(), tokenizer.eos_token_id)
+            prediction = tokenizer.decode(output, skip_special_tokens=True)
+            correct, diagnosis = score(prediction, row.answer)
+            samples.append(
+                {
+                    "id": row.id,
+                    "question": row.question,
+                    "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                    "reference_answer": str(extract_answer(row.answer)),
+                    "prediction": prediction,
+                    "correct": correct,
+                    "diagnosis": diagnosis,
+                    "generated_tokens": len(output),
+                    "hit_generation_limit": len(output) == config.evaluation.max_new_tokens,
+                }
+            )
     count = len(samples)
     correct = sum(sample["correct"] for sample in samples)
     if evaluation_protocol(config) != protocol:
@@ -129,10 +147,12 @@ def evaluate(
     return EvaluationReport.model_validate(report).model_dump()
 
 
-def compare(baseline: dict, candidate: dict, seed: int) -> dict:
+def compare(baseline: dict, candidate: dict, seed: int, *, shared_baseline: bool = False) -> dict:
+    """A shared baseline is the campaign's frozen untrained evaluation, reused by its runs."""
     baseline = EvaluationReport.model_validate(baseline).model_dump()
     candidate = EvaluationReport.model_validate(candidate).model_dump()
-    for key in ("campaign_id", "experiment_id", "dataset", "protocol", "scorer", "model"):
+    keys = ("campaign_id", "dataset", "protocol", "scorer", "model")
+    for key in keys if shared_baseline else ("experiment_id", *keys):
         if baseline[key] != candidate[key]:
             raise ValueError(f"Cannot compare evaluations with different {key}")
     if baseline["checkpoint_sha256"] is not None or candidate["checkpoint_sha256"] is None:

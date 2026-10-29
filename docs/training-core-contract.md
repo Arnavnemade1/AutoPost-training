@@ -31,8 +31,10 @@ creates one immutable experiment configuration and invokes:
 
 ```sh
 forge-train validate --config /absolute/path/experiment.json
-forge-train run --config /absolute/path/experiment.json
+forge-train run --config /absolute/path/experiment.json \
+  [--frozen-baseline /absolute/path/baseline.json --frozen-baseline-sha256 <sha256>]
 forge-train verify --run-dir /absolute/path/run
+forge-train protocol --config /absolute/path/experiment.json
 ```
 
 `validate` checks schema, input checksums, partition purpose, duplicate IDs/questions,
@@ -42,8 +44,25 @@ exclusively, then runs baseline evaluation, LoRA optimization, and candidate eva
 in separate subprocesses. Any existing output directory causes a failure. Use a new
 experiment ID and new directory for a retry; actor state controls whether it is allowed.
 
+With `--frozen-baseline`, `run` reuses the campaign's untrained evaluation instead of
+repeating it, but only if the file matches the given SHA-256 and has no checkpoint, the
+same campaign and model, the same staged development data and samples, and an identical
+protocol (which includes this package's source hash and runtime versions). The run
+records `baseline_source: {kind: "frozen", sha256}`, and `verify` checks the reused
+file by that hash instead of requiring the run's own experiment ID. `protocol` prints
+the identity an untrained evaluation depends on, for caching such reports by key.
+
+`run`, `_train`, `evaluate` and `smoke` take a host-wide model-job lock (`flock` on
+`~/.cache/forge/model-job.lock`, or `FORGE_MODEL_LOCK`; `off` disables it) before any
+phase deadline starts, so one machine runs at most one model job at a time. Phase
+subprocesses of a held job inherit it. The operating system releases the lock when its
+holder exits. `FORGE_MODEL_LOCK_TIMEOUT` bounds the wait (default 7,200 seconds).
+
 Both evaluations use the same frozen development dataset, prompt, decoding settings,
-device, precision, seed, scorer, and library versions. Model generation is greedy.
+device, precision, seed, scorer, and library versions. Model generation is greedy, in
+left-padded batches of `evaluation.batch_size` (default 1). Batch size is part of the
+protocol: padding can break near-ties differently, so baseline and candidates must
+share it. A finished sequence ends at its first EOS; later positions are padding.
 The candidate evaluation reconstructs the pinned base and loads the saved adapter,
 checking its directory checksum and base identity/revision before use.
 

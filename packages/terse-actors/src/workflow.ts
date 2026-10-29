@@ -111,7 +111,7 @@ export class ResearchWorkflowActor extends Actor {
       publishSchema,
     );
     scope(request, this.id);
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const [senderRole, recipientRole] = routes[auth.payload.kind];
     if (auth.role !== senderRole)
@@ -127,7 +127,7 @@ export class ResearchWorkflowActor extends Actor {
       senderKeyId: auth.keyId,
     };
     const result = document(message);
-    this.state = commit(append(this.state, message), auth, "MESSAGE_QUEUED", result, {
+    this.state = commit(this.db, append(this.state, message), auth, "MESSAGE_QUEUED", result, {
       messageId: message.messageId,
       kind: message.kind,
     });
@@ -151,7 +151,7 @@ export class ResearchWorkflowActor extends Actor {
       }),
     );
     scope(request, this.id);
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     requireScopedId("exp", this.id, auth.payload.experimentId);
     if (this.state.reviews[auth.payload.experimentId])
@@ -169,6 +169,7 @@ export class ResearchWorkflowActor extends Actor {
       body: review,
     };
     this.state = commit(
+      this.db,
       append(
         { ...this.state, reviews: { ...this.state.reviews, [experimentId]: review } },
         message,
@@ -192,7 +193,7 @@ export class ResearchWorkflowActor extends Actor {
       z.strictObject({ messageId: id, jobId: id, grant: grantSchema }),
     );
     scope(request, this.id);
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const grant = verifyGrant(auth.payload.grant, auth.payload.grant.claims.experimentId, this.id);
     const { experimentId, proposal } = grant.claims;
@@ -217,6 +218,7 @@ export class ResearchWorkflowActor extends Actor {
       },
     };
     this.state = commit(
+      this.db,
       append(
         {
           ...this.state,
@@ -243,7 +245,7 @@ export class ResearchWorkflowActor extends Actor {
       z.strictObject({ messageId: id, relayMessageId: id }),
     );
     scope(request, this.id);
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const entry = this.state.deliveries[auth.payload.messageId];
     if (!entry) fail("UNKNOWN_MESSAGE", "No durable outbox message");
@@ -251,6 +253,7 @@ export class ResearchWorkflowActor extends Actor {
       fail("DELIVERY_CONFLICT", "Message already has a different delivery identity");
     const result = document(auth.payload);
     this.state = commit(
+      this.db,
       {
         ...this.state,
         deliveries: {
@@ -277,7 +280,7 @@ export class ResearchWorkflowActor extends Actor {
       z.strictObject({ messageId: id }),
     );
     scope(request, this.id);
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const entry = this.state.deliveries[auth.payload.messageId];
     if (!entry || entry.message.recipientRole !== auth.role)
@@ -285,6 +288,7 @@ export class ResearchWorkflowActor extends Actor {
     if (!entry.relayMessageId) fail("NOT_DELIVERED", "Relay delivery must be recorded first");
     const result = { messageId: auth.payload.messageId, acknowledged: true };
     this.state = commit(
+      this.db,
       {
         ...this.state,
         deliveries: {
@@ -314,6 +318,6 @@ export class ResearchWorkflowActor extends Actor {
     });
   }
   async getEvents(after: number, limit: number): Promise<Document> {
-    return events(this.state, after, limit);
+    return events(this.db, this.state.version, after, limit);
   }
 }

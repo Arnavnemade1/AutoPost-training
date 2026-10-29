@@ -46,7 +46,8 @@ profile provisions paid compute.
 | File | Responsibility |
 | --- | --- |
 | `src/relay.ts` | Registers role participants; sends unsent outbox messages with idempotency keys; recipients consume their Relay channel, verify sender, channel and exact bytes against the durable message, then acknowledge |
-| `src/worker.ts` | Allowlisted training jobs; fenced lease with heartbeats; evidence checks of the Python run bundle; evaluator reproduction in a separate process |
+| `src/worker.ts` | Allowlisted training jobs; fenced lease renewed at a third of the campaign's `maxLeaseMs`; runs reuse the frozen baseline; evidence checks of the Python run bundle; evaluator reproduction in a separate process |
+| `src/evaluations.ts` | Untrained-model evaluations cached by campaign, experiment label, model, data and protocol; batched evaluation adopted only if it matches batch size 1 |
 | `src/reconcile.ts` | Reports unsent, unacknowledged, unannounced-completion and expired-lease work from actor state; settles unmeasured local cost at the reserved bound |
 | `src/director.ts` | Pure decision policy: diagnosis, two exploratory recipes, measured ranking, revision operator, stop rules |
 | `src/recipes.ts` | Data role materializes a recipe (training subset and config) from the campaign template; reviewer recomputes and compares it |
@@ -54,6 +55,28 @@ profile provisions paid compute.
 | `src/research.ts` | Message-driven campaign: each role reacts to Relay messages; director decides after a round's measurements are recorded; coordinator settles terminal reservations |
 | `scripts/scenario.ts` | The Phase 3 fault-injection lifecycle used by `test` and `demo` |
 | `scripts/research.ts` | Provisions a profile, freezes the baseline and runs a research campaign |
+
+## Evaluation cost
+
+Development evaluation dominates campaign time, so the orchestrator avoids repeating it:
+
+- **Frozen baseline reuse.** Each worker run receives the campaign's frozen untrained
+  evaluation (`run --frozen-baseline`) instead of re-evaluating the base model; the
+  training core accepts it only if model, data, samples and protocol match exactly.
+- **Batched generation.** A profile may request `evaluation.batch_size` (Qwen: 8,
+  fixture: 2). Before any training, the campaign compares the untrained model's batched
+  predictions with batch size 1 and adopts the batch size only if every prediction is
+  identical; otherwise the whole campaign uses batch size 1. The report records the
+  requested and used sizes and the agreement count.
+- **Cached untrained evaluations.** The frozen baseline, the batch-size-1 reference and
+  the regression suite's untrained score are cached by key in `FORGE_EVALUATION_CACHE`
+  (default for `npm run research`: ignored `artifacts/cache/evaluations/`). The key covers
+  campaign, experiment label, model, data and protocol, including the training core's
+  source hash, so code or data changes miss the cache. Cache entries are checked against
+  their key before use. `runResearch()` called as a library uses no cache unless given one.
+- **One model job per host.** Python model commands take the training core's host-wide
+  lock (`FORGE_MODEL_LOCK`, `FORGE_MODEL_LOCK_TIMEOUT` pass through), so concurrent
+  campaigns or agents queue instead of exhausting memory.
 
 ## Delivery semantics
 

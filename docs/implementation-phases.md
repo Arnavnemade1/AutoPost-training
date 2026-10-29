@@ -36,6 +36,10 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   tamper was vetoed, both promotion paths refused it, and the director fell back to the
   next candidate. In the real Qwen campaign the selected candidate passed every check
   (held-out regression suite 0/16 to 6/16) and was promoted.
+- Infrastructure: actor journals in SQLite, frozen-baseline reuse, validated batched
+  evaluation, cached untrained evaluations and a host model-job lock cut the real Qwen
+  campaign from 2,015 to 746 seconds with identical decisions
+  ([performance record](verification/performance-local.md)).
 - Phases 6–8: planned; no GRPO, dashboard or sealed final evaluation is claimed.
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
