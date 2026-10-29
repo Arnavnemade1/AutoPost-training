@@ -15,6 +15,7 @@ from services.core.contracts import CampaignConfig
 from services.core.engine import actor, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
+from services.chaos_routes import router as chaos_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -38,11 +39,13 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Forge research control plane", lifespan=lifespan)
+app.include_router(chaos_router)
 
 
 API_PORT = httpx.URL(os.environ.get("FORGE_API_URL", "http://127.0.0.1:8000")).port or 8000
 TRUSTED_HOSTS = {f"127.0.0.1:{API_PORT}", f"localhost:{API_PORT}"}
-TRUSTED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
+WEB_PORT = os.environ.get("FORGE_WEB_PORT", "3000")
+TRUSTED_ORIGINS = {f"http://localhost:{WEB_PORT}", f"http://127.0.0.1:{WEB_PORT}"}
 
 
 @app.middleware("http")
@@ -62,7 +65,9 @@ async def local_boundary(request: Request, call_next):
 @app.get("/health")
 def health():
     services = {}
-    for name, url in [("terse", "http://127.0.0.1:7100"), ("relay", "http://127.0.0.1:7529/health")]:
+    terse = os.getenv("DURABLE_ACTORS_CONTROL_PLANE_URL", "http://127.0.0.1:7100")
+    relay = os.getenv("FORGE_RELAY_BRIDGE", "http://127.0.0.1:7529")
+    for name, url in [("terse", terse), ("relay", relay + "/health")]:
         try:
             r = httpx.get(url, timeout=3)
             services[name] = {"connected": r.status_code < 500, "mode": "Local runtime"}

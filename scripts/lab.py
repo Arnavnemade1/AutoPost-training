@@ -11,13 +11,29 @@ from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
+sys.path.insert(0, str(ROOT))
+from services.core.chaos import RuntimeSupervisor  # noqa: E402
+
 children = []
 logs = []
 (ROOT / "data").mkdir(exist_ok=True)
 settings = dotenv_values(ROOT / ".env")
 # Unset or loopback: this command runs a local Relaycast engine. Otherwise the bridge uses
 # that engine, e.g. the hosted https://cast.agentrelay.com.
-RELAY_URL = settings.get("FORGE_RELAY_URL") or os.environ.get("FORGE_RELAY_URL") or "http://127.0.0.1:7528"
+# FORGE_<NAME>_PORT runs a second lab beside the default one (children inherit the URLs).
+PORT = {
+    k: int(os.environ.get(f"FORGE_{k.upper()}_PORT", d))
+    for k, d in {"terse": 7100, "api": 8000, "web": 3000, "relaycast": 7528, "relay_bridge": 7529}.items()
+}
+TERSE = os.environ.setdefault("DURABLE_ACTORS_CONTROL_PLANE_URL", f"http://127.0.0.1:{PORT['terse']}")
+os.environ.setdefault("FORGE_RELAY_BRIDGE", f"http://127.0.0.1:{PORT['relay_bridge']}")
+os.environ.setdefault("FORGE_API_URL", f"http://127.0.0.1:{PORT['api']}")
+os.environ.update(FORGE_RELAY_BRIDGE_PORT=str(PORT["relay_bridge"]), FORGE_WEB_PORT=str(PORT["web"]))
+RELAY_URL = (
+    settings.get("FORGE_RELAY_URL")
+    or os.environ.get("FORGE_RELAY_URL")
+    or f"http://127.0.0.1:{PORT['relaycast']}"
+)
 LOCAL_RELAY = httpx.URL(RELAY_URL).host in ("127.0.0.1", "localhost")
 
 
@@ -55,20 +71,28 @@ def stop(_signal, _frame):
 signal.signal(signal.SIGTERM, stop)
 
 
+terse = None
 try:
-    start(
-        "terse",
-        [
-            str(ROOT / ".venv/bin/durable-actors"),
-            "dev",
-            "--project",
-            "services/actors",
-            "--data-dir",
-            str(Path(settings.get("FORGE_TERSE_DATA_DIR") or ROOT / "data/terse").resolve()),
-            "--no-watch",
-        ],
-        "http://127.0.0.1:7100",
-    )
+    if healthy(TERSE):
+        print("terse: using existing service (not supervised; crash tests disabled)", flush=True)
+    else:
+        # Supervised: if the runtime dies it is restarted on the same data dir, and recorded.
+        data_dir = Path(settings.get("FORGE_TERSE_DATA_DIR") or ROOT / "data/terse").resolve()
+        log = (ROOT / "data" / "terse.log").open("a")
+        logs.append(log)
+        terse = RuntimeSupervisor(
+            [
+                str(ROOT / ".venv/bin/durable-actors"),
+                *("dev", "--project", "services/actors", "--port", str(PORT["terse"])),
+                *("--data-dir", str(data_dir), "--no-watch"),
+            ],
+            TERSE,
+            data_dir,
+            log,
+            cwd=ROOT,
+        )
+        terse.start()
+        print(f"terse: ready (supervised, pid {terse.process.pid})", flush=True)
     subprocess.run(
         [str(ROOT / ".venv/bin/durable-actors"), "generate", "--out-dir", "services/actors/generated"],
         check=True,
@@ -80,34 +104,53 @@ try:
                 "node",
                 "services/relay/server.mjs",
                 "data/relaycast.db",
-                "7528",
+                str(PORT["relaycast"]),
             ],
-            "http://127.0.0.1:7528",
+            RELAY_URL,
         )
     start(
         "relay-bridge",
         ["node", "services/relay/bridge.mjs"],
-        "http://127.0.0.1:7529/health",
+        os.environ["FORGE_RELAY_BRIDGE"] + "/health",
         {"FORGE_RELAY_URL": RELAY_URL},
     )
     start(
         "api",
-        [sys.executable, "-m", "uvicorn", "services.api:app", "--host", "127.0.0.1", "--port", "8000"],
-        "http://127.0.0.1:8000/health",
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "services.api:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(PORT["api"]),
+        ],
+        os.environ["FORGE_API_URL"] + "/health",
     )
-    start("web", ["npm", "run", "dev"], "http://127.0.0.1:3000")
+    web = f"http://127.0.0.1:{PORT['web']}"
+    start("web", ["npx", "next", "dev", "--hostname", "127.0.0.1", "--port", str(PORT["web"])], web)
     print(
-        "\nForge is ready: http://127.0.0.1:3000\nCtrl+C stops only services started by this command.",
+        f"\nForge is ready: {web}\nCtrl+C stops only services started by this command.",
         flush=True,
     )
     while True:
+        restart = terse and terse.poll()
+        if restart:
+            print(
+                f"terse: pid {restart['old_pid']} exited ({restart['signal'] or restart['returncode']}); "
+                f"restarted as pid {restart['pid']} in {restart['restart_seconds']:.1f}s",
+                flush=True,
+            )
         for child in children:
             if child.poll() is not None:
                 raise RuntimeError("A lab process exited. Inspect data/*.log")
-        time.sleep(2)
+        time.sleep(0.2)
 except KeyboardInterrupt:
     pass
 finally:
+    if terse:
+        terse.stop()
     for child in reversed(children):
         if child.poll() is None:
             os.killpg(child.pid, signal.SIGTERM)

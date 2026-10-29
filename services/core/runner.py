@@ -610,4 +610,9 @@ def run(cid):
 
 
 if __name__ == "__main__":
+    from services.core.actor_client import transport
+
+    # Outlast a Terse runtime restart, including its owner-lease fence (about 30 s after SIGKILL).
+    # Retries reuse one request ID per call, so a call that already committed is not run again.
+    transport.retry_seconds = 180
     run(sys.argv[1])
