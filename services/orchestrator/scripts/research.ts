@@ -47,6 +47,14 @@ async function writeDataset(directory: string, name: string, lines: string[], ma
   };
 }
 const regressionPolicy = { maxDropBps: 0, maxDevRegressions: 0 };
+
+/** Real-model device: Apple GPU by default; FORGE_DEVICE=cuda or cpu elsewhere. */
+function modelDevice(): "mps" | "cuda" | "cpu" {
+  const device = process.env.FORGE_DEVICE ?? "mps";
+  if (device !== "mps" && device !== "cuda" && device !== "cpu")
+    throw new Error(`FORGE_DEVICE must be mps, cuda or cpu, not ${device}`);
+  return device;
+}
 /**
  * The dashboard's only view of actor state: snapshots read with public actor reads and
  * written as files, so the dashboard never holds actor credentials. Atomic replace.
@@ -355,7 +363,7 @@ async function provision(
           batch_size: 8,
         },
         seed: 42,
-        device: "mps",
+        device: modelDevice(),
         precision: "float32",
         // The meta-device preflight counts tied embeddings twice (~630M for 494M loaded).
         max_model_parameters: 700000000,

@@ -25,6 +25,7 @@ FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm test
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run demo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen
+# Real-model runs default to Apple mps; set FORGE_DEVICE=cuda or cpu elsewhere.
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture-grpo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen-grpo \
   --start-adapter /absolute/path/to/approved/sft/checkpoint
