@@ -93,6 +93,7 @@ def build(snapshot, events):
             "relay_deliveries": sum(e["kind"] == "message" and bool(e.get("relay_id")) for e in events),
             "settled_compute_seconds": snapshot.get("actor", {}).get("consumed_seconds", 0),
             "time_limit_seconds": snapshot["config"]["max_seconds"],
+            "hardware": snapshot.get("hardware"),
         },
     }
 

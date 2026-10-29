@@ -10,7 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from services.core import production, store
+from services.core import compute, production, store
 from services.core.contracts import CampaignConfig
 from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
@@ -42,7 +42,10 @@ app = FastAPI(title="Forge research control plane", lifespan=lifespan)
 
 API_PORT = httpx.URL(os.environ.get("FORGE_API_URL", "http://127.0.0.1:8000")).port or 8000
 TRUSTED_HOSTS = {f"127.0.0.1:{API_PORT}", f"localhost:{API_PORT}"}
-TRUSTED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
+WEB_PORT = os.environ.get("FORGE_WEB_PORT", "3000")
+TRUSTED_ORIGINS = {f"http://localhost:{WEB_PORT}", f"http://127.0.0.1:{WEB_PORT}"}
+TERSE_URL = os.environ.get("DURABLE_ACTORS_CONTROL_PLANE_URL", "http://127.0.0.1:7100")
+RELAY_BRIDGE_URL = bridge_url()
 
 
 @app.middleware("http")
@@ -62,8 +65,7 @@ async def local_boundary(request: Request, call_next):
 @app.get("/health")
 def health():
     services = {}
-    terse = os.getenv("DURABLE_ACTORS_CONTROL_PLANE_URL", "http://127.0.0.1:7100")
-    for name, url in [("terse", terse), ("relay", bridge_url() + "/health")]:
+    for name, url in [("terse", TERSE_URL), ("relay", RELAY_BRIDGE_URL + "/health")]:
         try:
             r = httpx.get(url, timeout=3)
             services[name] = {"connected": r.status_code < 500, "mode": "Local runtime"}
@@ -85,10 +87,16 @@ def health():
         "connected": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
         "mode": "Supabase private storage" if os.getenv("SUPABASE_SERVICE_ROLE_KEY") else "Local artifacts",
     }
+    try:
+        backend = compute.describe()
+    except ValueError as error:
+        backend = {"backend": "invalid", "label": None, "gpu": None, "error": str(error)}
+    local = "Apple M3 / Metal" if os.uname().machine == "arm64" else "PyTorch worker"
     return {
         "ok": True,
         "services": services,
-        "worker": "Apple M3 / Metal" if os.uname().machine == "arm64" else "PyTorch worker",
+        "worker": backend["label"] or local,
+        "compute": backend,
         "version": "0.1.0",
     }
 
@@ -111,6 +119,12 @@ def create_campaign(config: CampaignConfig):
 def initialize_campaign(config: CampaignConfig):
     if any(s["status"] not in TERMINAL for s in store.campaigns()):
         raise HTTPException(409, "A campaign already owns the local GPU. Stop it or wait for completion.")
+    try:
+        backend = compute.configured()
+    except ValueError as error:
+        raise HTTPException(503, str(error)) from error
+    if backend != "local" and "grpo" in config.strategies:
+        raise HTTPException(422, "GRPO runs only on the local backend. Choose SFT strategies for Modal.")
     if config.production_scan and not production.load_scan(config.production_scan):
         raise HTTPException(404, "Production scan not found")
     cid = "forge-" + uuid.uuid4().hex[:8]

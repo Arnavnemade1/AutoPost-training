@@ -26,6 +26,21 @@ export type Prediction = {
   correct: boolean;
   environment_id?: string;
 };
+export type Hardware = {
+  backend: "local" | "modal";
+  type: string;
+  name: string | null;
+  requested?: string;
+  torch?: string;
+  cuda?: string | null;
+};
+/** The device that ran the model work, or the GPU requested before it reports in. */
+export const hardwareName = (h?: Hardware | null) =>
+  h?.name ?? (h?.requested ? `NVIDIA ${h.requested} (starting)` : null);
+export const hardwareLabel = (h?: Hardware | null) => {
+  const name = hardwareName(h);
+  return name && h?.backend === "modal" ? `${name} · Modal` : name;
+};
 export type Evaluation = {
   score: number;
   n: number;
@@ -36,7 +51,8 @@ export type Evaluation = {
   seconds: number;
   dataset_revision: string;
   scoring: string;
-  decoding: { max_new_tokens: number; do_sample: boolean };
+  decoding: { max_new_tokens: number; do_sample: boolean; batch_size?: number };
+  device?: Hardware | null;
 };
 export type Metric = {
   step: number;
@@ -75,6 +91,8 @@ export type Experiment = {
     before_hash: string;
     after_hash: string;
     seconds: number;
+    max_sequence_length?: number;
+    device?: Hardware;
   };
 };
 export type Artifact = {
@@ -142,6 +160,7 @@ export type Campaign = {
       relay_deliveries: number;
       settled_compute_seconds: number;
       time_limit_seconds: number;
+      hardware?: Hardware | null;
     };
   };
   id: string;
@@ -150,6 +169,7 @@ export type Campaign = {
   created_at: string;
   updated_at: string;
   config: Config;
+  hardware?: Hardware;
   director?: string;
   experiments: Experiment[];
   reviews: Review[];
@@ -237,6 +257,7 @@ export type Event = {
 export type Health = {
   ok: boolean;
   worker: string;
+  compute?: { backend: string; label: string | null; gpu: string | null };
   version: string;
   services: Record<
     string,

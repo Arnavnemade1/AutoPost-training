@@ -22,7 +22,13 @@ export function relayConfig(env) {
     (workspaceKey ? HOSTED_RELAY_URL : "http://127.0.0.1:7528")
   ).replace(/\/+$/, "");
   const local = ["127.0.0.1", "localhost"].includes(new URL(baseUrl).hostname);
-  const bridgePort = Number(env.FORGE_RELAY_BRIDGE_PORT || 7529);
+  // The port comes from FORGE_RELAY_BRIDGE_PORT, else from FORGE_RELAY_BRIDGE (the address the
+  // API posts to), so a second lab can run on other ports.
+  const bridgePort = Number(
+    env.FORGE_RELAY_BRIDGE_PORT ||
+      (env.FORGE_RELAY_BRIDGE ? new URL(env.FORGE_RELAY_BRIDGE).port : "") ||
+      7529,
+  );
   if (!Number.isInteger(bridgePort) || bridgePort <= 0)
     throw new Error("Invalid FORGE_RELAY_BRIDGE_PORT");
   // Saved agent tokens belong to one workspace on one engine; a fingerprint (never the

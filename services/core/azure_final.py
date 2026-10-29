@@ -100,6 +100,7 @@ def evaluate(campaign_id, rows, config, adapter, expected_sha, cancelled):
             "services/core/__init__.py",
             "services/core/contracts.py",
             "services/core/store.py",
+            "services/core/protocol.py",
             "services/core/training.py",
             "services/core/final_evaluator.py",
             "services/core/final_job.py",

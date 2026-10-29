@@ -6,6 +6,7 @@ import {
   TERMINAL,
   agentNames,
   duration,
+  hardwareLabel,
 } from "@/lib/types";
 import { Icon } from "./icon";
 import { Empty, PanelHeader, Status } from "./views";
@@ -380,6 +381,12 @@ export function Briefing({
           {duration(b.execution.settled_compute_seconds)} settled /{" "}
           {duration(b.execution.time_limit_seconds)} limit
         </span>
+        {hardwareLabel(b.execution.hardware) && (
+          <span>
+            <Icon name="chip" size={16} />
+            <strong>{hardwareLabel(b.execution.hardware)}</strong>
+          </span>
+        )}
       </section>
       {latest && (
         <section className="panel briefing-handoff">

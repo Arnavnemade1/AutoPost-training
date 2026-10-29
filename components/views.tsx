@@ -314,11 +314,11 @@ export function ExperimentDetail({
               "Learning rate": e.proposal.learning_rate,
               "LoRA rank": e.proposal.lora_rank,
               "LoRA targets": "q_proj, v_proj",
-              "Maximum sequence length": 384,
+              "Maximum sequence length": e.training?.max_sequence_length ?? 768,
               Seed: campaign?.config.seed,
               Dataset: "openai/gsm8k, disjoint train slice",
               "Reward version": "exact-answer-v1",
-              Precision: "float16 on Metal or CUDA",
+              Precision: `float16 on ${e.training?.device?.name ?? "Metal or CUDA"}`,
             }).map(([k, v]) => (
               <div key={k}>
                 <span>{k}</span>

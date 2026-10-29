@@ -54,6 +54,7 @@ export function NewCampaign({
   }
   const ready =
     health?.services.terse.connected && health.services.relay.connected;
+  const modal = health?.compute?.backend === "modal";
   return (
     <Dialog
       title="Train a model for a task"
@@ -68,7 +69,9 @@ export function NewCampaign({
             <strong>Qwen2.5-0.5B-Instruct</strong>
             <span>494M parameters · Apache 2.0 · pinned revision</span>
           </div>
-          <span className="tag">Local GPU</span>
+          <span className="tag">
+            {modal ? `Modal ${health?.compute?.gpu}` : "Local GPU"}
+          </span>
         </div>
         <label>
           Campaign name
@@ -203,7 +206,10 @@ export function NewCampaign({
         )}
         <footer className="dialog-actions">
           <span className="muted small">
-            GSM8K subset · seed 42 · no cloud GPU billing
+            GSM8K subset · seed 42 ·{" "}
+            {modal
+              ? `Modal ${health?.compute?.gpu} billed per second`
+              : "no cloud GPU billing"}
           </span>
           <button
             type="submit"
