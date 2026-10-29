@@ -2,11 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
-import { canonical, digest } from "../../../packages/terse-actors/src/core.js";
+import { canonical, digest, document } from "../../../packages/terse-actors/src/core.js";
 import type { PolicyLimits, Recipe } from "./director.js";
-import { verifyRecipe, type SourcePartition } from "./recipes.js";
+import { verifyRecipe, type MethodSettings, type SourcePartition } from "./recipes.js";
 import type { RelayDispatcher } from "./relay.js";
-import { untrainedEvaluation } from "./evaluations.js";
+import { startingEvaluation } from "./evaluations.js";
+import { verifyWorldRollouts } from "./worlds.js";
 import { exists, fileHash, pythonJson, readJson, type TrainingJob } from "./worker.js";
 
 /** Held-out development-role data that no recipe may train on. */
@@ -25,6 +26,7 @@ export interface GovernancePolicy {
   limits: PolicyLimits;
   source: SourcePartition;
   template: Document;
+  method?: MethodSettings;
 }
 export interface GovernanceOutcome {
   decision: "approved" | "rejected";
@@ -121,8 +123,22 @@ export class GovernanceReviewer {
           template: this.policy.template,
           validatedConfig: validated.config as Document,
           trainingRecordsPath: join(runDir, "inputs/train.jsonl"),
+          method: this.policy.method,
         })
       : ["staged run configuration does not validate"];
+    // Reward-driven training data are its rewards: each must be a transition in the world
+    // journals, exactly once, read by the reviewer itself.
+    if (job.world) {
+      try {
+        facts.worldRewards = document(
+          await verifyWorldRollouts({ reader: reviewer, campaignId, jobId: job.jobId, runDir }),
+        );
+      } catch (error) {
+        facts.worldRewards = String(error instanceof Error ? error.message : error).slice(0, 500);
+        dataProblems.push("recorded rewards are not the world journals' transitions");
+        reasons.add("REWARD_PROVENANCE");
+      }
+    }
     const developmentSha256 = (
       ((validated?.datasets as Document | undefined)?.development as Document | undefined) ?? {}
     ).content_sha256;
@@ -257,13 +273,17 @@ export class GovernanceReviewer {
           { flag: "wx" },
         );
       const output = join(this.directory, "regression-baseline.json");
+      // The suite's reference is the policy training started from, like the frozen baseline.
+      const adapter = ((job.config.grpo as Document | undefined)?.init_adapter ??
+        null) as Document | null;
       if (!(await exists(output)))
-        await untrainedEvaluation({
+        await startingEvaluation({
           python: this.python,
           configPath: baselineConfig,
           output,
           cacheDir: this.cacheDir,
           timeoutMs: this.timeoutMs,
+          start: adapter ? { path: String(adapter.path), sha256: String(adapter.sha256) } : null,
         });
       this.baselineRegression = await readJson(output);
     }

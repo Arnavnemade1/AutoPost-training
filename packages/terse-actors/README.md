@@ -3,9 +3,9 @@
 Seven actors on **Terse `durable-actors@0.14.0`**, with real native runtime integration
 tests. Phase 2 built five; Phase 3 added `ResearchWorkflowActor`, the durable outbox
 that `services/orchestrator/` delivers through Agent Relay; Phase 4 added
-`ResearchLedgerActor`, the evidence-checked record of research decisions. The
-mathematical environment produces rewards; it is not wired to an RL optimizer until
-Phase 6.
+`ResearchLedgerActor`, the evidence-checked record of research decisions. Since
+Phase 6 the mathematical worlds produce the only rewards of GRPO training, through the
+orchestrator's world gateway (`services/orchestrator/src/worlds.ts`).
 
 ## Run
 
@@ -49,7 +49,8 @@ normal exit. No signing keys or server secrets are printed.
 [The integration contract](../../docs/actor-contract.md) describes permissions,
 recovery and next-phase responsibilities. `src/contracts.ts` contains strict Zod
 schemas. Use `src/client.ts` from a trusted backend to sign and invoke commands.
-Use `scripts/local-runtime.ts` only for local development and serial tests.
+Use `scripts/local-runtime.ts` only for local development and serial tests; `launch`
+can restart a runtime on its previous port so existing clients reconnect.
 
 ## Trust and limits
 

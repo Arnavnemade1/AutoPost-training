@@ -4,21 +4,29 @@ Forge is being built to coordinate research agents that diagnose a model's failu
 propose and run post-training experiments, evaluate results, and select a checkpoint
 under independent governance and a bounded compute budget.
 
-The isolated command-center workstream adds a live dashboard, GRPO, governance,
+The command-center workstream (repo root Next app) adds a live dashboard, GRPO, governance,
 independent final evaluation and recording. See [command-center setup and trust
-boundaries](docs/command-center.md). The status below describes the original
+boundaries](docs/command-center.md). The Phase 7 evidence dashboard and recorder
+live in [apps/web](apps/web/README.md). The status below describes the original
 training/orchestrator profile.
 
-**Current implementation:** a tested LoRA training/development-evaluation worker,
-seven durable Terse actors (campaigns, experiments, governance, artifacts, math worlds,
-a message outbox and a research ledger), Agent Relay dispatch between research roles,
-a deterministic director that picks each next experiment from measured development
-results, and an independent reviewer that verifies artifacts, data, protocol and
-regressions from bytes before any promotion. In a local Qwen2.5-0.5B campaign the
+**Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
+rewards are Terse math-world transitions, seven durable Terse actors (campaigns,
+experiments, governance, artifacts, math worlds, a message outbox and a research
+ledger), Agent Relay dispatch between research roles, a deterministic director that
+picks each next experiment from measured development results, and an independent
+reviewer that verifies artifacts, data, rewards, protocol and regressions from bytes
+and actor journals before any promotion. In a local Qwen2.5-0.5B SFT campaign the
 selected candidate moved a 16-example development diagnostic from 0/16 to 6/16, scored
 6/16 versus 0/16 on a held-out regression set, and was approved and promoted. These are
 small custom-scorer results, mostly answer-format learning, not a benchmark claim.
-GRPO, dashboard and sealed final evaluation remain later phases.
+A Qwen GRPO campaign continuing that checkpoint found no improvement: its best
+development candidate (7/16) regressed on held-out problems (6/16 to 4/16) and was
+vetoed. A research command center renders campaigns from stored files and records them
+with 100x and 120x exports (verified on a fixture campaign). Sealed final evaluation
+is now implemented as a separate, one-attempt evaluator with a pinned EleutherAI
+harness, paired development diagnostics, resource guards, checkpoint freeze and
+release bundles. No sealed final evaluation or benchmark improvement is claimed.
 
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
 - [Architecture and trust boundaries](docs/architecture.md)
@@ -27,6 +35,10 @@ GRPO, dashboard and sealed final evaluation remain later phases.
 - [Durable actor setup, tests and demo](packages/terse-actors/README.md)
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
+- [Research dashboard and recorder](apps/web/README.md)
+- [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
+- [Phase 7 verification](docs/verification/phase7-local.md)
+- [Phase 6 verification](docs/verification/phase6-local.md)
 - [Phase 5 verification](docs/verification/phase5-local.md)
 - [Infrastructure performance](docs/verification/performance-local.md)
 - [Phase 4 verification](docs/verification/phase4-local.md)

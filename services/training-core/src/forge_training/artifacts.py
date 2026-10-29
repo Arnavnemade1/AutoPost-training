@@ -64,6 +64,7 @@ def runtime_versions() -> dict[str, str | None]:
         "numpy",
         "accelerate",
         "datasets",
+        "trl",
         "pydantic",
         "huggingface-hub",
         "safetensors",

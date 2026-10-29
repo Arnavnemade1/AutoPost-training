@@ -3,8 +3,10 @@
 The system separates research decisions, authoritative state, compute, and independent
 verification. The training core, durable actors and Relay dispatch to the worker are
 implemented and tested locally, including deterministic evidence-driven experiment
-selection and evidence-bound checkpoint governance. This is the target architecture;
-GRPO, separately hosted evaluation and the UI remain future integrations.
+selection, evidence-bound checkpoint governance and GRPO driven by world transitions
+(the gate verified on an offline fixture; real Qwen campaigns found no improvement), and a
+recorded research dashboard. This is the target architecture; separately hosted
+evaluation remains a future integration.
 
 ```mermaid
 flowchart TD
@@ -18,8 +20,9 @@ flowchart TD
     G --> V[Terse governance actor: policy, vetoes, approvals]
     C --> E
     V --> E
-    E --> W[Scoped GPU worker: LoRA / future GRPO]
-    W <--> M[Terse math worlds: canonical transitions and rewards]
+    E --> W[Scoped GPU worker: LoRA SFT / GRPO]
+    W <--> WG[World gateway: per-job token, signed resets and steps]
+    WG <--> M[Terse math worlds: canonical transitions and rewards]
     W --> A[Immutable artifact storage and registry]
     A --> Q[Independent development evaluator]
     Q --> V
@@ -39,13 +42,13 @@ flowchart TD
 
 | Boundary | Location | Responsibility |
 | --- | --- | --- |
-| Training worker | `services/training-core/` | Implemented Python package; pinned models/data, bounded SFT LoRA, development diagnostics, real metrics, artifacts |
-| Research orchestration | `services/orchestrator/` | Implemented Relay transport, durable dispatch/reconciliation, worker adapter and deterministic evidence-driven director; model-backed proposals optional/planned |
+| Training worker | `services/training-core/` | Implemented Python package; pinned models/data, bounded SFT LoRA and world-rewarded GRPO (pinned TRL), development diagnostics, rollout and lineage artifacts, real metrics |
+| Research orchestration | `services/orchestrator/` | Implemented Relay transport, durable dispatch/reconciliation, worker adapter, world gateway with journal verification and deterministic evidence-driven director; model-backed proposals optional/planned |
 | Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry, workflow-outbox and research-ledger actors; [integration contract](actor-contract.md) |
 | Common contracts | `packages/contracts/` (planned) | Versioned actor/message/event schemas; consume worker-generated JSON Schema |
 | Independent evaluation | `services/orchestrator/src/governance.ts`; `services/evaluator/` (planned) | Implemented: byte-level artifact verification, held-out regression suite, evidence-bound governance decisions. Planned: established benchmark harness and protected final evaluation |
-| Research interface | `apps/web/` (planned) | Research graph, metrics, environments, artifacts, governance, recording state |
-| Capture/export | `scripts/record/`, `scripts/render-video/` (planned) | Faithful source recording, playable accelerated exports, recording manifests |
+| Research interface | `apps/web/` | Implemented loopback dashboard rendered from stored files and exported actor snapshots: research graph, budgets, experiments, training metrics, world transitions, governance, before/after examples, agent messages, recording state, downloads |
+| Capture/export | `apps/web/src/recorder.ts`, `apps/web/scripts/record-campaign.ts` | Implemented headless capture of the live view during a campaign, real-time VP8 source and 100x/120x FFmpeg exports, decoded frame-count verification, recording manifests; a failed preflight blocks the campaign |
 
 ## Agent synchronization
 

@@ -70,6 +70,9 @@ def load_base(config: ExperimentConfig):
         use_safetensors=True,
         torch_dtype=getattr(torch, config.precision),
         attn_implementation="eager",
+        # Materialize weights on the accelerator: staging a CPU copy first briefly holds the
+        # model twice (Qwen2.5-0.5B float32 on MPS: about 3.5 GB peak instead of 1.9 GB).
+        **({} if config.device == "cpu" else {"device_map": {"": config.device}}),
     )
     if sum(parameter.numel() for parameter in model.parameters()) > config.max_model_parameters:
         raise ValueError("Model exceeds configured parameter limit")

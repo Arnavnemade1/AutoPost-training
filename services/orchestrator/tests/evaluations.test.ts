@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
-import { chooseEvaluationBatch, untrainedEvaluation } from "../src/evaluations.js";
+import { chooseEvaluationBatch, startingEvaluation } from "../src/evaluations.js";
 import { pythonJson, readJson } from "../src/worker.js";
 
 // Real Python evaluations of the offline tiny fixture model; no services involved.
@@ -56,7 +56,7 @@ test("a batched campaign protocol is adopted only if it matches batch size one",
 
 test("identical untrained evaluations are served from the cache, byte for byte", async () => {
   const first = join(directory, "frozen-baseline-batch2.json");
-  const again = await untrainedEvaluation({
+  const again = await startingEvaluation({
     python: python!,
     configPath: templatePath,
     output: join(directory, "again.json"),
@@ -80,7 +80,7 @@ test("a cache entry that does not match its key is refused", async () => {
     );
   }
   await expect(
-    untrainedEvaluation({
+    startingEvaluation({
       python: python!,
       configPath: templatePath,
       output: join(directory, "conflict.json"),

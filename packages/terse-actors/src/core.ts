@@ -275,10 +275,14 @@ export function rewardCommitment(
   seed: number,
   question: string,
   answer: string,
+  /** The trusted task service passes its copy of the server reward secret explicitly. */
+  rewardSecret: string = secret("FORGE_REWARD_SECRET"),
 ): string {
   const normalized = numericAnswer(answer);
   if (normalized === null) fail("INVALID_ANSWER", "Answer must be a bounded decimal");
-  return createHmac("sha256", secret("FORGE_REWARD_SECRET"))
+  if (!/^[a-f0-9]{64}$/.test(rewardSecret))
+    fail("SERVER_CONFIGURATION", "Reward secret must be a 256-bit hex key");
+  return createHmac("sha256", rewardSecret)
     .update("forge/math/v1\n")
     .update(
       canonical({ campaignId, worldId, taskId, taskVersion, seed, question, answer: normalized }),

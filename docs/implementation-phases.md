@@ -11,7 +11,7 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after Phase 5
+## Current status through Phase 8 implementation
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
@@ -40,7 +40,30 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   evaluation, cached untrained evaluations and a host model-job lock cut the real Qwen
   campaign from 2,015 to 746 seconds with identical decisions
   ([performance record](verification/performance-local.md)).
-- Phases 6–8: planned; no GRPO, dashboard or sealed final evaluation is claimed.
+- Phase 6: TRL GRPO (pinned 0.24.0) trains on answer-free tasks, and its only reward is
+  the `RLWorldActor` transition for each completion, through a loopback world gateway.
+  Per-update lineage, recomputed advantages and journal cross-checks with step replay
+  are verified. Concurrency, lost replies and a Terse SIGKILL mid-rollout leave exactly
+  one transition per rollout; a forged reward is caught by the journals. GRPO can continue
+  an approved SFT adapter, measured against it. Two real Qwen2.5-0.5B campaigns found no
+  improvement: from the instruct model 3 of 128 rollouts were rewarded; from the 6/16 SFT
+  checkpoint the development-selected 7/16 candidate fell from 6/16 to 4/16 on the
+  held-out suite and was vetoed, as was the next
+  ([Phase 6 verification](verification/phase6-local.md)).
+- Phase 7: a loopback research command center renders a campaign from stored files only
+  (actor snapshots exported every 2 seconds, reports, run bundles, evidence), with every
+  score linked to its file and hash. A recorder captures its one-screen live view while a
+  campaign runs and exports 100x and 120x videos with FFmpeg; a recorder that cannot start
+  is shown and blocks the campaign. Gates verified on a recorded fixture campaign: zero
+  axe-core violations (desktop, mobile, light, dark), displayed scores equal to files,
+  frame-exact playable exports. The real Qwen campaign has not been recorded
+  ([Phase 7 verification](verification/phase7-local.md)).
+- Phase 8: pinned EleutherAI harness, paired development diagnostics, bounded subprocesses,
+  governance-checked release freeze, rehearsal, portable adapter/evidence bundles and a
+  separate one-attempt final evaluator implemented. Fixture generation/reload and failure
+  paths verified. The saved-output audit exposes a strict/flexible scoring disagreement;
+  no sealed final evaluation or model improvement is claimed.
+  See [Phase 8 verification](verification/phase8-local.md).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
 
@@ -192,6 +215,14 @@ animation or a disconnected reward function does not count as RL integration.
 
 Suggested owner: RL workstream. Depends on a reliable Phase 1 path and Phase 2 worlds.
 
+Implemented as `forge_training/grpo.py` (worker), `services/orchestrator/src/worlds.ts`
+(world gateway and journal verification) and a `grpo` campaign method in the director,
+recipes, preflight and governance. The [actor contract](actor-contract.md) and
+[training-core contract](training-core-contract.md) describe the protocol. The
+[local verification](verification/phase6-local.md) records each gate check, the labeled
+fault injections, an autonomous fixture campaign, two real Qwen campaigns (no
+improvement; both reviewed candidates vetoed) and the limits.
+
 ## Phase 7 — Research command center and faithful recording
 
 Work: dashboard consumes stored real events and artifacts; research graph, budgets,
@@ -206,6 +237,11 @@ contracts settle, with fixtures visibly labeled as fixtures.
 
 Suggested owner: frontend/capture workstream. Depends on stable event contracts.
 
+Implemented in `apps/web/` (dashboard, recorder and launcher) with live actor snapshots
+from `services/orchestrator/scripts/research.ts`. The [local verification](verification/phase7-local.md)
+records each gate check, the recorded fixture campaign and the limits: the recording is
+of the dashboard rendered headless, in VP8 WebM, and the real Qwen campaign is unrecorded.
+
 ## Phase 8 — Freeze, independently evaluate, rehearse, package
 
 Work: freeze the development-selected approved checkpoint; run the pinned established
@@ -219,6 +255,12 @@ and uncertainty. No claim of improvement, sponsor integration, deployment, or fi
 readiness precedes its corresponding gate.
 
 ## Verified upstream references
+
+Phase 8 commands and trust/resource boundaries are documented in the
+[harness runbook](../services/training-core/HARNESS.md). Final readiness still requires
+a separately owned evaluator, a complete final run, clean-machine reproduction,
+matching demo recording, and event-rule acceptance. Existing research agents remain
+scripted; no real agent collaboration was added.
 
 - [Qwen model card](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct)
 - [GSM8K dataset](https://huggingface.co/datasets/openai/gsm8k)

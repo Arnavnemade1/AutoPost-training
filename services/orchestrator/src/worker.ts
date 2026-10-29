@@ -5,9 +5,17 @@ import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ForgeActorClient } from "../../../packages/terse-actors/src/client.js";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
-import { digest } from "../../../packages/terse-actors/src/core.js";
+import { digest, document } from "../../../packages/terse-actors/src/core.js";
 import type { WorkflowMessage } from "../../../packages/terse-actors/src/workflow.js";
+import type { SourcePartition } from "./recipes.js";
 import { RelayDispatcher } from "./relay.js";
+import {
+  WorldGateway,
+  loadWorldTasks,
+  verifyWorldRollouts,
+  type WorldEvidence,
+  type WorldGatewayOptions,
+} from "./worlds.js";
 
 export async function readJson(path: string): Promise<Document> {
   return JSON.parse(await readFile(path, "utf8")) as Document;
@@ -28,7 +36,7 @@ export async function exists(path: string): Promise<boolean> {
 export async function pythonJson(
   python: string,
   args: string[],
-  options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  options: { timeoutMs?: number; signal?: AbortSignal; env?: Record<string, string> } = {},
 ): Promise<Document> {
   if (!isAbsolute(python)) throw new Error("Python executable must be an absolute, trusted path");
   if (options.signal?.aborted) throw new Error("Python worker cancelled before launch");
@@ -43,12 +51,19 @@ export async function pythonJson(
         TOKENIZERS_PARALLELISM: "false",
         OMP_NUM_THREADS: "1",
         MKL_NUM_THREADS: "1",
-        // Host-wide model-job lock settings (services/training-core locking.py).
+        // Host-wide model-job lock (services/training-core locking.py) and Apple GPU
+        // memory caps, so one job's footprint stays bounded on a shared machine.
         ...Object.fromEntries(
-          ["FORGE_MODEL_LOCK", "FORGE_MODEL_LOCK_TIMEOUT"]
+          [
+            "FORGE_MODEL_LOCK",
+            "FORGE_MODEL_LOCK_TIMEOUT",
+            "PYTORCH_MPS_HIGH_WATERMARK_RATIO",
+            "PYTORCH_MPS_LOW_WATERMARK_RATIO",
+          ]
             .filter((name) => process.env[name])
             .map((name) => [name, process.env[name]]),
         ),
+        ...options.env,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -112,6 +127,8 @@ export interface TrainingJob {
   trainingDatasetSha256: string;
   /** Evaluator-owned output; never inside the worker's run directory. */
   evaluatorDir: string;
+  /** Reward-driven (GRPO) jobs: the allowed partition the task service scores against. */
+  world?: { source: SourcePartition };
 }
 export async function prepareJob(
   python: string,
@@ -120,6 +137,7 @@ export async function prepareJob(
   baselinePath: string,
   evaluatorDir: string,
   timeoutMs = 180000,
+  world?: { source: SourcePartition },
 ): Promise<TrainingJob> {
   const validated = await pythonJson(python, [
     "-m",
@@ -128,18 +146,34 @@ export async function prepareJob(
     "--config",
     configPath,
   ]);
+  const config = validated.config as Document;
+  // One frozen baseline serves every experiment of a campaign; protocol equality is
+  // checked against each run's own baseline evaluation in `evidence`. It evaluates the
+  // policy training starts from: the untrained model, or the adapter a run continues.
+  const adapter = (config.grpo as Document | undefined)?.init_adapter as Document | undefined;
   if (!(await exists(baselinePath)))
     await pythonJson(
       python,
-      ["-m", "forge_training", "evaluate", "--config", configPath, "--output", baselinePath],
+      [
+        "-m",
+        "forge_training",
+        "evaluate",
+        "--config",
+        configPath,
+        ...(adapter
+          ? ["--checkpoint", String(adapter.path), "--expected-hash", String(adapter.sha256)]
+          : []),
+        "--output",
+        baselinePath,
+      ],
       { timeoutMs },
     );
-  const config = validated.config as Document;
   const baseline = await readJson(baselinePath);
-  // One frozen baseline serves every experiment of a campaign; protocol equality is
-  // checked against each run's own baseline evaluation in `evidence`.
-  if (baseline.campaign_id !== config.campaign_id || baseline.checkpoint_sha256 !== null)
-    throw new Error("Baseline does not belong to this campaign's untrained model");
+  if (
+    baseline.campaign_id !== config.campaign_id ||
+    baseline.checkpoint_sha256 !== (adapter?.sha256 ?? null)
+  )
+    throw new Error("Baseline does not belong to this campaign's starting policy");
   return {
     jobId,
     configPath,
@@ -151,6 +185,7 @@ export async function prepareJob(
       ((validated.datasets as Document).train as Document).content_sha256,
     ),
     evaluatorDir,
+    ...(world ? { world } : {}),
   };
 }
 const predictions = (report: Document) =>
@@ -159,6 +194,18 @@ const predictions = (report: Document) =>
     prediction,
     correct,
   }));
+
+/** The trusted task service's settings for reward-driven jobs. */
+export interface WorldSettings {
+  /** The reward secret the world actors verify answer commitments with. */
+  rewardSecret: string;
+  lanes?: number;
+  retryMs?: number;
+  /** Labeled failure injection for the world gateway. */
+  faults?: WorldGatewayOptions["faults"];
+  /** Observes each attempt's gateway, for example to read its statistics. */
+  onGateway?: (gateway: WorldGateway) => void;
+}
 
 /** Trusted local job registry: Relay messages can select IDs, never shell commands or paths. */
 export class TrainingBridge {
@@ -170,6 +217,7 @@ export class TrainingBridge {
       runMs: 420000,
       evaluationMs: 300000,
     },
+    readonly worlds?: WorldSettings,
   ) {}
   register(job: TrainingJob): void {
     if (this.jobs.has(job.jobId)) throw new Error("Job ID is immutable");
@@ -217,7 +265,7 @@ export class TrainingBridge {
       await this.optimize(job, message, proposal, Number(state.maxLeaseMs));
       if (afterComplete) await afterComplete();
     }
-    const evidence = await this.evidence(job),
+    const evidence = await this.evidence(job, actors.worker),
       runDir = String(job.config.output_dir);
     await actors.worker.command(
       "ArtifactRegistryActor",
@@ -245,8 +293,40 @@ export class TrainingBridge {
         configSha256: job.configSha256,
         manifestSha256: evidence.manifestSha256,
         checkpointSha256: evidence.result.checkpoint_sha256,
+        ...(evidence.world ? { world: document(evidence.world) } : {}),
       },
     );
+  }
+  /** Reward-driven jobs score rollouts through a gateway scoped to this lease generation. */
+  private async gateway(job: TrainingJob, experimentId: string, generation: number) {
+    if (!job.world) return null;
+    if (!this.worlds) throw new Error("WORLD_SETTINGS: reward-driven jobs need a task service");
+    const train = job.config.train as Document,
+      training = job.config.training as Document;
+    const { tasks, taskVersion } = await loadWorldTasks({
+      sourceRecords: job.world.source.records,
+      sourceManifest: job.world.source.manifest,
+      tasksRecords: String(train.records),
+      tasksManifest: String(train.manifest),
+    });
+    const gateway = new WorldGateway({
+      campaignId: this.dispatcher.campaignId,
+      experimentId,
+      jobId: job.jobId,
+      attempt: generation,
+      tasks,
+      taskVersion,
+      seed: Number(job.config.seed ?? 42),
+      rewardSecret: this.worlds.rewardSecret,
+      actors: () => ({ data: this.dispatcher.actors.data, worker: this.dispatcher.actors.worker }),
+      rolloutsPerUpdate: Number(training.batch_size) * Number(training.gradient_accumulation_steps),
+      maxUpdates: Number(training.max_steps),
+      lanes: this.worlds.lanes,
+      retryMs: this.worlds.retryMs,
+      faults: this.worlds.faults,
+    }).start();
+    this.worlds.onGateway?.(gateway);
+    return gateway;
   }
   private async optimize(
     job: TrainingJob,
@@ -289,6 +369,7 @@ export class TrainingBridge {
       },
       Math.max(500, Math.floor(leaseMs / 3)),
     );
+    let gateway: WorldGateway | null = null;
     try {
       // A completed bundle from a lost completion reply is reconciled, never rerun.
       if (!(await exists(join(runDir, "manifest.json")))) {
@@ -308,6 +389,7 @@ export class TrainingBridge {
           (datasets.development as Document).content_sha256 !== proposal.developmentDatasetSha256
         )
           throw new Error("DATASET_MISMATCH");
+        gateway = await this.gateway(job, message.experimentId, Number(lease.generation));
         // The run reuses the campaign's frozen untrained evaluation instead of repeating it.
         await pythonJson(
           this.python,
@@ -322,10 +404,12 @@ export class TrainingBridge {
             "--frozen-baseline-sha256",
             job.baselineSha256,
           ],
-          { signal: abort.signal, timeoutMs: this.timeouts.runMs },
+          { signal: abort.signal, timeoutMs: this.timeouts.runMs, env: gateway?.environment() },
         );
+        await gateway?.stop();
       }
-      const evidence = await this.evidence(job);
+      // Rewards must be the worlds' own: resend every recorded step with its request ID.
+      const evidence = await this.evidence(job, actors.worker, actors.worker);
       clearInterval(timer);
       await inflight;
       if (heartbeatFailure) throw heartbeatFailure;
@@ -359,6 +443,7 @@ export class TrainingBridge {
       throw error;
     } finally {
       clearInterval(timer);
+      await gateway?.stop();
     }
   }
   /**
@@ -369,7 +454,7 @@ export class TrainingBridge {
   async evaluate(message: WorkflowMessage): Promise<void> {
     if (message.kind !== "TRAINING_COMPLETED") throw new Error("Expected completed training");
     const job = this.job(message),
-      evidence = await this.evidence(job);
+      evidence = await this.evidence(job, this.dispatcher.actors.evaluator);
     const checkpointSha256 = evidence.result.checkpoint_sha256;
     if (
       message.body.manifestSha256 !== evidence.manifestSha256 ||
@@ -458,12 +543,13 @@ export class TrainingBridge {
         baselineCorrect: evidence.frozen.num_correct,
         candidateCorrect: reproduced.num_correct,
         reproducedWorkerPredictions: true,
+        ...(evidence.world ? { world: document(evidence.world) } : {}),
         costStatus: "not_measured_by_local_worker",
         promotionAuthorized: false,
       },
     );
   }
-  private async evidence(job: TrainingJob) {
+  private async evidence(job: TrainingJob, reader: ForgeActorClient, replayer?: ForgeActorClient) {
     const runDir = String(job.config.output_dir);
     const manifestSha256 = await fileHash(join(runDir, "manifest.json"));
     await pythonJson(this.python, ["-m", "forge_training", "verify", "--run-dir", runDir]);
@@ -487,10 +573,18 @@ export class TrainingBridge {
       result.status !== "completed"
     )
       throw new Error("INVALID_TRAINING_EVIDENCE");
-    // Worker stages dataset paths; all other resolved configuration must match the approved job.
-    const { train: _train, development: _dev, ...actualConfig } = resolved;
-    const { train: _expectedTrain, development: _expectedDev, ...expectedConfig } = job.config;
-    if (digest(actualConfig) !== digest(expectedConfig)) throw new Error("CONFIG_MISMATCH");
+    // Worker stages dataset and starting-adapter paths (the adapter's hash still binds it);
+    // all other resolved configuration must match the approved job.
+    const unstaged = (config: Document) => {
+      const { train: _train, development: _dev, ...rest } = config;
+      const grpo = rest.grpo as Document | null | undefined;
+      const adapter = grpo?.init_adapter as Document | null | undefined;
+      if (!adapter) return rest;
+      const { path: _path, ...identity } = adapter;
+      return { ...rest, grpo: { ...grpo, init_adapter: identity } };
+    };
+    if (digest(unstaged(resolved)) !== digest(unstaged(job.config)))
+      throw new Error("CONFIG_MISMATCH");
     const trainingManifest = await readJson(join(runDir, "inputs/train.manifest.json"));
     if (trainingManifest.content_sha256 !== job.trainingDatasetSha256)
       throw new Error("TRAINING_DATASET_MISMATCH");
@@ -504,6 +598,18 @@ export class TrainingBridge {
     for (const name of Object.keys(manifest.files as Document))
       if (name.startsWith("checkpoint/"))
         checkpointBytes += (await readFile(join(runDir, name))).length;
+    // Reward-driven runs: every recorded reward must be a transition in the world journals.
+    const world: WorldEvidence | null = job.world
+      ? await verifyWorldRollouts({
+          reader,
+          replayer,
+          campaignId: this.dispatcher.campaignId,
+          jobId: job.jobId,
+          runDir,
+        })
+      : null;
+    if (Boolean(job.world) !== (result.training_method === "grpo"))
+      throw new Error("INVALID_TRAINING_EVIDENCE: training method differs from the job");
     return {
       result,
       frozen,
@@ -511,6 +617,7 @@ export class TrainingBridge {
       candidateSha256: await fileHash(join(runDir, "candidate.json")),
       manifestSha256,
       checkpointBytes,
+      world,
     };
   }
 }

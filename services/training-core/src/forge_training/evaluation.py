@@ -147,16 +147,28 @@ def evaluate(
     return EvaluationReport.model_validate(report).model_dump()
 
 
-def compare(baseline: dict, candidate: dict, seed: int, *, shared_baseline: bool = False) -> dict:
-    """A shared baseline is the campaign's frozen untrained evaluation, reused by its runs."""
+def compare(
+    baseline: dict,
+    candidate: dict,
+    seed: int,
+    *,
+    shared_baseline: bool = False,
+    starting_checkpoint: str | None = None,
+) -> dict:
+    """A shared baseline is the campaign's frozen evaluation of the starting policy (the
+    untrained model, or the adapter a run continues from), reused by its runs."""
     baseline = EvaluationReport.model_validate(baseline).model_dump()
     candidate = EvaluationReport.model_validate(candidate).model_dump()
     keys = ("campaign_id", "dataset", "protocol", "scorer", "model")
     for key in keys if shared_baseline else ("experiment_id", *keys):
         if baseline[key] != candidate[key]:
             raise ValueError(f"Cannot compare evaluations with different {key}")
-    if baseline["checkpoint_sha256"] is not None or candidate["checkpoint_sha256"] is None:
-        raise ValueError("Comparison requires the original baseline and a saved candidate")
+    if (
+        baseline["checkpoint_sha256"] != starting_checkpoint
+        or candidate["checkpoint_sha256"] is None
+        or candidate["checkpoint_sha256"] == starting_checkpoint
+    ):
+        raise ValueError("Comparison requires the starting-policy baseline and a new candidate")
     if (
         baseline["evaluation_role"] != "development"
         or candidate["evaluation_role"] != "development"

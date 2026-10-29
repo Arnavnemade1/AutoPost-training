@@ -1,7 +1,8 @@
 # Forge training core
 
-A working local worker for real completion-only LoRA optimization and independently
-loaded development evaluation. Requires Python 3.11+. Dependencies are pinned in
+A working local worker for real completion-only LoRA optimization, GRPO whose rewards
+come only from Terse world transitions, and independently loaded development
+evaluation. Requires Python 3.11+. Dependencies are pinned in
 `pyproject.toml`; CUDA, MPS, and CPU are explicit choices.
 
 ```sh
@@ -53,5 +54,20 @@ exactly. Model-loading commands take a host-wide `flock` (`~/.cache/forge/model-
 override with `FORGE_MODEL_LOCK`, disable with `FORGE_MODEL_LOCK=off`), so one machine
 runs one model job at a time.
 
+`training.method: "grpo"` (with a `grpo` block) trains with TRL `GRPOTrainer` pinned at
+0.24.0 on answer-free task files. Each completion's final answer is submitted through the
+orchestrator's world gateway (`FORGE_WORLD_GATEWAY_URL`, `FORGE_WORLD_GATEWAY_TOKEN`), and
+the returned `RLWorldActor` reward is the only reward. Runs add `rollouts.jsonl` and
+adapter snapshots under `lineage/`; `verify` re-derives actions, advantages and the
+policy lineage. `make_grpo_fixture` builds an offline tiny model warm-started on the
+answer format; `tests/world_stub.py` is a labeled test double of the gateway.
+
 See the [integration contract](../../docs/training-core-contract.md) for event fields,
 artifact formats, process boundaries, failure handling, and deployment requirements.
+
+## Phase 8 evaluation harness
+
+The separate `forge-harness` and `forge-final` commands add pinned EleutherAI evaluation,
+paired diagnostics, resource guards, approved checkpoint freezes, and one-attempt final
+authorization. See [HARNESS.md](HARNESS.md) for setup, boundaries and commands. Existing
+`forge-train` commands and saved runs keep their original contracts.

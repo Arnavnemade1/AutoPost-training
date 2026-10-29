@@ -2,13 +2,19 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
-import type { DataSelection, PolicyLimits, Recipe } from "./director.js";
+import type { DataSelection, Method, PolicyLimits, Recipe } from "./director.js";
 
 /** The campaign's allowed training partition; recipes may only select from it. */
 export interface SourcePartition {
   records: string;
   manifest: string;
 }
+/** The campaign's training method; GRPO adds the fixed `grpo` block of every config. */
+export interface MethodSettings {
+  method: Method;
+  grpo?: Document;
+}
+const SFT: MethodSettings = { method: "sft_lora" };
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 function lines(text: string): string[] {
   if (!text.endsWith("\n")) throw new Error("Dataset records must end with a newline");
@@ -54,6 +60,21 @@ export function selectRecords(source: string, data: DataSelection): string {
   return rows.filter((_, index) => keep.has(index)).join("\n") + "\n";
 }
 
+/**
+ * GRPO trains on answer-free tasks: the selection's IDs and questions, in order. Reference
+ * answers stay in the allowed partition, which only the trusted task service reads.
+ */
+export function taskProjection(records: string): string {
+  return (
+    lines(records)
+      .map((line) => {
+        const row = JSON.parse(line) as Document;
+        return JSON.stringify({ id: row.id, question: row.question });
+      })
+      .join("\n") + "\n"
+  );
+}
+
 export function withinLimits(recipe: Recipe, limits: PolicyLimits): boolean {
   return (
     (recipe.data === "full" || recipe.data === "concise") &&
@@ -77,20 +98,25 @@ export async function materialize(options: {
   campaignId: string;
   experimentId: string;
   recipe: Recipe;
+  method?: MethodSettings;
 }): Promise<string> {
   const { directory, template, source, recipe } = options;
+  const method = options.method ?? SFT;
   const original = await readSource(source);
   const data = join(directory, "data");
   await mkdir(data, { recursive: true });
-  const records = selectRecords(original.records, recipe.data);
+  const selected = selectRecords(original.records, recipe.data);
+  const grpo = method.method === "grpo";
+  const records = grpo ? taskProjection(selected) : selected;
   await writeRecipeFile(join(data, "train.jsonl"), records);
   await writeRecipeFile(
     join(data, "train.manifest.json"),
     JSON.stringify({
       ...original.manifest,
-      dataset_id: `${original.manifest.dataset_id}-${recipe.data}`,
+      dataset_id: `${original.manifest.dataset_id}-${recipe.data}${grpo ? "-tasks" : ""}`,
       content_sha256: sha256(records),
       num_examples: lines(records).length,
+      ...(grpo ? { record_kind: "task" } : {}),
     }),
   );
   // Template paths are relative to the template; rebase them onto the experiment directory.
@@ -111,9 +137,11 @@ export async function materialize(options: {
     },
     training: {
       ...(template.training as Document),
+      ...(grpo ? { method: "grpo" } : {}),
       learning_rate: recipe.learningRate,
       max_steps: recipe.maxSteps,
     },
+    ...(grpo ? { grpo: method.grpo } : {}),
     output_dir: "run",
   };
   const path = join(directory, "experiment.json");
@@ -141,16 +169,28 @@ export async function verifyRecipe(options: {
   template: Document;
   validatedConfig: Document;
   trainingRecordsPath: string;
+  method?: MethodSettings;
 }): Promise<string[]> {
   const problems: string[] = [];
   const { recipe, validatedConfig } = options;
+  const method = options.method ?? SFT;
   if (!withinLimits(recipe, options.limits)) problems.push("recipe outside policy limits");
-  const expected = selectRecords((await readSource(options.source)).records, recipe.data);
+  const selected = selectRecords((await readSource(options.source)).records, recipe.data);
+  const expected = method.method === "grpo" ? taskProjection(selected) : selected;
   if ((await readFile(options.trainingRecordsPath, "utf8")) !== expected)
     problems.push("training records are not the recipe's selection from the allowed partition");
   const training = validatedConfig.training as Document;
-  const { learning_rate: _lr, max_steps: _steps, ...fixed } = options.template.training as Document;
+  const {
+    learning_rate: _lr,
+    max_steps: _steps,
+    method: _method,
+    ...fixed
+  } = options.template.training as Document;
   if (!pins(fixed, training)) problems.push("training settings differ from the campaign template");
+  if ((training.method ?? "sft_lora") !== method.method)
+    problems.push("training method differs from the campaign's method");
+  if (method.method === "grpo" && !pins(method.grpo, validatedConfig.grpo))
+    problems.push("GRPO settings differ from the campaign's");
   if (training.learning_rate !== recipe.learningRate) problems.push("learning rate differs");
   if (training.max_steps !== recipe.maxSteps) problems.push("step count differs");
   for (const key of ["evaluation", "seed", "device", "precision", "max_model_parameters"])

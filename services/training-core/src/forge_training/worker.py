@@ -15,24 +15,33 @@ from pathlib import Path
 from .artifacts import (
     EventLog,
     directory_manifest,
+    directory_sha256,
     file_sha256,
     manifest_sha256,
     runtime_versions,
     utc_now,
     write_json,
 )
-from .config import ExperimentConfig, load_config
-from .data import load_dataset, verify_separation
+from .config import ExperimentConfig, load_config, starting_checkpoint
+from .data import load_dataset, load_tasks, verify_separation
 from .evaluation import compare, evaluation_protocol
 from .reports import EvaluationReport
 from .scoring import extract_answer
 
+# Credentials for the orchestrator's world gateway; only the GRPO training phase gets them.
+GATEWAY_ENVIRONMENT = ("FORGE_WORLD_GATEWAY_URL", "FORGE_WORLD_GATEWAY_TOKEN")
+
 
 def validate_inputs(config: ExperimentConfig, *, check_output: bool = True) -> dict:
-    train, train_manifest = load_dataset(config.train, "train")
+    # Reward-driven training reads answer-free tasks; supervised training reads examples.
+    grpo = config.training.method == "grpo"
+    train, train_manifest = (
+        load_tasks(config.train) if grpo else load_dataset(config.train, "train")
+    )
     development, dev_manifest = load_dataset(config.development, "development")
     verify_separation(train, development)
-    if any(extract_answer(row.answer) is None for row in train + development):
+    referenced = development if grpo else train + development
+    if any(extract_answer(row.answer) is None for row in referenced):
         raise ValueError("All references must end with a numeric '#### <answer>' line")
     output = Path(config.output_dir)
     inputs = [
@@ -44,19 +53,33 @@ def validate_inputs(config: ExperimentConfig, *, check_output: bool = True) -> d
         inputs.append(Path(config.model.model_id))
         if output.is_relative_to(Path(config.model.model_id)):
             raise ValueError("Output may not be written inside the local base-model directory")
+    adapter = config.grpo.init_adapter if config.grpo is not None else None
+    if adapter is not None:
+        # The starting adapter is an input like the data: checked by hash, never written to.
+        if directory_sha256(Path(adapter.path)) != adapter.sha256:
+            raise ValueError("Starting adapter checksum mismatch")
+        inputs.append(Path(adapter.path))
+        if output.is_relative_to(Path(adapter.path)):
+            raise ValueError("Output may not be written inside the starting adapter")
     if check_output and any(input_path.is_relative_to(output) for input_path in inputs):
         raise ValueError("Output directory may not contain input artifacts")
     return {"train": train_manifest.model_dump(), "development": dev_manifest.model_dump()}
 
 
-def run_phase(arguments: list[str], timeout: int, log: Path) -> None:
+def run_phase(arguments: list[str], timeout: int, log: Path, *, world_access: bool = False) -> None:
     """A parent deadline terminates a whole process group, including model loading."""
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if world_access or name not in GATEWAY_ENVIRONMENT
+    }
     with log.open("x", encoding="utf-8") as stream:
         process = subprocess.Popen(
             [sys.executable, "-m", "forge_training", *arguments],
             stdout=stream,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            env=environment,
         )
         try:
             code = process.wait(timeout=timeout)
@@ -82,7 +105,7 @@ def adopt_frozen_baseline(
     report = EvaluationReport.model_validate_json(source.read_text()).model_dump()
     rows, manifest = load_dataset(config.development, "development")
     if (
-        report["checkpoint_sha256"] is not None
+        report["checkpoint_sha256"] != starting_checkpoint(config)
         or report["campaign_id"] != config.campaign_id
         or report["model"] != config.model.model_dump()
         or report["dataset"] != manifest.model_dump()
@@ -134,6 +157,11 @@ def run_experiment(
                 shutil.copyfile(getattr(source, key), destination)
                 effective[purpose][key] = str(destination)
                 replay[purpose][key] = f"inputs/{purpose}.{suffix}"
+        start = starting_checkpoint(config)
+        if start is not None:
+            shutil.copytree(config.grpo.init_adapter.path, staged / "parent-adapter")
+            effective["grpo"]["init_adapter"]["path"] = str(staged / "parent-adapter")
+            replay["grpo"]["init_adapter"]["path"] = "inputs/parent-adapter"
         config = ExperimentConfig.model_validate(effective)
         validate_inputs(config, check_output=False)
         replay["output_dir"] = "."
@@ -167,10 +195,19 @@ def run_experiment(
                     ["_train", "--config", frozen],
                     config.training.max_seconds,
                     output / "training.log",
+                    world_access=config.training.method == "grpo",
                 )
             else:
                 events.emit("EVALUATION_STARTED", {"role": role, "evaluationRole": "development"})
                 args = ["evaluate", "--config", frozen, "--output", str(output / f"{role}.json")]
+                if role == "baseline" and start is not None:
+                    # The baseline is the policy training starts from.
+                    args += [
+                        "--checkpoint",
+                        config.grpo.init_adapter.path,
+                        "--expected-hash",
+                        start,
+                    ]
                 if role == "candidate":
                     training = json.loads((output / "training.json").read_text())
                     args += [
@@ -196,7 +233,11 @@ def run_experiment(
         baseline = json.loads((output / "baseline.json").read_text())
         candidate = json.loads((output / "candidate.json").read_text())
         comparison = compare(
-            baseline, candidate, config.seed, shared_baseline=baseline_source["kind"] == "frozen"
+            baseline,
+            candidate,
+            config.seed,
+            shared_baseline=baseline_source["kind"] == "frozen",
+            starting_checkpoint=start,
         )
         write_json(output / "comparison.json", comparison)
         summary = {
@@ -209,6 +250,8 @@ def run_experiment(
             "comparison": comparison,
             "checkpoint_sha256": training["checkpoint_sha256"],
             "weights_changed": training["weights_changed"],
+            "training_method": config.training.method,
+            "starting_checkpoint_sha256": start,
             "candidate_evaluated_in_fresh_process": True,
             "baseline_source": baseline_source,
             "cost_usd": None,
@@ -286,7 +329,12 @@ def verify_run(output: Path) -> dict:
     shared = source["kind"] == "frozen"
     if shared and file_sha256(output / "baseline.json") != source.get("sha256"):
         raise ValueError("Reused baseline differs from the frozen report the run recorded")
-    recomputed = compare(baseline, candidate, config.seed, shared_baseline=shared)
+    start = starting_checkpoint(config)
+    if start is not None and directory_sha256(output / "inputs/parent-adapter") != start:
+        raise ValueError("Staged starting adapter differs from the configured one")
+    recomputed = compare(
+        baseline, candidate, config.seed, shared_baseline=shared, starting_checkpoint=start
+    )
     if recomputed != json.loads((output / "comparison.json").read_text()):
         raise ValueError("Stored comparison does not match sample-level evidence")
     training = json.loads((output / "training.json").read_text())
@@ -302,6 +350,13 @@ def verify_run(output: Path) -> dict:
         training["initial_trainable_sha256"] == training["final_trainable_sha256"]
     ):
         raise ValueError("Training metadata does not demonstrate changed weights")
+    if training.get("method", "sft_lora") != config.training.method:
+        raise ValueError("Training metadata method differs from the configuration")
+    grpo = None
+    if config.training.method == "grpo":
+        from .grpo import verify_rollouts
+
+        grpo = verify_rollouts(output, config, training)
     if result["comparison"] != recomputed or result["status"] != "completed":
         raise ValueError("Result does not match completed evaluation evidence")
     if result["promotion_authorized"] is not False or result["governance_status"] != "unreviewed":
@@ -323,7 +378,11 @@ def verify_run(output: Path) -> dict:
     if (output / "replay-config.json").exists():
         replay = load_config(output / "replay-config.json")
         rows, dataset = load_dataset(replay.development, "development")
-        if dataset.model_dump() != baseline["dataset"]:
+        # Phase 6 added record_kind with a backwards-compatible default. Normalize
+        # the old manifest in memory; never rewrite the preserved evidence bytes.
+        from .config import DatasetManifest
+
+        if dataset.model_dump() != DatasetManifest.model_validate(baseline["dataset"]).model_dump():
             raise ValueError("Evaluated dataset differs from input snapshot")
         for row, sample in zip(rows, baseline["samples"], strict=True):
             if (row.id, row.question, str(extract_answer(row.answer))) != (
@@ -336,5 +395,6 @@ def verify_run(output: Path) -> dict:
         "status": "verified",
         "num_artifacts": len(expected_files),
         "manifest_sha256": file_sha256(output / "manifest.json"),
+        "rollouts": grpo,
         "note": "Hashes detect changes relative to this manifest; they are not a signature.",
     }

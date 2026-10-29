@@ -20,7 +20,7 @@ import {
   type Recipe,
 } from "./director.js";
 import type { GovernanceReviewer } from "./governance.js";
-import { materialize, verifyRecipe, type SourcePartition } from "./recipes.js";
+import { materialize, verifyRecipe, type MethodSettings, type SourcePartition } from "./recipes.js";
 import { settleAtReservedBound } from "./reconcile.js";
 import { participantRoles, type ParticipantRole, type RelayDispatcher } from "./relay.js";
 import {
@@ -44,6 +44,8 @@ export interface ResearchProfile {
   costMicroUsd: number;
   maxExperiments: number;
   timeouts: { runMs: number; evaluationMs: number };
+  /** Training method of every recipe; defaults to supervised `sft_lora`. */
+  method?: MethodSettings;
 }
 export interface ResearchContext {
   output: string;
@@ -98,6 +100,9 @@ export class ResearchCampaign {
   private get campaignId() {
     return this.ctx.profile.campaignId;
   }
+  private get method(): MethodSettings {
+    return this.ctx.profile.method ?? { method: "sft_lora" };
+  }
   private actor(role: Role) {
     return this.ctx.dispatcher.actors[role];
   }
@@ -130,7 +135,13 @@ export class ResearchCampaign {
       ...(await this.capacity()),
     };
     await this.apply(
-      initialDecision(baseline, this.ctx.profile.base, this.ctx.profile.costMicroUsd, this.history),
+      initialDecision(
+        baseline,
+        this.ctx.profile.base,
+        this.ctx.profile.costMicroUsd,
+        this.history,
+        this.method.method,
+      ),
     );
     await this.pump();
     if (!this.closed) {
@@ -534,22 +545,35 @@ export class ResearchCampaign {
         campaignId: this.campaignId,
         experimentId: message.experimentId,
         recipe,
+        method: this.method,
       });
     let job = bridge.get(label);
+    const grpo = this.method.method === "grpo";
     if (!job) {
-      job = await prepareJob(python, label, configPath, baselinePath, join(directory, "evaluator"));
+      job = await prepareJob(
+        python,
+        label,
+        configPath,
+        baselinePath,
+        join(directory, "evaluator"),
+        undefined,
+        // Reward-driven jobs are scored by the task service against the allowed partition.
+        grpo ? { source: profile.source } : undefined,
+      );
       bridge.register(job);
     }
     const model = job.config.model as Document;
     const proposal = {
       experimentId: message.experimentId,
-      strategy: "sft_lora",
+      strategy: this.method.method,
       model: { modelId: model.model_id, revision: model.revision },
       configSha256: job.configSha256,
       trainingDatasetSha256: job.trainingDatasetSha256,
       developmentDatasetSha256: ((await readJson(this.ctx.baselinePath)).dataset as Document)
         .content_sha256,
-      hypothesis: `${label}: ${recipe.data} solutions, lr ${recipe.learningRate}, ${recipe.maxSteps} steps`,
+      hypothesis: grpo
+        ? `${label}: GRPO with world rewards on ${recipe.data} tasks, lr ${recipe.learningRate}, ${recipe.maxSteps} updates`
+        : `${label}: ${recipe.data} solutions, lr ${recipe.learningRate}, ${recipe.maxSteps} steps`,
       maxCostMicroUsd: profile.costMicroUsd,
     };
     await this.ctx.dispatcher.publish(
@@ -603,6 +627,7 @@ export class ResearchCampaign {
           template: this.template,
           validatedConfig: config,
           trainingRecordsPath: String((config.train as Document).records),
+          method: this.method,
         })),
       );
     }
