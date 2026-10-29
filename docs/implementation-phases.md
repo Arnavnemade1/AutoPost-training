@@ -259,7 +259,8 @@ readiness precedes its corresponding gate.
 
 Phase 8 commands and trust/resource boundaries are documented in the
 [harness runbook](../services/training-core/HARNESS.md). Final readiness still requires
-a separately owned evaluator, a complete final run, clean-machine reproduction,
+a separately owned evaluator, a complete final run, a clean-machine model run (test
+suites already reproduced: [record](verification/clean-machine.md)),
 matching demo recording, and event-rule acceptance. Existing research agents remain
 scripted; no real agent collaboration was added.
 
