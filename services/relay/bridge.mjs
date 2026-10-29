@@ -58,8 +58,12 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({ error: error.message }));
   }
 });
-server.listen(7529, "127.0.0.1", () =>
-  console.log("Forge Agent Relay bridge ready on 7529"),
+// The bridge serves the address the API posts to, so a second lab can run on other ports.
+const port = Number(
+  new URL(process.env.FORGE_RELAY_BRIDGE || "http://127.0.0.1:7529").port || 7529,
+);
+server.listen(port, "127.0.0.1", () =>
+  console.log(`Forge Agent Relay bridge ready on ${port}`),
 );
 process.on("SIGTERM", () => {
   server.close();
