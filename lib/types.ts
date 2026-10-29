@@ -91,6 +91,7 @@ export type Experiment = {
     before_hash: string;
     after_hash: string;
     seconds: number;
+    max_sequence_length?: number;
     device?: Hardware;
   };
 };
