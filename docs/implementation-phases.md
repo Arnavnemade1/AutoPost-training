@@ -11,7 +11,7 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after Phase 7
+## Current status through Phase 8 implementation
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
@@ -58,7 +58,12 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   axe-core violations (desktop, mobile, light, dark), displayed scores equal to files,
   frame-exact playable exports. The real Qwen campaign has not been recorded
   ([Phase 7 verification](verification/phase7-local.md)).
-- Phase 8: planned; no sealed final evaluation is claimed.
+- Phase 8: pinned EleutherAI harness, paired development diagnostics, bounded subprocesses,
+  governance-checked release freeze, rehearsal, portable adapter/evidence bundles and a
+  separate one-attempt final evaluator implemented. Fixture generation/reload and failure
+  paths verified. The saved-output audit exposes a strict/flexible scoring disagreement;
+  no sealed final evaluation or model improvement is claimed.
+  See [Phase 8 verification](verification/phase8-local.md).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
 
@@ -250,6 +255,12 @@ and uncertainty. No claim of improvement, sponsor integration, deployment, or fi
 readiness precedes its corresponding gate.
 
 ## Verified upstream references
+
+Phase 8 commands and trust/resource boundaries are documented in the
+[harness runbook](../services/training-core/HARNESS.md). Final readiness still requires
+a separately owned evaluator, a complete final run, clean-machine reproduction,
+matching demo recording, and event-rule acceptance. Existing research agents remain
+scripted; no real agent collaboration was added.
 
 - [Qwen model card](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct)
 - [GSM8K dataset](https://huggingface.co/datasets/openai/gsm8k)

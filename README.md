@@ -18,7 +18,9 @@ A Qwen GRPO campaign continuing that checkpoint found no improvement: its best
 development candidate (7/16) regressed on held-out problems (6/16 to 4/16) and was
 vetoed. A research command center renders campaigns from stored files and records them
 with 100x and 120x exports (verified on a fixture campaign). Sealed final evaluation
-remains the last phase.
+is now implemented as a separate, one-attempt evaluator with a pinned EleutherAI
+harness, paired development diagnostics, resource guards, checkpoint freeze and
+release bundles. No sealed final evaluation or benchmark improvement is claimed.
 
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
 - [Architecture and trust boundaries](docs/architecture.md)
@@ -28,6 +30,7 @@ remains the last phase.
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Research dashboard and recorder](apps/web/README.md)
+- [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
 - [Phase 7 verification](docs/verification/phase7-local.md)
 - [Phase 6 verification](docs/verification/phase6-local.md)
 - [Phase 5 verification](docs/verification/phase5-local.md)

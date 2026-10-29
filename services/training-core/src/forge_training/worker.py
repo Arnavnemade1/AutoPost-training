@@ -378,7 +378,11 @@ def verify_run(output: Path) -> dict:
     if (output / "replay-config.json").exists():
         replay = load_config(output / "replay-config.json")
         rows, dataset = load_dataset(replay.development, "development")
-        if dataset.model_dump() != baseline["dataset"]:
+        # Phase 6 added record_kind with a backwards-compatible default. Normalize
+        # the old manifest in memory; never rewrite the preserved evidence bytes.
+        from .config import DatasetManifest
+
+        if dataset.model_dump() != DatasetManifest.model_validate(baseline["dataset"]).model_dump():
             raise ValueError("Evaluated dataset differs from input snapshot")
         for row, sample in zip(rows, baseline["samples"], strict=True):
             if (row.id, row.question, str(extract_answer(row.answer))) != (

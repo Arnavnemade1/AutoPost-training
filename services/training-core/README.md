@@ -64,3 +64,10 @@ answer format; `tests/world_stub.py` is a labeled test double of the gateway.
 
 See the [integration contract](../../docs/training-core-contract.md) for event fields,
 artifact formats, process boundaries, failure handling, and deployment requirements.
+
+## Phase 8 evaluation harness
+
+The separate `forge-harness` and `forge-final` commands add pinned EleutherAI evaluation,
+paired diagnostics, resource guards, approved checkpoint freezes, and one-attempt final
+authorization. See [HARNESS.md](HARNESS.md) for setup, boundaries and commands. Existing
+`forge-train` commands and saved runs keep their original contracts.
