@@ -6,7 +6,9 @@ import time
 import traceback
 from pathlib import Path
 from dotenv import load_dotenv
-from services.core import store, training
+from forge_training.config import Example
+from forge_training.data import question_key, verify_separation
+from services.core import production, store, training
 from services.core.director import propose, build_input
 from services.core.briefing import publish
 from services.core.verdict import SUMMARY as VERDICT_SUMMARY, final_verdict
@@ -23,6 +25,22 @@ from services.core.engine import (
 from services.core.actor_client import get_actor
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+
+def production_split(config, train_rows, dev_rows):
+    """Labeled production failures: half join training, half are held out to measure the fix."""
+    if not config.get("production_scan"):
+        return [], [], {"keys": set(), "report": None}
+    report = production.load_scan(config["production_scan"])
+    if not report:
+        raise ValueError("Production scan not found")
+    train, held_out = production.campaign_rows(report, production.load_labels(config["production_scan"]))
+    # Development rows stay pure: production failures that duplicate them are dropped.
+    dev_keys = {question_key(r["question"]) for r in dev_rows}
+    train = [r for r in train if question_key(r["question"]) not in dev_keys]
+    held_out = [r for r in held_out if question_key(r["question"]) not in dev_keys]
+    keys = {question_key(r["question"]) for r in train + held_out}
+    return train, held_out, {"keys": keys, "report": report}
 
 
 def run(cid):
@@ -76,16 +94,66 @@ def run(cid):
 
     try:
         train_rows, dev_rows, sealed = training.benchmark_data(config)
+        prod_train, prod_held_out, scan = production_split(config, train_rows, dev_rows)
+        train_rows = [{k: r[k] for k in ("id", "question", "answer")} for r in prod_train] + [
+            r for r in train_rows if question_key(r["question"]) not in scan["keys"]
+        ]
+        verify_separation(
+            [Example(**r) for r in train_rows],
+            [
+                Example(**r)
+                for r in dev_rows + [{k: r[k] for k in ("id", "question", "answer")} for r in prod_held_out]
+            ],
+        )
         manifest = {
             "dataset": "openai/gsm8k",
             "revision": training.DATASET_REVISION,
             "train_ids": [r["id"] for r in train_rows],
             "dev_ids": [r["id"] for r in dev_rows],
+            "production_scan": config.get("production_scan"),
+            "production_train_ids": [r["id"] for r in prod_train],
+            "production_held_out_ids": [r["id"] for r in prod_held_out],
             "test_policy": "One held-out subset, queried only after immutable checkpoint selection",
             "seed": config["seed"],
         }
         (folder / "dataset-manifest.json").write_text(json.dumps(manifest, indent=2))
         artifact(cid, folder / "dataset-manifest.json", "dataset", "Dataset provenance")
+        held_rows = [{k: r[k] for k in ("id", "question", "answer")} for r in prod_held_out]
+        if scan["report"]:
+            r = scan["report"]
+            found = ", ".join(
+                f"{c['count']} {c['kind'].replace('_', ' ')}" for c in r["categories"] if c["count"]
+            )
+            save_field(
+                production={
+                    "scan_id": r["id"],
+                    "name": r["name"],
+                    "traces": r["traces"],
+                    "flagged": r["flagged"],
+                    "categories": r["categories"],
+                    "audit": r["audit"],
+                    "train": [
+                        {"id": x["id"], "trace_id": x["trace_id"], "kinds": x["kinds"]} for x in prod_train
+                    ],
+                    "held_out": [
+                        {
+                            "id": x["id"],
+                            "trace_id": x["trace_id"],
+                            "kinds": x["kinds"],
+                            "question": x["question"],
+                        }
+                        for x in prod_held_out
+                    ],
+                }
+            )
+            send(
+                cid,
+                "data",
+                "director",
+                "PRODUCTION_FAILURES_TRIAGED",
+                f"{r['flagged']} of {r['traces']} production answers flagged ({found or 'none'}). "
+                f"{len(prod_train)} labeled failures join training; {len(prod_held_out)} are held out to measure the fix.",
+            )
         send(
             cid,
             "director",
@@ -110,6 +178,20 @@ def run(cid):
         base_reg = training.evaluate(
             model, tokenizer, regressions, progress("Baseline regression"), stop, split="regression"
         )
+        base_prod = (
+            training.evaluate(
+                model,
+                tokenizer,
+                held_rows,
+                progress("Baseline production"),
+                stop,
+                split="production held-out",
+            )
+            if held_rows
+            else None
+        )
+        if base_prod:
+            save_field(production_baseline=base_prod)
         training.unload(model)
         actor(cid).settle(cid + "-baseline", time.monotonic() - base_started)
         (folder / "baseline.json").write_text(json.dumps(baseline, indent=2))
@@ -131,7 +213,7 @@ def run(cid):
                 cid, "diagnosing", "Research director is selecting the next experiment from measured evidence"
             )
             measured = baseline if not best else best["evaluation"]
-            context = build_input(config, measured, previous)
+            context = build_input(config, measured, previous, scan["report"], prod_train)
             save_field(director_context=context)
             expid = f"exp-{index + 1:03d}"
             input_file = folder / f"{expid}-director-input.json"
@@ -280,6 +362,18 @@ def run(cid):
             reg = training.evaluate(
                 model, tokenizer, regressions, progress(expid + " regression"), stop, split="regression"
             )
+            prod_eval = (
+                training.evaluate(
+                    model,
+                    tokenizer,
+                    held_rows,
+                    progress(expid + " production"),
+                    stop,
+                    split="production held-out",
+                )
+                if held_rows
+                else None
+            )
             training.unload(model)
             (folder / f"{expid}-evaluation.json").write_text(json.dumps(evaluation, indent=2))
             evaluation_artifact = artifact(
@@ -313,6 +407,7 @@ def run(cid):
                 status="completed" if review["decision"] == "approved" else "rejected",
                 evaluation=evaluation,
                 regression=reg,
+                production=prod_eval,
                 review=review,
             )
             send(
@@ -320,7 +415,12 @@ def run(cid):
                 "evaluator",
                 "director",
                 "EVALUATION_COMPLETED",
-                f"{expid}: {evaluation['correct']}/{evaluation['n']} development answers correct. Review {review['decision']}. Regression change {(reg['score'] - base_reg['score']) * 100:+.1f} pp.",
+                f"{expid}: {evaluation['correct']}/{evaluation['n']} development answers correct. Review {review['decision']}. Regression change {(reg['score'] - base_reg['score']) * 100:+.1f} pp."
+                + (
+                    f" Held-out production failures now correct: {prod_eval['correct']}/{prod_eval['n']} (baseline {base_prod['correct']}/{base_prod['n']})."
+                    if prod_eval
+                    else ""
+                ),
                 expid,
             )
             previous.append(
@@ -344,6 +444,7 @@ def run(cid):
                     "evaluation": evaluation,
                     "sha256": result["sha256"],
                     "path": str(adapter),
+                    "production": prod_eval,
                 }
                 save_field(best=best)
                 send(
@@ -424,6 +525,19 @@ def run(cid):
             "selection_basis": "development only",
             "test_queries_per_model": 1,
         }
+        if base_prod:
+            after = best["production"] if best and best.get("production") else base_prod
+            fixed = [
+                a["id"]
+                for b, a in zip(base_prod["predictions"], after["predictions"], strict=True)
+                if a["correct"] and not b["correct"]
+            ]
+            final["production"] = {
+                "baseline": {"correct": base_prod["correct"], "n": base_prod["n"]},
+                "checkpoint": {"correct": after["correct"], "n": after["n"]},
+                "fixed_ids": fixed,
+                **final_verdict(base_prod, after, config["seed"]),
+            }
         measured = json.loads(actor(cid).snapshot())["consumed_seconds"]
         save_field(
             final=final,

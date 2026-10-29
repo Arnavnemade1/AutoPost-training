@@ -37,6 +37,7 @@ release bundles. No sealed final evaluation or benchmark improvement is claimed.
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Research command center and recorder](docs/command-center.md)
+- [Production failures into improvements](docs/production-failures.md)
 - [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
 - [Phase 7 verification](docs/verification/phase7-local.md)
 - [Phase 6 verification](docs/verification/phase6-local.md)

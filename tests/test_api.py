@@ -92,3 +92,33 @@ def test_dns_rebound_hosts_are_refused_for_reads_and_writes():
         assert c.post("/campaigns", json={}, headers=rebound).status_code == 403
         assert c.get("/campaigns").status_code == 200
         assert c.get("/campaigns", headers={"origin": "http://127.0.0.1:3000"}).status_code == 200
+
+
+def test_production_scan_round_trip_and_campaign_reference(tmp_path, monkeypatch):
+    from services.core import production
+
+    monkeypatch.setattr(store, "DATA", tmp_path)
+    monkeypatch.setattr(production, "sealed_questions", lambda: ["What is the sealed question?"])
+    traces = "\n".join(
+        [
+            '{"id": "a", "prompt": "How many pens?", "output": "12 * 7 = 74\\n#### 74"}',
+            '{"id": "b", "prompt": "What is the sealed question?", "output": "no answer"}',
+            "{broken",
+        ]
+    )
+    with TestClient(api.app, base_url=LOCAL) as c:
+        created = c.post("/production/scans", json={"name": "Week 43", "traces": traces})
+        assert created.status_code == 201
+        body = created.json()
+        assert (body["traces"], body["flagged"], body["malformed"]) == (2, 1, 1)
+        assert body["excluded_sealed_overlap"] == ["b"] and "findings" not in body
+        listed = c.get("/production/scans").json()
+        assert [s["id"] for s in listed] == [body["id"]]
+        full = c.get(f"/production/scans/{body['id']}").json()
+        assert full["findings"][0]["signals"][0]["evidence"]["computed"] == "84"
+        assert c.get("/production/scans/scan-00000000").status_code == 404
+        assert c.get("/production/scans/..%2F..%2Fetc").status_code == 404
+        missing = c.post("/campaigns", json={"production_scan": "scan-00000000"})
+        assert missing.status_code == 404
+        assert c.post("/campaigns", json={"production_scan": "../x"}).status_code == 422
+        assert c.post("/production/scans", json={"name": "x", "traces": "", "extra": 1}).status_code == 422

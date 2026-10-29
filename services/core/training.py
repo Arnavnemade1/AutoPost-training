@@ -123,7 +123,9 @@ def evaluate(model, tokenizer, rows, progress, cancelled, split="development", w
             tokens = model.generate(
                 **inputs, do_sample=False, max_new_tokens=256, pad_token_id=tokenizer.eos_token_id
             )
-            output = tokenizer.decode(tokens[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+            generated = tokens[0, inputs["input_ids"].shape[1] :]
+            output = tokenizer.decode(generated, skip_special_tokens=True)
+            truncated = len(generated) >= 256 and generated[-1].item() != tokenizer.eos_token_id
             answer, expected = extract(output), extract(row["answer"])
             correct = equal(answer, expected)
             env = worlds(row, answer, i) if worlds else None
@@ -136,6 +138,7 @@ def evaluate(model, tokenizer, rows, progress, cancelled, split="development", w
                 "answer": answer,
                 "expected": expected,
                 "correct": correct,
+                "finish_reason": "length" if truncated else "stop",
                 "environment_id": env["id"] if env else None,
             }
             predictions.append(p)
@@ -182,11 +185,20 @@ def train(proposal, config, rows, folder, progress, cancelled):
     model.config.use_cache = False
     metrics = []
     sampled = list(rows)
+    production = [r for r in sampled if r["id"].startswith("prod-")]
+    sampled = [r for r in sampled if not r["id"].startswith("prod-")]
     if proposal["strategy"] == "targeted_sft":
         # Reweight longer, multi-step worked solutions using training data only.
         sampled.sort(key=lambda r: len(r["answer"]), reverse=True)
         sampled = sampled[: max(32, len(sampled) // 2)]
     random.Random(config["seed"]).shuffle(sampled)
+    random.Random(config["seed"]).shuffle(production)
+    # Each step trains one record, so targeted runs see production failures first.
+    if proposal["strategy"] == "targeted_sft":
+        sampled = production + sampled
+    else:
+        sampled = sampled + production
+        random.Random(config["seed"]).shuffle(sampled)
     records = []
     accepted = []
     excluded = []

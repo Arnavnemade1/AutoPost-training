@@ -1,8 +1,6 @@
 import pytest
 
-pytest.importorskip("forge_training")
-
-from services.core.verdict import final_verdict  # noqa: E402
+from services.core.verdict import final_verdict
 
 
 def evaluation(correct):

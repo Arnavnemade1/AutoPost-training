@@ -25,6 +25,7 @@ class CampaignConfig(BaseModel):
     strategies: list[Literal["broad_sft", "targeted_sft", "grpo"]] = Field(
         default_factory=lambda: ["broad_sft", "targeted_sft"], min_length=1
     )
+    production_scan: str | None = Field(default=None, pattern=r"^scan-[0-9a-f]{8}$")
 
 
 class Message(BaseModel):

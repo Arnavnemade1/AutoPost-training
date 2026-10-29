@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
-from services.core import store
+from pydantic import BaseModel, ConfigDict, Field
+from services.core import production, store
 from services.core.contracts import CampaignConfig
 from services.core.engine import actor, governance, probe, spawn
 from services.core.actor_client import get_actor
@@ -103,6 +103,8 @@ def create_campaign(config: CampaignConfig):
 def initialize_campaign(config: CampaignConfig):
     if any(s["status"] not in TERMINAL for s in store.campaigns()):
         raise HTTPException(409, "A campaign already owns the local GPU. Stop it or wait for completion.")
+    if config.production_scan and not production.load_scan(config.production_scan):
+        raise HTTPException(404, "Production scan not found")
     cid = "forge-" + uuid.uuid4().hex[:8]
     c = config.model_dump()
     state = json.loads(actor(cid).initialize(json.dumps(c)))
@@ -266,3 +268,32 @@ def recording(cid: str, update: RecordingUpdate):
         raise HTTPException(422, "Invalid recording state")
     store.patch(cid, lambda current: current.update(recording=update.model_dump()))
     return {"ok": True}
+
+
+class ProductionUpload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    traces: str = Field(min_length=1, max_length=8_000_000)
+    labels: str | None = Field(default=None, max_length=2_000_000)
+
+
+@app.get("/production/scans")
+def production_scans():
+    return production.scans()
+
+
+@app.post("/production/scans", status_code=201)
+def create_production_scan(upload: ProductionUpload):
+    try:
+        report = production.save_scan(upload.name, upload.traces, upload.labels)
+    except (ValueError, KeyError, json.JSONDecodeError) as error:
+        raise HTTPException(422, f"Could not scan production traces: {error}") from error
+    return production.summary(report)
+
+
+@app.get("/production/scans/{scan_id}")
+def production_scan(scan_id: str):
+    report = production.load_scan(scan_id)
+    if not report:
+        raise HTTPException(404, "Production scan not found")
+    return report
