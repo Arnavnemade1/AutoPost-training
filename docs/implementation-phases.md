@@ -64,6 +64,11 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   paths verified. The saved-output audit exposes a strict/flexible scoring disagreement;
   no sealed final evaluation or model improvement is claimed.
   See [Phase 8 verification](verification/phase8-local.md).
+- Azure CPU reproduction: on a clean 8-core Arm VM the Qwen SFT campaign reproduced the
+  0/16 to 6/16 selection and held-out result. A predeclared prompt/length ablation of that
+  checkpoint under the official harness found **no gain** (strict 0 to 0 zero-shot; flexible
+  9 to 6), so freeze refused the release and no final evaluation ran
+  ([record](verification/azure-cpu-campaign.md)).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
 
