@@ -32,6 +32,7 @@ class FakeRemote:
         self.jobs.append(job)
         finished = False
         try:
+            yield ("device", self.device)
             if job["kind"] == "evaluate":
                 for row in job["rows"]:
                     if cancelled():
@@ -344,3 +345,11 @@ def test_modal_session_refuses_calls_before_it_is_open():
 
     with pytest.raises(RuntimeError, match="not open"):
         list(remote.Session().call({"kind": "evaluate"}, never))
+
+
+def test_remote_gpu_is_named_before_the_first_prediction_arrives():
+    names = []
+    backend = compute.Remote(FakeRemote())
+    model, tokenizer = backend.load()
+    backend.evaluate(model, tokenizer, ROWS, lambda *_: names.append(backend.hardware["name"]), never)
+    assert names == ["NVIDIA H100 80GB HBM3"] * 3

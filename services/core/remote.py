@@ -95,6 +95,7 @@ def execute(job, events):
 
     started = time.monotonic()
     device = training.device_info()
+    events.put(("device", device))  # The command center names the GPU before the first result.
     if job["kind"] == "evaluate":
         model, tokenizer = _model(job.get("adapter"))
         count = 0

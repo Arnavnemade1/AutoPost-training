@@ -113,6 +113,8 @@ class Remote:
             for kind, value in self.client.call(job, cancelled):
                 if kind == "prediction":
                     yield value
+                elif kind == "device":
+                    self._measured(value)
                 elif kind == "result":
                     done.update(value)
 
@@ -138,6 +140,8 @@ class Remote:
         for kind, value in self.client.call(job, cancelled):
             if kind == "metric":
                 progress(value)
+            elif kind == "device":
+                self._measured(value)
             elif kind == "result":
                 done.update(value)
         if not done:
