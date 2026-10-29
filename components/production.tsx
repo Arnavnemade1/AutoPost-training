@@ -16,6 +16,8 @@ import { Empty, PanelHeader } from "./views";
 // Measured on scan-d2f134cd: 24 training steps left every held-out production
 // failure unfixed (forge-f530d7fa); 96 steps fixed 11 of 33 (forge-ad0318ee).
 const PRODUCTION_CAMPAIGN = {
+  objective:
+    "Fix the failures found in production traffic without benchmark leakage, and measure the fix on held-out production failures.",
   strategies: ["targeted_sft", "broad_sft"],
   max_experiments: 2,
   train_steps: 96,

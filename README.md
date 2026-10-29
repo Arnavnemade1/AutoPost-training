@@ -11,6 +11,13 @@ earlier separate `apps/web` dashboard was retired (recoverable from git history 
 `6ab37db`). The status below describes the original
 training/orchestrator profile.
 
+**Production failures into improvements:** Forge scans deployed traffic for failures
+without an answer key (audited at precision 1.00, recall 0.98 on 64 real Qwen answers),
+trains on half of the labeled failures and measures the held-out half. In a recorded run
+held-out production failures went from 0/33 to 8/33 and the sealed subset from 0/24 to
+6/24, both validated by paired interval, mostly by fixing answer completion and format.
+See [production failures](docs/production-failures.md).
+
 **Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
 rewards are Terse math-world transitions, seven durable Terse actors (campaigns,
 experiments, governance, artifacts, math worlds, a message outbox and a research
