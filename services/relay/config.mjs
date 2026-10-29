@@ -3,9 +3,13 @@ import { createHash } from "node:crypto";
 export const HOSTED_RELAY_URL = "https://cast.agentrelay.com";
 
 /**
- * Where Forge's agents talk. Default: the local Relaycast engine started by `npm run lab`.
- * Hosted: set FORGE_RELAY_WORKSPACE_KEY to an Agent Relay workspace key (rk_live_...);
- * the base URL then defaults to the hosted engine. The key is never written to disk.
+ * Where Forge's agents talk, as one model (docs/agent-relay.md):
+ * - FORGE_RELAY_URL picks the engine. Unset or loopback: the local Relaycast engine that
+ *   `npm run lab` starts. https://cast.agentrelay.com: hosted Agent Relay.
+ * - FORGE_RELAY_WORKSPACE_KEY (rk_live_...) picks a workspace you own on that engine; with
+ *   no URL it implies the hosted engine. It is never written to disk.
+ * - Without a key, the bridge mints a workspace on the engine and saves that key, keyed by
+ *   engine, so a key minted for one engine is never replayed against another.
  */
 export function relayConfig(env) {
   const workspaceKey = env.FORGE_RELAY_WORKSPACE_KEY?.trim() || undefined;
@@ -13,19 +17,22 @@ export function relayConfig(env) {
     throw new Error(
       "FORGE_RELAY_WORKSPACE_KEY must be an Agent Relay workspace key (rk_live_...)",
     );
-  const hosted = Boolean(workspaceKey);
   const baseUrl = (
-    env.FORGE_RELAY_URL || (hosted ? HOSTED_RELAY_URL : "http://127.0.0.1:7528")
+    env.FORGE_RELAY_URL?.trim() ||
+    (workspaceKey ? HOSTED_RELAY_URL : "http://127.0.0.1:7528")
   ).replace(/\/+$/, "");
+  const local = ["127.0.0.1", "localhost"].includes(new URL(baseUrl).hostname);
   const bridgePort = Number(env.FORGE_RELAY_BRIDGE_PORT || 7529);
   if (!Number.isInteger(bridgePort) || bridgePort <= 0)
     throw new Error("Invalid FORGE_RELAY_BRIDGE_PORT");
-  // Agent tokens belong to one workspace; a fingerprint (not the key) tells them apart.
-  const workspaceId = hosted
-    ? `hosted:${createHash("sha256").update(workspaceKey).digest("hex").slice(0, 16)}@${baseUrl}`
-    : `local@${baseUrl}`;
+  // Saved agent tokens belong to one workspace on one engine; a fingerprint (never the
+  // key) names a provided workspace.
+  const workspaceId = workspaceKey
+    ? `key:${createHash("sha256").update(workspaceKey).digest("hex").slice(0, 16)}@${baseUrl}`
+    : `minted@${baseUrl}`;
   return {
-    hosted,
+    local,
+    hosted: !local,
     workspaceKey,
     baseUrl,
     bridgePort,

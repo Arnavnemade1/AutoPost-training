@@ -8,7 +8,8 @@ from services.core.contracts import Message
 
 BRIDGE = os.getenv("FORGE_RELAY_BRIDGE", "http://127.0.0.1:7529")
 live = pytest.mark.skipif(
-    os.getenv("FORGE_LIVE_RELAY_TEST") != "1", reason="Requires the real local Relay engine and bridge"
+    os.getenv("FORGE_LIVE_RELAY_TEST") != "1",
+    reason="Requires a running Relay bridge (FORGE_RELAY_BRIDGE, local or hosted engine)",
 )
 
 

@@ -16,6 +16,19 @@ children = []
 logs = []
 (ROOT / "data").mkdir(exist_ok=True)
 settings = dotenv_values(ROOT / ".env")
+# Unset or loopback: this command runs a local Relaycast engine. Otherwise the bridge uses
+# that engine, e.g. the hosted https://cast.agentrelay.com.
+RELAY_URL = (
+    settings.get("FORGE_RELAY_URL")
+    or os.environ.get("FORGE_RELAY_URL")
+    # A workspace key with no URL means the hosted engine (services/relay/config.mjs).
+    or (
+        "https://cast.agentrelay.com"
+        if settings.get("FORGE_RELAY_WORKSPACE_KEY") or os.environ.get("FORGE_RELAY_WORKSPACE_KEY")
+        else "http://127.0.0.1:7528"
+    )
+)
+LOCAL_RELAY = httpx.URL(RELAY_URL).host in ("127.0.0.1", "localhost")
 
 
 def healthy(url):
@@ -31,7 +44,9 @@ def start(name, cmd, url, env=None):
         return
     log = (ROOT / "data" / f"{name}.log").open("a")
     logs.append(log)
-    child = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=log, start_new_session=True, env=env)
+    child = subprocess.Popen(
+        cmd, cwd=ROOT, stdout=log, stderr=log, start_new_session=True, env={**os.environ, **(env or {})}
+    )
     children.append(child)
     for _ in range(90):
         if child.poll() is not None:
@@ -68,9 +83,10 @@ try:
         [str(ROOT / ".venv/bin/durable-actors"), "generate", "--out-dir", "services/actors/generated"],
         check=True,
     )
-    # Agent Relay: the local engine by default; a hosted workspace when .env (or the shell)
-    # sets FORGE_RELAY_WORKSPACE_KEY. The key goes only to the bridge's environment.
-    relay_env = os.environ | {k: v for k, v in settings.items() if k.startswith("FORGE_RELAY_") and v}
+    # Agent Relay. RELAY_URL picks the engine; FORGE_RELAY_WORKSPACE_KEY (env or .env) picks a
+    # workspace on it and reaches only the bridge. See docs/agent-relay.md.
+    relay_env = {k: v for k, v in settings.items() if k.startswith("FORGE_RELAY_") and v}
+    relay_env["FORGE_RELAY_URL"] = RELAY_URL
     # Per-launch bridge secret: only the bridge and the API (and the campaign workers it
     # spawns) hold it. A bridge reused from an earlier launch keeps that launch's secret.
     token_file = ROOT / "data" / "relay-bridge.token"
@@ -81,7 +97,7 @@ try:
             f.write(secrets.token_urlsafe(32))
     bridge_token = token_file.read_text().strip()
     relay_env["FORGE_RELAY_BRIDGE_TOKEN"] = bridge_token
-    if not relay_env.get("FORGE_RELAY_WORKSPACE_KEY"):
+    if LOCAL_RELAY:
         start(
             "relaycast",
             [
@@ -96,7 +112,7 @@ try:
         "relay-bridge",
         ["node", "services/relay/bridge.mjs"],
         "http://127.0.0.1:7529/health",
-        env=relay_env,
+        relay_env,
     )
     start(
         "api",

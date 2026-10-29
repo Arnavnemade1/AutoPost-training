@@ -1,5 +1,6 @@
 import { AgentRelay } from "@agent-relay/sdk";
 import { RelayCast } from "@relaycast/sdk";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dispatcher, pushWaiter, roles } from "./delivery.mjs";
@@ -17,43 +18,70 @@ if (token.length < 32) {
   process.exit(2);
 }
 await mkdir("data", { recursive: true });
+// Saved credentials are used only for the same workspace on the same engine. Files from
+// before this model carry only `baseUrl` (or nothing, meaning the local engine).
 let saved;
 try {
-  saved = JSON.parse(await readFile(config.credentialsPath, "utf8"));
+  const row = JSON.parse(await readFile(config.credentialsPath, "utf8"));
+  const owner =
+    row.workspace ?? `minted@${row.baseUrl ?? "http://127.0.0.1:7528"}`;
+  if (owner === config.workspaceId) saved = row;
 } catch {
   /* First boot. */
 }
-// A hosted workspace is reached with Vir's workspace key from the environment, never from
-// disk. A local engine mints its own workspace on first boot and keeps the key under data/.
+// A workspace you own is reached with its key from the environment, never from disk.
+// Otherwise the bridge mints one; hosted names are global and idempotent (the key is
+// returned only on first creation), so the name carries a random suffix.
 const workspaceKey = config.workspaceKey ?? saved?.key;
 const relay = workspaceKey
   ? new AgentRelay({ workspaceKey, baseUrl: config.baseUrl })
   : await AgentRelay.createWorkspace({
-      name: "Forge Research Lab",
+      name: `Forge Research Lab ${randomUUID().slice(0, 8)}`,
       baseUrl: config.baseUrl,
     });
 const agents = {};
-const tokens =
-  saved?.workspace === config.workspaceId ? saved?.tokens || {} : {};
+const tokens = saved?.tokens || {};
+const admin = new RelayCast({
+  apiKey: relay.workspaceKey,
+  baseUrl: config.baseUrl,
+});
+// A workspace that already has Forge's agents but no saved tokens here (another machine,
+// a lost credentials file) is taken over with the workspace key, keeping each identity.
+async function enroll(name) {
+  try {
+    return await relay.workspace.register({ name, type: "agent" });
+  } catch (error) {
+    if (!/already exists/i.test(String(error?.message))) throw error;
+    const existing = await admin.agents.get(name);
+    const taken = await admin.agents.takeOver({
+      name,
+      expectedAgentId: existing.id,
+      actor: "forge-bridge",
+      reason: "Forge bridge started without this agent's saved token",
+      sessionRef: "forge-bridge",
+      nodeId: "forge-bridge",
+    });
+    return relay.workspace.reconnect({ apiToken: taken.token });
+  }
+}
 for (const name of roles) {
   agents[name] = tokens[name]
     ? await relay.workspace
         .reconnect({ apiToken: tokens[name] })
-        .catch(() => relay.workspace.register({ name, type: "agent" }))
-    : await relay.workspace.register({ name, type: "agent" });
+        .catch(() => enroll(name))
+    : await enroll(name);
   tokens[name] = agents[name].token ?? tokens[name];
 }
 // Recipients are woken by Relay's push stream. A read-only observer token carries it, so
 // no participant opens its own node socket (which would ack deliveries on receipt).
-let observerToken =
-  saved?.workspace === config.workspaceId ? saved?.observerToken : undefined;
+let observerToken = saved?.observerToken;
 if (!observerToken) {
-  const admin = new RelayCast({
-    apiKey: relay.workspaceKey,
-    baseUrl: config.baseUrl,
-  });
+  // The old token's secret is not on this machine: retire it, then mint a fresh one.
+  for (const row of await admin.observerTokens.list())
+    if (String(row?.name ?? "").startsWith("forge-bridge-push"))
+      await admin.observerTokens.revoke(row.id);
   const minted = await admin.observerTokens.create({
-    name: "forge-bridge-push",
+    name: `forge-bridge-push-${randomUUID().slice(0, 8)}`,
     description: "Wakes Forge recipients when a handoff lands",
     scopes: [
       "stream:read",
@@ -70,7 +98,8 @@ await writeFile(
   config.credentialsPath,
   JSON.stringify({
     workspace: config.workspaceId,
-    // The hosted key stays in the environment only.
+    baseUrl: config.baseUrl,
+    // A provided key stays in the environment only; a minted one must survive restarts.
     key: config.workspaceKey ? undefined : relay.workspaceKey,
     tokens,
     observerToken,
@@ -110,9 +139,12 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           ok: true,
           agents: roles,
-          transport: "Agent Relay 14 / Relaycast engine 12",
-          workspace: config.hosted ? "hosted" : "local",
-          local: !config.hosted,
+          transport: config.local
+            ? "SDK 14.0.0 · Engine 12.0.0"
+            : "SDK 14.0.0 · Relaycast API v1",
+          local: config.local,
+          endpoint: new URL(config.baseUrl).host,
+          workspace: config.workspaceKey ? "provided" : "minted",
           push: { stream: "observer", events: pushes },
         }),
       );
@@ -138,7 +170,7 @@ const server = createServer(async (req, res) => {
 });
 server.listen(config.bridgePort, "127.0.0.1", () =>
   console.log(
-    `Forge Agent Relay bridge ready on ${config.bridgePort} (${config.hosted ? "hosted" : "local"} workspace)`,
+    `Forge Agent Relay bridge ready on ${config.bridgePort} (${config.local ? "local" : "hosted"} engine, ${config.workspaceKey ? "provided" : "minted"} workspace)`,
   ),
 );
 for (const signal of ["SIGTERM", "SIGINT"])

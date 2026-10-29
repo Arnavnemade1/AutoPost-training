@@ -1,4 +1,3 @@
-import { AgentRelay } from "@agent-relay/sdk";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -17,7 +16,7 @@ import { RelayDispatcher, registerParticipants } from "../src/relay.js";
 import { ResearchCampaign, type ResearchProfile } from "../src/research.js";
 import { TrainingBridge, exists, pythonJson, readJson } from "../src/worker.js";
 import { verifyWorldRollouts, type WorldGateway } from "../src/worlds.js";
-import { launchRelay } from "./local-relay.js";
+import { openRelay, type RelayTarget } from "./relay-target.js";
 
 const limits = { maxRevisions: 2, maxFailures: 2 };
 const GSM8K_REVISION = "740312add88f781978c0658806c59bc2815b9866";
@@ -476,13 +475,10 @@ export async function runResearch(
   };
   const authority = localAuthority([profile.campaignId]);
   const runtime = await launch(authority, join(output, "terse"));
-  let relayServer: Awaited<ReturnType<typeof launchRelay>> | undefined;
+  let relayTarget: RelayTarget | undefined;
   try {
-    relayServer = await launchRelay(output);
-    const relay = await AgentRelay.createWorkspace({
-      name: `forge-${name}-research`,
-      baseUrl: relayServer.url,
-    });
+    relayTarget = await openRelay(output);
+    const relay = await relayTarget.createWorkspace(`forge-${name}-research`);
     const actors = clients(authority, runtime);
     const dispatcher = new RelayDispatcher(
       profile.campaignId,
@@ -654,6 +650,7 @@ export async function runResearch(
       profile: name,
       policyVersion: POLICY_VERSION,
       campaignId: profile.campaignId,
+      relay: { kind: relayTarget.kind, url: relayTarget.url, workspaces: relayTarget.workspaces },
       elapsedSeconds: Math.round((Date.now() - started) / 1000),
       baseline: {
         reportSha256: baselineSha256,
@@ -699,7 +696,7 @@ export async function runResearch(
     await writeFile(join(output, "ledger.json"), JSON.stringify(ledger, null, 2));
     return report;
   } finally {
-    await relayServer?.stop();
+    await relayTarget?.stop();
     await runtime.stop();
   }
 }

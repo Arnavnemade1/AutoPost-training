@@ -86,17 +86,48 @@ than `127.0.0.1:<port>`/`localhost:<port>`, any browser `Origin`, any request wi
 per-launch bearer secret (except `GET /health`), and non-JSON POSTs. `scripts/lab.py`
 issues the secret to the bridge and the API (`data/relay-bridge.token`, 0600).
 
+## Engine and workspace model
+
+One model covers the bridge, `scripts/lab.py` and the API health card
+(`services/relay/config.mjs`):
+
+| Setting | Effect |
+| --- | --- |
+| `FORGE_RELAY_URL` unset or loopback | Local Relaycast engine; `npm run lab` starts it on 7528 |
+| `FORGE_RELAY_URL=https://cast.agentrelay.com` | Hosted Agent Relay engine; no local engine is started |
+| `FORGE_RELAY_WORKSPACE_KEY=rk_live_...` | Use that workspace on the selected engine; with no URL it implies the hosted engine. Passed only to the bridge's environment and never written to disk |
+| No workspace key | The bridge mints a workspace (name `Forge Research Lab <random suffix>`, since hosted names are global and idempotent) and keeps its key in `data/relay-credentials.json` (0600) so restarts reuse it |
+
+`data/relay-credentials.json` is keyed by workspace and engine (`minted@<url>` or
+`key:<sha256 fingerprint>@<url>`). Saved tokens are used only for that same workspace on
+that same engine, so a key minted for the local engine is never replayed against the hosted
+one. Files written before this model are read as `minted@<their baseUrl>`. If a provided
+workspace already has Forge's agents but this machine has no saved tokens, the bridge takes
+each identity over with the workspace key (`agents.takeOver`) and mints a fresh push
+observer token, retiring the old one.
+
+`GET /health` on the bridge reports `local`, `transport`, `endpoint` (the engine actually in
+use), `workspace` (`provided` or `minted`) and the push stream; the API's health and the
+Connections card show the engine from it.
+
+The orchestrator (`services/orchestrator`) follows `FORGE_RELAY_URL` too: against the hosted
+engine each run creates an anonymous workspace with a random suffix and deletes it on exit
+(`scripts/relay-target.ts`, `docs/verification/relay-hosted.md`).
+
 ## Hosted workspace
 
-The SDK talks to the hosted engine at `https://cast.agentrelay.com` with a workspace key
-(`rk_live_...`). That key is what Forge needs: it registers the five agent identities,
-mints the read-only observer token for push, and sends and reads as those agents.
+To use your own hosted workspace, Forge needs its workspace key (`rk_live_...`). It
+registers the five agent identities, mints the read-only observer token for push, and sends
+and reads as those agents.
 
-1. Put the key in `.env` (or the shell) as `FORGE_RELAY_WORKSPACE_KEY=rk_live_...` and leave
-   `FORGE_RELAY_URL` empty.
-2. `npm run lab`. The bridge skips the local engine, registers `director`, `data`,
-   `trainer`, `evaluator` and `governance` in that workspace, and `/health` reports
-   `"workspace": "hosted"`.
+1. Put the key in `.env` (or the shell) as `FORGE_RELAY_WORKSPACE_KEY=rk_live_...`. Leave
+   `FORGE_RELAY_URL` empty or set it to `https://cast.agentrelay.com`.
+2. `npm run lab`. The bridge skips the local engine, registers (or takes over) `director`,
+   `data`, `trainer`, `evaluator` and `governance` in that workspace, and `/health` reports
+   `"local": false, "workspace": "provided"`.
+
+Without a key, `FORGE_RELAY_URL=https://cast.agentrelay.com` alone runs against an
+anonymous hosted workspace the bridge mints and keeps.
 
 The read-only sessions token from the dashboard's Agent access page cannot send messages
 and does not work here. Public docs do not show a dashboard page that reveals an existing

@@ -30,6 +30,13 @@ FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -
   --start-adapter /absolute/path/to/approved/sft/checkpoint
 ```
 
+Relay engine: every command starts its own loopback Relaycast engine unless
+`FORGE_RELAY_URL` is set. `FORGE_RELAY_URL=https://cast.agentrelay.com` runs the same
+commands over hosted Agent Relay: each run creates an anonymous workspace with a random
+name suffix (no account needed), records its name (never its key) in the report, and
+deletes it on exit unless `FORGE_RELAY_KEEP_WORKSPACE=1`. Against a remote engine the
+Relay SIGKILL fault becomes a full client reconnect from persisted tokens.
+
 Use the npm scripts: they run the pinned Bun 1.4.2. A different global Bun cannot read
 the actors' persisted state (hydration fails with "Unable to deserialize data").
 
@@ -186,8 +193,10 @@ Deployed roles need separate processes and credentials. The world gateway in par
 holds the data role's key, the reward secret and the worker key in this process; a
 deployment needs a separate trusted task service. Relay channels are routing,
 not authorization. Recipients poll; Relay inbox acknowledgements and push subscriptions
-are not used. Only the local Relaycast engine has been exercised, not a hosted Relay
-workspace. Evaluator reproduction and governance review share host, code and process
+are not used. Runs use the loopback engine by default; with `FORGE_RELAY_URL` set they
+use that engine, verified against hosted `https://cast.agentrelay.com` with anonymous,
+per-run workspaces ([hosted Relay](../../docs/verification/relay-hosted.md)); no Agent
+Relay Cloud account workspace has been exercised. Evaluator reproduction and governance review share host, code and process
 with the worker, but use separate keys and re-derive facts from bytes rather than
 messages; separate infrastructure and the sealed final evaluator are Phase 8. The
 director's working state is in memory and is not resumed after a process crash; the

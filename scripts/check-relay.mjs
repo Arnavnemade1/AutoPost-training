@@ -19,6 +19,11 @@ assert.equal(relayConfig({}).baseUrl, "http://127.0.0.1:7528");
 const hosted = relayConfig({ FORGE_RELAY_WORKSPACE_KEY: "rk_live_example" });
 assert.equal(hosted.baseUrl, HOSTED_RELAY_URL);
 assert.ok(!hosted.workspaceId.includes("rk_live_example"));
+// FORGE_RELAY_URL alone picks the hosted engine with a minted workspace; keys are per engine.
+const anonymous = relayConfig({ FORGE_RELAY_URL: `${HOSTED_RELAY_URL}/` });
+assert.equal(anonymous.hosted, true);
+assert.equal(anonymous.workspaceId, `minted@${HOSTED_RELAY_URL}`);
+assert.notEqual(relayConfig({}).workspaceId, anonymous.workspaceId);
 assert.throws(
   () => relayConfig({ FORGE_RELAY_WORKSPACE_KEY: "ot_live_wrong_kind" }),
   /workspace key/,
