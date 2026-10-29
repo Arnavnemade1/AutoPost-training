@@ -7,7 +7,9 @@ import traceback
 from pathlib import Path
 from dotenv import load_dotenv
 from services.core import store, training
-from services.core.director import propose
+from services.core.director import propose, build_input
+from services.core.briefing import publish
+from services.core.verdict import SUMMARY as VERDICT_SUMMARY, final_verdict
 from services.core.engine import (
     actor,
     add_review,
@@ -128,7 +130,15 @@ def run(cid):
             transition(
                 cid, "diagnosing", "Research director is selecting the next experiment from measured evidence"
             )
-            proposal = propose(config, baseline if not best else best["evaluation"], previous)
+            measured = baseline if not best else best["evaluation"]
+            context = build_input(config, measured, previous)
+            save_field(director_context=context)
+            expid = f"exp-{index + 1:03d}"
+            input_file = folder / f"{expid}-director-input.json"
+            input_file.write_text(json.dumps(context, indent=2))
+            artifact(cid, input_file, "director_input", f"{expid} evidence sent to the director")
+            publish(cid)
+            proposal = propose(config, measured, previous, context=context)
             save_field(director=proposal["director"])
             expid = f"exp-{index + 1:03d}"
             key = f"{cid}-{expid}"
@@ -207,6 +217,8 @@ def run(cid):
                     experiment_id=_expid,
                     metric=m,
                 )
+                if m["step"] == 1 or m["step"] % max(1, _steps // 4) == 0:
+                    publish(cid)
 
             adapter = folder / expid
             try:
@@ -402,12 +414,13 @@ def run(cid):
                 training.unload(model)
             else:
                 final_best = final_base
+        if not best:
+            final_best = final_base
         final = {
             "baseline": final_base,
             "checkpoint": final_best,
             "checkpoint_id": selection,
-            "improvement_pp": (final_best["score"] - final_base["score"]) * 100,
-            "valid_improvement": bool(best and final_best["score"] > final_base["score"]),
+            **final_verdict(final_base, final_best, config["seed"]),
             "selection_basis": "development only",
             "test_queries_per_model": 1,
         }
@@ -442,7 +455,7 @@ def run(cid):
             "director",
             "governance",
             "CAMPAIGN_COMPLETED",
-            f"Final evaluation complete. {'Validated improvement measured.' if final['valid_improvement'] else 'No validated improvement claimed.'} All sample-level evidence preserved.",
+            f"Final evaluation complete. {VERDICT_SUMMARY[final['improvement_claim']]} All sample-level evidence preserved.",
         )
         transition(cid, "completed", "Research complete. Evidence package ready.")
         from services.core.cloud import mirror
