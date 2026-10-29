@@ -74,6 +74,9 @@ class EvaluationSpec(Contract):
     max_new_tokens: Annotated[int, Field(ge=1, le=1024)] = 256
     max_prompt_tokens: Annotated[int, Field(ge=16, le=4096)] = 1024
     max_seconds: Annotated[int, Field(ge=1, le=86400)] = 1800
+    # Greedy generation in left-padded batches of this size. Part of the frozen protocol:
+    # padding can change near-tie decisions, so baseline and candidates must share it.
+    batch_size: Annotated[int, Field(ge=1, le=64)] = 1
 
 
 class ExperimentConfig(Contract):

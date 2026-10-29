@@ -46,5 +46,12 @@ never grants checkpoint promotion. Monetary accounting, separate credentials,
 sealed final evaluation, safety/regression checks, Terse, and Relay belong to the
 next architectural phases.
 
+`evaluation.batch_size` (default 1) generates in left-padded greedy batches and is part
+of the frozen protocol. `run --frozen-baseline <report> --frozen-baseline-sha256 <hash>`
+reuses a campaign's untrained evaluation instead of repeating it, when it matches the run
+exactly. Model-loading commands take a host-wide `flock` (`~/.cache/forge/model-job.lock`,
+override with `FORGE_MODEL_LOCK`, disable with `FORGE_MODEL_LOCK=off`), so one machine
+runs one model job at a time.
+
 See the [integration contract](../../docs/training-core-contract.md) for event fields,
 artifact formats, process boundaries, failure handling, and deployment requirements.

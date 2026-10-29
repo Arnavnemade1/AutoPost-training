@@ -42,12 +42,13 @@ export class ResearchCampaignActor extends Actor {
   async initialize(request: SignedRequest): Promise<Document> {
     const auth = authorize(request, actorName, this.id, "initialize", ["owner"], campaignSchema);
     if (request.campaignId !== this.id) fail("CAMPAIGN_SCOPE", "Campaign ID must match actor ID");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     if (this.state.spec) fail("OBJECTIVE_IMMUTABLE", "Campaign is already initialized");
     const objectiveSha256 = digest(auth.payload);
     const result = { objectiveSha256, status: "active" };
     this.state = commit(
+      this.db,
       { ...this.state, spec: auth.payload, objectiveSha256, status: "active" },
       auth,
       "CAMPAIGN_INITIALIZED",
@@ -61,7 +62,7 @@ export class ResearchCampaignActor extends Actor {
   async propose(request: SignedRequest): Promise<Document> {
     const auth = authorize(request, actorName, this.id, "propose", ["director"], proposalSchema);
     if (request.campaignId !== this.id) fail("CAMPAIGN_SCOPE", "Wrong campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const spec = this.state.spec;
     if (!spec || this.state.status !== "active")
@@ -81,6 +82,7 @@ export class ResearchCampaignActor extends Actor {
     }
     const result = { experimentId: proposal.experimentId, configSha256: proposal.configSha256 };
     this.state = commit(
+      this.db,
       { ...this.state, proposals: { ...this.state.proposals, [proposal.experimentId]: proposal } },
       auth,
       "EXPERIMENT_PROPOSED",
@@ -101,7 +103,7 @@ export class ResearchCampaignActor extends Actor {
       z.strictObject({ experimentId: id }),
     );
     if (request.campaignId !== this.id) fail("CAMPAIGN_SCOPE", "Wrong campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const spec = this.state.spec;
     if (!spec || this.state.status !== "active")
@@ -138,6 +140,7 @@ export class ResearchCampaignActor extends Actor {
     });
     const result = document({ grant });
     this.state = commit(
+      this.db,
       {
         ...this.state,
         reservedMicroUsd: this.state.reservedMicroUsd + proposal.maxCostMicroUsd,
@@ -165,7 +168,7 @@ export class ResearchCampaignActor extends Actor {
       z.strictObject({ experimentId: id, actualMicroUsd: money, costEvidenceSha256: hash }),
     );
     if (request.campaignId !== this.id) fail("CAMPAIGN_SCOPE", "Wrong campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const reservation = this.state.reservations[auth.payload.experimentId];
     if (!reservation || reservation.settled)
@@ -187,6 +190,7 @@ export class ResearchCampaignActor extends Actor {
       spentMicroUsd: auth.payload.actualMicroUsd,
     };
     this.state = commit(
+      this.db,
       {
         ...this.state,
         reservedMicroUsd:
@@ -220,7 +224,7 @@ export class ResearchCampaignActor extends Actor {
       z.strictObject({ experimentId: id }),
     );
     if (request.campaignId !== this.id) fail("CAMPAIGN_SCOPE", "Wrong campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const spec = this.state.spec;
     if (!spec) fail("UNINITIALIZED", "Initialize the campaign first");
@@ -332,6 +336,7 @@ export class ResearchCampaignActor extends Actor {
       numExamples: result.numExamples,
     };
     this.state = commit(
+      this.db,
       { ...this.state, best },
       auth,
       "CHECKPOINT_PROMOTED",
@@ -353,10 +358,11 @@ export class ResearchCampaignActor extends Actor {
     );
     if (request.campaignId !== this.id || !this.state.spec)
       fail("CAMPAIGN_SCOPE", "Unknown campaign");
-    const previous = duplicate(this.state, auth);
+    const previous = duplicate(this.db, auth);
     if (previous) return previous;
     const result = { status: "stopped", reason: auth.payload.reason };
     this.state = commit(
+      this.db,
       { ...this.state, status: "stopped" },
       auth,
       "CAMPAIGN_STOPPED",
@@ -384,6 +390,6 @@ export class ResearchCampaignActor extends Actor {
     });
   }
   async getEvents(after: number, limit: number): Promise<Document> {
-    return events(this.state, after, limit);
+    return events(this.db, this.state.version, after, limit);
   }
 }

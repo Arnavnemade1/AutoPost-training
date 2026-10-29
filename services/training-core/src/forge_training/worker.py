@@ -23,7 +23,8 @@ from .artifacts import (
 )
 from .config import ExperimentConfig, load_config
 from .data import load_dataset, verify_separation
-from .evaluation import compare
+from .evaluation import compare, evaluation_protocol
+from .reports import EvaluationReport
 from .scoring import extract_answer
 
 
@@ -72,7 +73,37 @@ def run_phase(arguments: list[str], timeout: int, log: Path) -> None:
         raise RuntimeError(f"Worker subprocess failed (exit {code}); inspect {log}")
 
 
-def run_experiment(config_path: Path) -> dict:
+def adopt_frozen_baseline(
+    config: ExperimentConfig, source: Path, expected_sha256: str | None, destination: Path
+) -> None:
+    """Reuse the campaign's untrained evaluation only when it matches this run exactly."""
+    if expected_sha256 is None or file_sha256(source) != expected_sha256:
+        raise ValueError("Frozen baseline checksum mismatch or missing expected checksum")
+    report = EvaluationReport.model_validate_json(source.read_text()).model_dump()
+    rows, manifest = load_dataset(config.development, "development")
+    if (
+        report["checkpoint_sha256"] is not None
+        or report["campaign_id"] != config.campaign_id
+        or report["model"] != config.model.model_dump()
+        or report["dataset"] != manifest.model_dump()
+        or report["protocol"] != evaluation_protocol(config)
+    ):
+        raise ValueError("Frozen baseline differs from this run's model, data or protocol")
+    for row, sample in zip(rows, report["samples"], strict=True):
+        if (row.id, row.question, str(extract_answer(row.answer))) != (
+            sample["id"],
+            sample["question"],
+            sample["reference_answer"],
+        ):
+            raise ValueError("Frozen baseline samples differ from the staged development data")
+    shutil.copyfile(source, destination)
+
+
+def run_experiment(
+    config_path: Path,
+    frozen_baseline: Path | None = None,
+    frozen_baseline_sha256: str | None = None,
+) -> dict:
     config = load_config(config_path)
     datasets = validate_inputs(config)
     output = Path(config.output_dir)
@@ -110,7 +141,25 @@ def run_experiment(config_path: Path) -> dict:
         write_json(output / "resolved-config.json", config.model_dump())
         events.emit("EXPERIMENT_STARTED", {"runtime": runtime, "datasets": datasets})
         frozen = str(output / "resolved-config.json")
-        for role in ("baseline", "training", "candidate"):
+        roles: tuple[str, ...] = ("baseline", "training", "candidate")
+        baseline_source: dict = {"kind": "in_run"}
+        if frozen_baseline is not None:
+            # The protocol includes this package's source hash and runtime versions, so a
+            # reused report was produced by identical code on the identical inputs.
+            adopt_frozen_baseline(
+                config, frozen_baseline, frozen_baseline_sha256, output / "baseline.json"
+            )
+            baseline_source = {"kind": "frozen", "sha256": frozen_baseline_sha256}
+            events.emit(
+                "EVALUATION_REUSED",
+                {
+                    "role": "baseline",
+                    "evaluationRole": "development",
+                    "reportSha256": frozen_baseline_sha256,
+                },
+            )
+            roles = ("training", "candidate")
+        for role in roles:
             if runtime_versions() != runtime:
                 raise ValueError("Worker source or runtime changed between experiment phases")
             if role == "training":
@@ -146,7 +195,9 @@ def run_experiment(config_path: Path) -> dict:
                 raise ValueError("Worker source or runtime changed during an experiment phase")
         baseline = json.loads((output / "baseline.json").read_text())
         candidate = json.loads((output / "candidate.json").read_text())
-        comparison = compare(baseline, candidate, config.seed)
+        comparison = compare(
+            baseline, candidate, config.seed, shared_baseline=baseline_source["kind"] == "frozen"
+        )
         write_json(output / "comparison.json", comparison)
         summary = {
             "schema_version": 1,
@@ -159,6 +210,7 @@ def run_experiment(config_path: Path) -> dict:
             "checkpoint_sha256": training["checkpoint_sha256"],
             "weights_changed": training["weights_changed"],
             "candidate_evaluated_in_fresh_process": True,
+            "baseline_source": baseline_source,
             "cost_usd": None,
             "cost_status": "not_measured_by_local_worker",
             "governance_status": "unreviewed",
@@ -229,11 +281,15 @@ def verify_run(output: Path) -> dict:
     config = load_config(output / "resolved-config.json")
     baseline = json.loads((output / "baseline.json").read_text())
     candidate = json.loads((output / "candidate.json").read_text())
-    recomputed = compare(baseline, candidate, config.seed)
+    result = json.loads((output / "result.json").read_text())
+    source = result.get("baseline_source", {"kind": "in_run"})
+    shared = source["kind"] == "frozen"
+    if shared and file_sha256(output / "baseline.json") != source.get("sha256"):
+        raise ValueError("Reused baseline differs from the frozen report the run recorded")
+    recomputed = compare(baseline, candidate, config.seed, shared_baseline=shared)
     if recomputed != json.loads((output / "comparison.json").read_text()):
         raise ValueError("Stored comparison does not match sample-level evidence")
     training = json.loads((output / "training.json").read_text())
-    result = json.loads((output / "result.json").read_text())
     checkpoint_files = directory_manifest(output / "checkpoint")
     checkpoint_hash = manifest_sha256(checkpoint_files)
     if training["checkpoint_files"] != checkpoint_files:
@@ -250,7 +306,9 @@ def verify_run(output: Path) -> dict:
         raise ValueError("Result does not match completed evaluation evidence")
     if result["promotion_authorized"] is not False or result["governance_status"] != "unreviewed":
         raise ValueError("A training worker cannot grant governance approval")
-    for record in (manifest, result, baseline, candidate):
+    for record in (
+        (manifest, result, candidate) if shared else (manifest, result, baseline, candidate)
+    ):
         if (record["campaign_id"], record["experiment_id"]) != (
             config.campaign_id,
             config.experiment_id,
@@ -258,6 +316,8 @@ def verify_run(output: Path) -> dict:
             raise ValueError(
                 "Artifact campaign or experiment identities do not match configuration"
             )
+    if baseline["campaign_id"] != config.campaign_id:
+        raise ValueError("Baseline belongs to another campaign")
     if baseline["model"] != config.model.model_dump():
         raise ValueError("Evaluation model differs from the frozen configuration")
     if (output / "replay-config.json").exists():

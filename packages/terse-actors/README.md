@@ -80,8 +80,18 @@ verification. Decisions are terminal; ongoing revocation after promotion remains
 future work. Stopping a campaign blocks new work; the coordinator must abort active
 experiments and stop external compute before settling them.
 
-State is deliberately bounded (10,000 journal entries per actor, 4,000 registry
-artifacts, 1,000 ledger entries, 1,000 world episodes, 32 snapshots, 32 steps per
-episode). Plan new actors before exhausting capacity. Journal compaction, production backups, cancellation of
-external workers, live billing, sealed evaluation, and resumable optimization remain
-separate integrations. This package never stores model weights in actor state.
+Each actor's event journal and idempotency receipts are rows in its Terse SQLite
+database (`forge_events`, `forge_receipts`), written in the same transaction as its
+`@Persisted` domain state. Terse rewrites and re-reads persisted fields whole on every
+invocation, so keeping these append-only logs out of them makes command cost
+independent of history: lease renewal stays at about 16–20 ms after 2,750 entries,
+where it previously grew to 114 ms. Local data directories created before this
+change are not compatible.
+
+Domain state is still bounded (1,000,000 journal entries per actor, 4,000 registry
+artifacts, 1,000 ledger entries, 2,000 workflow messages, 1,000 world episodes, 32
+snapshots, 32 steps per episode) and still rewritten whole on change, so large outboxes
+and registries grow command cost. Plan new actors before exhausting capacity.
+Production backups, cancellation of external workers, live billing, sealed evaluation,
+and resumable optimization remain separate integrations. This package never stores
+model weights in actor state.

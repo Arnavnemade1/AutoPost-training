@@ -1,5 +1,6 @@
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from "node:crypto";
 import { z } from "zod";
+import type { ActorDatabase } from "durable-actors";
 import { createActorTransport } from "durable-actors/backend";
 import {
   grantSchema,
@@ -36,7 +37,7 @@ export function document(value: unknown): Document {
   return JSON.parse(canonical(value)) as Document;
 }
 export function journal(): Journal {
-  return { version: 0, receipts: {}, events: [] };
+  return { version: 0 };
 }
 export function scopedId(kind: "exp" | "world", campaignId: string, label: string): string {
   id.parse(campaignId);
@@ -131,51 +132,81 @@ export function authorize<T>(
   const { issuedAtMs: _issued, expiresAtMs: _expires, ...operation } = unsigned;
   return { request, payload, keyId: request.keyId, role: key.role, fingerprint: digest(operation) };
 }
-export function duplicate(state: Journal, auth: Authorization): Document | undefined {
-  const receipt = state.receipts[auth.request.requestId];
+/**
+ * The journal (events) and idempotency receipts live in actor SQLite, in the same
+ * transaction as the persisted domain state. Persisted fields are rewritten and re-read
+ * whole on every invocation, so keeping these append-only logs out of them makes each
+ * command independent of history length.
+ */
+const MAX_JOURNAL = 1_000_000;
+function journalTables(db: ActorDatabase): void {
+  // Not cached: a table created inside an invocation that later fails is rolled back.
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS forge_receipts (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)",
+  );
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS forge_events (sequence INTEGER PRIMARY KEY, event TEXT NOT NULL)",
+  );
+}
+export function duplicate(db: ActorDatabase, auth: Authorization): Document | undefined {
+  journalTables(db);
+  const [receipt] = db.exec<{ fingerprint: string; result: string }>(
+    "SELECT fingerprint, result FROM forge_receipts WHERE request_id = ?",
+    auth.request.requestId,
+  );
   if (!receipt) return undefined;
   if (receipt.fingerprint !== auth.fingerprint)
     fail("IDEMPOTENCY_CONFLICT", "Request ID was already used for different work");
-  return structuredClone(receipt.result);
+  return JSON.parse(receipt.result) as Document;
 }
 export function commit<S extends Journal>(
+  db: ActorDatabase,
   state: S,
   auth: Authorization,
   type: string,
   result: Document,
   payload: Document,
 ): S {
-  if (state.events.length >= 10_000)
+  if (state.version >= MAX_JOURNAL)
     fail("STATE_LIMIT", "Actor journal reached its configured bound");
   const version = state.version + 1;
-  return {
-    ...state,
-    version,
-    receipts: {
-      ...state.receipts,
-      [auth.request.requestId]: { fingerprint: auth.fingerprint, result: structuredClone(result) },
-    },
-    events: [
-      ...state.events,
-      {
-        eventId: `${auth.request.actorName}:${auth.request.actorId}:${version}`,
-        campaignId: auth.request.campaignId,
-        actorName: auth.request.actorName,
-        actorId: auth.request.actorId,
-        sequence: version,
-        timestampMs: Date.now(),
-        type,
-        payload,
-      },
-    ],
+  const event = {
+    eventId: `${auth.request.actorName}:${auth.request.actorId}:${version}`,
+    campaignId: auth.request.campaignId,
+    actorName: auth.request.actorName,
+    actorId: auth.request.actorId,
+    sequence: version,
+    timestampMs: Date.now(),
+    type,
+    payload,
   };
+  journalTables(db);
+  db.exec(
+    "INSERT INTO forge_receipts (request_id, fingerprint, result) VALUES (?, ?, ?)",
+    auth.request.requestId,
+    auth.fingerprint,
+    canonical(result),
+  );
+  db.exec("INSERT INTO forge_events (sequence, event) VALUES (?, ?)", version, canonical(event));
+  return { ...state, version };
 }
-export function events(state: Journal, after: number, limit: number): Document {
+export function events(db: ActorDatabase, version: number, after: number, limit: number): Document {
   integer.parse(after);
   z.number().int().min(1).max(100).parse(limit);
+  // Reads never create tables: an actor without a journal simply has no events.
+  const exists = db.exec(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'forge_events'",
+  ).length;
+  const rows = exists
+    ? db.exec<{ event: string }>(
+        "SELECT event FROM forge_events WHERE sequence > ? ORDER BY sequence LIMIT ?",
+        after,
+        limit,
+      )
+    : [];
   return document({
-    events: state.events.filter((event) => event.sequence > after).slice(0, limit),
-    latestSequence: state.version,
+    events: rows.map((row) => JSON.parse(row.event) as Document),
+    latestSequence: version,
   });
 }
 function secret(name: string): string {

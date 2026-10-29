@@ -10,11 +10,12 @@ import {
 import { digest, document } from "../../../packages/terse-actors/src/core.js";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
 import { POLICY_VERSION } from "../src/director.js";
+import { chooseEvaluationBatch } from "../src/evaluations.js";
 import { GovernanceReviewer, type RegressionSuite } from "../src/governance.js";
 import { reconcile } from "../src/reconcile.js";
 import { RelayDispatcher, registerParticipants } from "../src/relay.js";
 import { ResearchCampaign, type ResearchProfile } from "../src/research.js";
-import { TrainingBridge, fileHash, pythonJson, readJson } from "../src/worker.js";
+import { TrainingBridge, pythonJson, readJson } from "../src/worker.js";
 import { launchRelay } from "./local-relay.js";
 
 const limits = { maxRevisions: 2, maxFailures: 2 };
@@ -62,7 +63,13 @@ async function provision(
     const template = await readJson(templatePath);
     await writeFile(
       templatePath,
-      JSON.stringify({ ...template, campaign_id: "research-fixture", experiment_id: "baseline" }),
+      JSON.stringify({
+        ...template,
+        campaign_id: "research-fixture",
+        experiment_id: "baseline",
+        // Exercises the batched evaluation path and its batch-size-1 validation.
+        evaluation: { ...(template.evaluation as Document), batch_size: 2 },
+      }),
     );
     // Held-out synthetic problems for the regression suite; never in any training recipe.
     const regression = await writeDataset(
@@ -171,6 +178,7 @@ async function provision(
           max_new_tokens: 256,
           max_prompt_tokens: 1024,
           max_seconds: 1500,
+          batch_size: 8,
         },
         seed: 42,
         device: "mps",
@@ -205,26 +213,24 @@ export async function runResearch(
   output: string,
   python: string,
   name: string,
-  options: { tamperFirstReviewedCheckpoint?: boolean } = {},
+  options: { tamperFirstReviewedCheckpoint?: boolean; cacheDir?: string | null } = {},
 ): Promise<Document> {
   await mkdir(output, { recursive: true });
-  const { profile, regression } = await provision(name, output, python);
-  const baselinePath = join(output, "frozen-baseline.json");
-  await pythonJson(
+  const provisioned = await provision(name, output, python);
+  const { regression } = provisioned;
+  const cacheDir = options.cacheDir ?? null;
+  // Frozen untrained baseline, at the requested batch size only if it matches batch size 1.
+  const batch = await chooseEvaluationBatch({
     python,
-    [
-      "-m",
-      "forge_training",
-      "evaluate",
-      "--config",
-      profile.templatePath,
-      "--output",
-      baselinePath,
-    ],
-    { timeoutMs: profile.timeouts.evaluationMs },
-  );
-  const baseline = await readJson(baselinePath),
-    baselineSha256 = await fileHash(baselinePath);
+    templatePath: provisioned.profile.templatePath,
+    directory: output,
+    cacheDir,
+    timeoutMs: provisioned.profile.timeouts.evaluationMs,
+  });
+  const profile: ResearchProfile = { ...provisioned.profile, templatePath: batch.templatePath };
+  const baselinePath = batch.baseline.path,
+    baselineSha256 = batch.baseline.sha256;
+  const baseline = await readJson(baselinePath);
   // Resolved model identity: local fixture paths become absolute, exactly as workers see them.
   const template = (
     await pythonJson(python, ["-m", "forge_training", "validate", "--config", profile.templatePath])
@@ -241,7 +247,7 @@ export async function runResearch(
     maxConcurrent: 1,
     maxExperiments: profile.maxExperiments,
     maxAttempts: 2,
-    maxLeaseMs: 10000,
+    maxLeaseMs: 60000,
     maxRunMs: profile.timeouts.runMs,
     minImprovementBps: 100,
     baseline: {
@@ -271,7 +277,7 @@ export async function runResearch(
       actors.owner.command(actor, profile.campaignId, profile.campaignId, "initialize", payload);
     await owner("ResearchCampaignActor", spec);
     await owner("GovernanceActor", { objectiveSha256: digest(spec), policyVersion: "v1" });
-    const bridge = new TrainingBridge(python, dispatcher, profile.timeouts);
+    const bridge = new TrainingBridge(python, dispatcher, { ...profile.timeouts, leaseMs: 60000 });
     const research = new ResearchCampaign({
       output,
       python,
@@ -294,6 +300,7 @@ export async function runResearch(
         },
         join(output, "governance"),
         profile.timeouts.evaluationMs,
+        cacheDir,
       ),
       maxReviews: 2,
       faults: options,
@@ -395,6 +402,14 @@ export async function runResearch(
       promoted: outcome.promoted,
       faultsInjected: outcome.faultsInjected,
       vetoEnforcement: await vetoProbe(),
+      evaluation: {
+        batchSizeRequested: batch.requested,
+        batchSizeUsed: batch.used,
+        batchMatchesBatchOne: batch.identicalPredictions,
+        numExamples: batch.numExamples,
+        frozenBaselineCached: batch.baseline.cached,
+        reusedFrozenBaselineInRuns: true,
+      },
       humanSelectedExperiments: false,
       modelImprovementClaimed: false,
     });
@@ -417,6 +432,8 @@ if (import.meta.main) {
   );
   const report = await runResearch(output, python, name, {
     tamperFirstReviewedCheckpoint: process.argv.includes("--inject-tamper"),
+    cacheDir:
+      process.env.FORGE_EVALUATION_CACHE ?? join(import.meta.dir, "../artifacts/cache/evaluations"),
   });
   console.log(JSON.stringify({ output, ...report }, null, 2));
 }

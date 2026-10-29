@@ -35,6 +35,8 @@ Changing payload, destination or identity with that ID fails. Failed operations 
 not consume IDs. Retries after expiration must be freshly signed. Successful read
 methods do not add journal entries. Clients must persist stable request/action IDs
 before dispatch; automatic generation is convenient for interactive use only.
+Receipts and journal events are stored as actor SQLite rows in the command's own
+transaction, so a failed command leaves neither behind.
 
 ## Experiment lifecycle and recovery
 
@@ -48,7 +50,8 @@ before dispatch; automatic generation is convenient for interactive use only.
    reservation grant. Read the campaign snapshot or retry to recover a lost reply.
 4. Coordinator initializes the experiment with that grant. A reservation exists
    before work can start. Worker acquires a lease and receives generation/expiry.
-5. Worker renews before expiry and includes the current generation when reporting
+5. Worker renews before expiry (the orchestrator renews at a third of the campaign's
+   `maxLeaseMs`) and includes the current generation when reporting
    completion/failure. Superseded or expired generations cannot mutate the result.
    Every acquisition consumes an attempt; renewals do not. Overall runtime and
    attempt limits are bounded by the grant. The process doing actual compute must
