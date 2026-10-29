@@ -237,7 +237,8 @@ contracts settle, with fixtures visibly labeled as fixtures.
 
 Suggested owner: frontend/capture workstream. Depends on stable event contracts.
 
-Implemented in `apps/web/` (dashboard, recorder and launcher) with live actor snapshots
+First implemented in `apps/web/` (dashboard, recorder and launcher; retired in favor of the
+root command center, recoverable from git history at `6ab37db`) with live actor snapshots
 from `services/orchestrator/scripts/research.ts`. The [local verification](verification/phase7-local.md)
 records each gate check, the recorded fixture campaign and the limits: the recording is
 of the dashboard rendered headless, in VP8 WebM, and the real Qwen campaign is unrecorded.

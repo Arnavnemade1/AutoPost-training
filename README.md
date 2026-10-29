@@ -6,8 +6,9 @@ under independent governance and a bounded compute budget.
 
 The command-center workstream (repo root Next app) adds a live dashboard, GRPO, governance,
 independent final evaluation and recording. See [command-center setup and trust
-boundaries](docs/command-center.md). The Phase 7 evidence dashboard and recorder
-live in [apps/web](apps/web/README.md). The status below describes the original
+boundaries](docs/command-center.md). It is the project's dashboard and recorder; an
+earlier separate `apps/web` dashboard was retired (recoverable from git history at
+`6ab37db`). The status below describes the original
 training/orchestrator profile.
 
 **Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
@@ -35,7 +36,7 @@ release bundles. No sealed final evaluation or benchmark improvement is claimed.
 - [Durable actor setup, tests and demo](packages/terse-actors/README.md)
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
-- [Research dashboard and recorder](apps/web/README.md)
+- [Research command center and recorder](docs/command-center.md)
 - [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
 - [Phase 7 verification](docs/verification/phase7-local.md)
 - [Phase 6 verification](docs/verification/phase6-local.md)

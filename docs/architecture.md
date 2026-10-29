@@ -47,8 +47,8 @@ flowchart TD
 | Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry, workflow-outbox and research-ledger actors; [integration contract](actor-contract.md) |
 | Common contracts | `packages/contracts/` (planned) | Versioned actor/message/event schemas; consume worker-generated JSON Schema |
 | Independent evaluation | `services/orchestrator/src/governance.ts`; `services/evaluator/` (planned) | Implemented: byte-level artifact verification, held-out regression suite, evidence-bound governance decisions. Planned: established benchmark harness and protected final evaluation |
-| Research interface | `apps/web/` | Implemented loopback dashboard rendered from stored files and exported actor snapshots: research graph, budgets, experiments, training metrics, world transitions, governance, before/after examples, agent messages, recording state, downloads |
-| Capture/export | `apps/web/src/recorder.ts`, `apps/web/scripts/record-campaign.ts` | Implemented headless capture of the live view during a campaign, real-time VP8 source and 100x/120x FFmpeg exports, decoded frame-count verification, recording manifests; a failed preflight blocks the campaign |
+| Research interface | repo root Next app (`app/`, `components/`, `services/api.py`) | Implemented loopback command center; see [command-center.md](command-center.md). The earlier `apps/web` dashboard (retired, recoverable at `6ab37db`) rendered from stored files and exported actor snapshots: research graph, budgets, experiments, training metrics, world transitions, governance, before/after examples, agent messages, recording state, downloads |
+| Capture/export | `scripts/capture.py`, `scripts/render-video.py` | Implemented UTC-stamped frame capture with 100x/120x exports. The retired `apps/web` recorder (at `6ab37db`) implemented headless capture of the live view during a campaign, real-time VP8 source and 100x/120x FFmpeg exports, decoded frame-count verification, recording manifests; a failed preflight blocks the campaign |
 
 ## Agent synchronization
 
