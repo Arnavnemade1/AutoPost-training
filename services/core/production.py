@@ -218,15 +218,14 @@ def audit(traces, findings, labels, excluded):
 
 
 def campaign_rows(report, labels_text):
-    """Labeled, wrongly answered production prompts split by a stable hash into train and held out."""
+    """Reviewer-labeled, wrongly answered production prompts, split by a stable hash into train and held out."""
     labels = parse_labels(labels_text)
     rows = []
     for finding in report["findings"]:
         trace = finding["trace"]
-        answer = labels.get(trace["id"]) or None
-        correction = (trace.get("feedback") or {}).get("correction")
-        if answer is None and correction and extract_answer(correction) is not None:
-            answer = correction
+        # Only reviewer labels become training targets. A user correction is a detection
+        # signal, never a label: anyone can send one, so it could poison training.
+        answer = labels.get(trace["id"])
         if answer is None:
             continue
         if extract_answer(trace["output"]) == extract_answer(answer):

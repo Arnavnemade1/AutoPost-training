@@ -105,9 +105,10 @@ def test_campaign_rows_need_a_reference_and_split_stably():
     report = scan(jsonl(rows), labels)
     train, held_out = campaign_rows(report, labels)
     ids = {r["trace_id"] for r in train + held_out}
-    assert "unlabeled" not in ids and "fixed-by-user" in ids
+    # A user correction flags a failure but is never trusted as a training answer.
+    assert "unlabeled" not in ids and "fixed-by-user" not in ids
     assert all(re.match(r"^prod-[0-9a-f]{12}$", r["id"]) for r in train + held_out)
-    assert len(train) + len(held_out) == 41 and train and held_out
+    assert len(train) + len(held_out) == 40 and train and held_out
     assert not {r["question"] for r in train} & {r["question"] for r in held_out}
     again = campaign_rows(scan(jsonl(rows), labels), labels)
     assert [r["id"] for r in again[1]] == [r["id"] for r in held_out]

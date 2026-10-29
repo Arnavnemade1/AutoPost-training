@@ -22,7 +22,7 @@ effect is measured on failures it never trained on.
 4. **Detector audit.** If reviewer labels are supplied (`{"id", "answer"}` JSONL), the scan
    reports precision and recall of "flagged" against them. Labels are never used to detect.
 5. **Campaign.** `POST /campaigns {"production_scan": "scan-…"}`. Failures with a reference
-   (a reviewer label or a user correction ending in `#### <number>`) whose final answer is
+   (a reviewer label; user corrections only flag a failure and are never used as answers, since anyone can send one) whose final answer is
    actually wrong are split by a stable hash of the normalized question: half join
    training, half are held out. Training rows sharing a question with either half, and
    production rows duplicating development questions, are dropped; separation is verified
