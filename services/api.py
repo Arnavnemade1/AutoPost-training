@@ -129,7 +129,7 @@ def initialize_campaign(config: CampaignConfig):
     store.event(cid, "created", "Campaign initialized. Immutable objective and budget saved in Terse.")
     spawn(cid)
     store.patch(cid, lambda s: s.update(dispatch_pending=False))
-    return store.get(cid)
+    return get_campaign(cid)
 
 
 @app.get("/campaigns/{cid}")
@@ -141,6 +141,9 @@ def get_campaign(cid: str):
         s["actor"] = json.loads(actor(cid).snapshot())
     except Exception:
         s["actor_unavailable"] = True
+    from services.core.briefing import build
+
+    s["briefing"] = build(s, store.events(cid))
     return s
 
 
@@ -179,6 +182,37 @@ def environment(cid: str, eid: str):
     return json.loads(get_actor("RLWorldActor", eid).observe())
 
 
+@app.get("/campaigns/{cid}/actors")
+def actor_state(cid: str):
+    s = store.get(cid)
+    if not s:
+        raise HTTPException(404, "Campaign not found")
+    try:
+        campaign = json.loads(actor(cid).snapshot())
+        council = json.loads(governance(cid).snapshot())
+        registry = json.loads(get_actor("ArtifactRegistryActor", cid).snapshot())
+        latest = s.get("experiments", [])[-1:]
+        experiment = (
+            json.loads(get_actor("ExperimentActor", f"{cid}-{latest[0]['id']}").snapshot())
+            if latest
+            else None
+        )
+    except Exception as error:
+        raise HTTPException(
+            503, "Terse snapshots are temporarily unavailable. Retry to read durable state."
+        ) from error
+    return {
+        "campaign_id": cid,
+        "read_at": store.now(),
+        "runtime": "Terse 0.14 / local native runtime",
+        "campaign": campaign,
+        "governance": council,
+        "registry": registry,
+        "experiment": experiment,
+        "experiment_id": latest[0]["id"] if latest else None,
+    }
+
+
 @app.get("/campaigns/{cid}/artifacts/{aid}")
 def download(cid: str, aid: str):
     s = store.get(cid)
@@ -189,7 +223,7 @@ def download(cid: str, aid: str):
     p = (root / a["path"]).resolve()
     if not p.is_relative_to(root) or not p.is_file():
         raise HTTPException(404, "Artifact unavailable")
-    from services.core.training import sha
+    from forge_training.artifacts import file_sha256 as sha
 
     if sha(p) != a["sha256"]:
         raise HTTPException(409, "Artifact checksum mismatch; download blocked")

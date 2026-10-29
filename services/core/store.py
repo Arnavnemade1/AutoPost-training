@@ -67,7 +67,13 @@ def campaigns():
         result = []
         for row in rows:
             try:
-                result.append(json.loads(row[0]))
+                snapshot = json.loads(row[0])
+                if (
+                    isinstance(snapshot, dict)
+                    and isinstance(snapshot.get("id"), str)
+                    and isinstance(snapshot.get("status"), str)
+                ):
+                    result.append(snapshot)
             except (ValueError, TypeError):
                 continue
         return result

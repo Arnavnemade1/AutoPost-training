@@ -63,6 +63,8 @@ def test_one_bad_external_read_row_does_not_blank_collection(isolated_store):
     store.save({"id": "valid", "status": "completed"})
     with store.db() as c:
         c.execute("INSERT INTO campaigns VALUES(?,?)", ("bad", "{invalid"))
+        for identity, payload in [("scalar", "42"), ("null", "null"), ("missing", '{"id":"incomplete"}')]:
+            c.execute("INSERT INTO campaigns VALUES(?,?)", (identity, payload))
     assert [s["id"] for s in store.campaigns()] == ["valid"]
 
 

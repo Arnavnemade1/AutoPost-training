@@ -82,6 +82,21 @@ def main(campaign_id):
         raise ValueError("No actual training stage was recorded")
     first = final["baseline"]
     last = final["checkpoint"]
+    prior = next(
+        (
+            s["final"]
+            for s in store.campaigns()
+            if s["id"] != campaign_id
+            and s.get("config", {}).get("final_backend") == "lm_eval_azure"
+            and s.get("final")
+        ),
+        None,
+    )
+    context = (
+        f" Earlier independent run: {prior['baseline']['correct']}/{prior['baseline']['n']} to {prior['checkpoint']['correct']}/{prior['checkpoint']['n']}."
+        if prior
+        else ""
+    )
     segments = [
         (
             tour,
@@ -123,7 +138,7 @@ def main(campaign_id):
             raw,
             max(0, total - 20),
             20,
-            f"Selection froze before the independent Azure benchmark.\n{first['correct']}/{first['n']} to {last['correct']}/{last['n']}, {final['improvement_pp']:+.1f} percentage points on this GSM8K subset. Uncertainty is in the report.",
+            f"Selection froze before the independent Azure benchmark.\n{first['correct']}/{first['n']} to {last['correct']}/{last['n']}, {final['improvement_pp']:+.1f} percentage points on this subset.{context}\nSmall samples. Uncertainty and prior results are preserved. No general superiority claim.",
         ),
         (
             tour,

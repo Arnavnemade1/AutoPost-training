@@ -18,6 +18,9 @@ import { Benchmark, LossChart, ResearchGraph } from "./charts";
 import { Dialog } from "./dialog";
 import { NewCampaign } from "./new-campaign";
 import { Results } from "./results";
+import { Briefing } from "./briefing";
+import { AgentChat } from "./agent-chat";
+import { TerseView } from "./terse-view";
 import {
   ArtifactDetail,
   ArtifactsView,
@@ -34,6 +37,9 @@ import {
 } from "./views";
 
 const navigation: { id: View; label: string; group: string }[] = [
+  { id: "briefing", label: "Training briefing", group: "Workspace" },
+  { id: "chat", label: "Agent chat", group: "Workspace" },
+  { id: "terse", label: "Durable actors", group: "Workspace" },
   { id: "overview", label: "Overview", group: "Workspace" },
   { id: "experiments", label: "Experiments", group: "Workspace" },
   { id: "environments", label: "Environments", group: "Workspace" },
@@ -43,6 +49,10 @@ const navigation: { id: View; label: string; group: string }[] = [
   { id: "connections", label: "Connections", group: "Resources" },
 ];
 const descriptions: Record<View, string> = {
+  briefing: "The task, the measurements, and what each research role can see.",
+  chat: "The research team's real assignments, decisions and handoffs.",
+  terse:
+    "Read the persisted coordination state and replay versioned training worlds.",
   overview: "Your autonomous research organization, at a glance.",
   experiments: "Every hypothesis, measured against the evidence.",
   environments: "Inspect the worlds behind each model prediction.",
@@ -66,7 +76,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export function Lab() {
-  const [view, setView] = useState<View>("overview"),
+  const [view, setView] = useState<View>("briefing"),
     [campaigns, setCampaigns] = useState<Campaign[]>([]),
     [selected, setSelected] = useState(""),
     [campaign, setCampaign] = useState<Campaign | null>(null),
@@ -397,7 +407,10 @@ export function Lab() {
             <span className="topbar-version mono">v0.1</span>
           </div>
         </header>
-        <main id="main-content" className="main-content">
+        <main
+          id="main-content"
+          className={`main-content ${["briefing", "chat", "terse"].includes(view) ? "briefing-mode" : ""}`}
+        >
           <div className="page-heading">
             <div>
               <div className="page-eyebrow">
@@ -512,7 +525,7 @@ export function Lab() {
                   </div>
                 </section>
               )}
-              {campaign?.error && view === "overview" && (
+              {campaign?.error && ["overview", "briefing"].includes(view) && (
                 <div className="error-banner" role="status">
                   <Icon name="alert" />
                   <span>{campaign.error}</span>
@@ -524,7 +537,13 @@ export function Lab() {
                   </button>
                 </div>
               )}
-              {view === "overview" ? (
+              {view === "briefing" ? (
+                <Briefing
+                  campaign={campaign}
+                  events={events}
+                  onInspect={setExperiment}
+                />
+              ) : view === "overview" ? (
                 <>
                   {!campaign && (
                     <div className="welcome-strip">
@@ -802,6 +821,18 @@ export function Lab() {
                     </section>
                   )}
                 </>
+              ) : view === "chat" ? (
+                <AgentChat
+                  key={campaign?.id}
+                  campaign={campaign}
+                  events={events}
+                />
+              ) : view === "terse" ? (
+                <TerseView
+                  key={campaign?.id}
+                  campaign={campaign}
+                  onSelect={setEnvironment}
+                />
               ) : view === "experiments" ? (
                 <>
                   <section className="panel">
@@ -894,7 +925,7 @@ export function Lab() {
             selectedRef.current = c.id;
             setCampaign(c);
             setEvents([]);
-            setView("overview");
+            setView("briefing");
             void refresh();
           }}
         />

@@ -62,6 +62,9 @@ def transition(campaign_id, status, reason):
     state = json.loads(actor(campaign_id).transition(status, reason))
     store.patch(campaign_id, lambda s: s.update(status=status, actor=state, progress=None))
     store.event(campaign_id, "stage", reason, status=status)
+    from services.core.briefing import publish
+
+    publish(campaign_id)
 
 
 def cancelled(campaign_id):
@@ -70,7 +73,7 @@ def cancelled(campaign_id):
 
 
 def artifact(campaign_id, path, kind, title):
-    from services.core.training import sha
+    from forge_training.artifacts import file_sha256 as sha
 
     p = Path(path)
     a = {

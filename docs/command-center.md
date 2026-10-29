@@ -77,6 +77,10 @@ CPU evaluator. It sets a two-hour automatic shutdown. Verify subscription quotas
 the printed resource identity before using it in another account. Cloud GPUs were
 not available under this subscription's tested quota; training uses the local GPU.
 
+Subsequent independent evaluations wake only this configured worker on demand and
+wait for the Azure guest agent. A fresh two-hour shutdown bounds each wake. No
+public SSH rule is required; dispatch uses Azure Run Command and scoped object grants.
+
 The evaluator receives an expiring read grant for its frozen input and separate
 object-scoped upload grants for progress and output. It receives no Supabase service
 key or OpenAI credential. The parent validates the input hash and returned job hash.
@@ -193,6 +197,7 @@ subset. Compare its recorded counts and raw harness outputs to the original repo
 
 ```sh
 npm run lint
+npm run test:relay
 npm run typecheck
 npm run format:check
 npm run build

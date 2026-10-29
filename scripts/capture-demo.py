@@ -26,6 +26,14 @@ def main(campaign_id):
     browser("record", "start", str(target), "http://127.0.0.1:3000")
     began = time.monotonic()
     markers = {}
+    captures = {}
+
+    def capture(name):
+        time.sleep(0.4)
+        path = folder / f"evidence-{name}.png"
+        browser("screenshot", str(path))
+        captures[name] = {"file": path.name, "captured_at": store.now()}
+
     try:
         browser("open", "http://127.0.0.1:3000")
         browser("wait", "#campaign-select")
@@ -37,9 +45,22 @@ def main(campaign_id):
         )
         browser("find", "role", "button", "click", "--name", "Results", "--exact")
         browser("wait", "--text", "Read the model's work")
+        before = {p["id"]: p for p in snapshot["final"]["baseline"]["predictions"]}
+        improved = [
+            p
+            for p in snapshot["final"]["checkpoint"]["predictions"]
+            if p["correct"] and not before[p["id"]]["correct"]
+        ]
+        if improved:
+            browser("select", ".results-view .filter-label select", "improved")
+            browser(
+                "wait",
+                "--fn",
+                f"document.querySelector('.paired-predictions')?.innerText.includes({json.dumps(improved[0]['id'])})",
+            )
         browser("scrollintoview", ".paired-predictions article:first-child")
         markers["comparison"] = time.monotonic() - began
-        time.sleep(18)
+        capture("comparison")
         browser("find", "role", "button", "click", "--name", "Governance", "--exact")
         browser("wait", "--text", "Put the gate to the test")
         browser(
@@ -47,11 +68,11 @@ def main(campaign_id):
             "Array.from(document.querySelectorAll('.review-list article')).find(e => e.innerText.includes('Controlled integrity probe'))?.scrollIntoView({block:'center'})",
         )
         markers["governance"] = time.monotonic() - began
-        time.sleep(24)
+        capture("governance")
         browser("find", "role", "button", "click", "--name", "Artifacts", "--exact")
         browser("wait", "--text", "Evidence registry")
         markers["artifacts"] = time.monotonic() - began
-        time.sleep(18)
+        capture("artifacts")
     finally:
         browser("record", "stop")
         browser("close")
@@ -61,6 +82,7 @@ def main(campaign_id):
                 "campaign_id": campaign_id,
                 "recorded_at": store.now(),
                 "markers": markers,
+                "captures": captures,
                 "purpose": "Historical views of actual completed evidence. No training is rerun or simulated.",
             },
             indent=2,

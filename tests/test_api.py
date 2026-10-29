@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 import time
+import hashlib
 from fastapi.testclient import TestClient
 from services import api
 from services.core import store
@@ -51,3 +52,30 @@ def test_unknown_config_rejected_and_cross_origin_mutations_blocked():
             c.post("/campaigns", json={}, headers={"origin": "https://untrusted.example"}).status_code == 403
         )
         assert c.get("/campaigns/no-such-campaign").status_code == 404
+
+
+def test_download_serves_exact_bytes_and_blocks_tampering_and_path_escape(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA", tmp_path)
+    root = tmp_path / "artifacts"
+    folder = root / "download"
+    folder.mkdir(parents=True)
+    monkeypatch.setattr(store, "ARTIFACTS", root)
+    content = b"immutable checkpoint mechanics"
+    target = folder / "checkpoint.bin"
+    target.write_bytes(content)
+    store.save(
+        {
+            "id": "download",
+            "status": "completed",
+            "artifacts": [
+                {"id": "good", "path": "checkpoint.bin", "sha256": hashlib.sha256(content).hexdigest()},
+                {"id": "escape", "path": "../../outside", "sha256": "0" * 64},
+            ],
+        }
+    )
+    with TestClient(api.app) as client:
+        response = client.get("/campaigns/download/artifacts/good")
+        assert response.status_code == 200 and response.content == content
+        target.write_bytes(b"changed")
+        assert client.get("/campaigns/download/artifacts/good").status_code == 409
+        assert client.get("/campaigns/download/artifacts/escape").status_code == 404

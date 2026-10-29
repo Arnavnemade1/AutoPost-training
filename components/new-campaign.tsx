@@ -56,8 +56,8 @@ export function NewCampaign({
     health?.services.terse.connected && health.services.relay.connected;
   return (
     <Dialog
-      title="Start a research campaign"
-      subtitle="A model, an objective, and a bounded compute window."
+      title="Train a model for a task"
+      subtitle="Define success and a budget. Follow the decisions and evidence."
       onClose={onClose}
       wide
     >
@@ -92,7 +92,8 @@ export function NewCampaign({
             required
           />
           <span className="field-help">
-            The objective is immutable once the campaign begins.
+            Verified starter task: mathematical reasoning on GSM8K. The
+            objective is immutable once the campaign begins.
           </span>
         </label>
         <div className="form-grid">
@@ -148,9 +149,9 @@ export function NewCampaign({
           Allowed research strategies
           <select name="strategies" defaultValue="sft_grpo">
             <option value="sft_grpo">
-              Supervised LoRA + Terse-backed GRPO
+              Worked examples and graded practice · SFT + GRPO
             </option>
-            <option value="sft">Supervised LoRA only</option>
+            <option value="sft">Worked examples only · supervised LoRA</option>
           </select>
           <span className="field-help">
             The director chooses from these methods using measured evidence.

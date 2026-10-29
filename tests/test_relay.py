@@ -20,3 +20,6 @@ def test_real_relay_assignment_readback_and_duplicate_send():
     second = httpx.post("http://127.0.0.1:7529/message", json=m).json()
     assert first["message_id"] == second["message_id"]
     assert first["recipient_readback_verified"] is True
+    assert first["room"]["readback_verified"] is True
+    assert set(first["room"]["readers"]) == {"director", "data", "trainer", "evaluator", "governance"}
+    assert second["room"]["message_id"] == first["room"]["message_id"]

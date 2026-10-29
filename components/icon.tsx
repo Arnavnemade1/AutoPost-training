@@ -8,6 +8,23 @@ export function Icon({
   className?: string;
 }) {
   const paths: Record<string, React.ReactNode> = {
+    chat: (
+      <>
+        <path d="M4 4h16v13H9l-5 4V4zM8 8h8m-8 4h5" />
+      </>
+    ),
+    terse: (
+      <>
+        <path d="M12 3l9 5v8l-9 5-9-5V8l9-5zm0 10v8M3 8l9 5 9-5" />
+        <path d="M7 5.8l10 5.6" />
+      </>
+    ),
+    briefing: (
+      <>
+        <rect x="5" y="3" width="14" height="18" rx="2" />
+        <path d="M9 8h6M9 12h6M9 16h3" />
+      </>
+    ),
     overview: (
       <>
         <rect x="3" y="3" width="7" height="7" rx="1.5" />

@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
 import { AgentRelay } from "@agent-relay/sdk";
+import { dispatcher, roles } from "../services/relay/delivery.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "forge-relay-check-"));
 const child = spawn(
@@ -78,8 +79,35 @@ try {
   const delivered = await recipient.messages.get(first.messageId);
   assert.equal(delivered.text, text);
   assert.equal(delivered.from.name, "sender");
+  const agents = {};
+  for (const name of roles) agents[name] = await relay.workspace.register({ name, type: "agent" });
+  const dispatch = dispatcher(agents);
+  const assignment = { id: "first", campaign_id: "mechanics", sender: "director", recipient: "trainer", text: "Train only after verified delivery." };
+  const receipt = await dispatch.deliver(assignment);
+  assert.equal(receipt.room.readers.length, 5);
+  assert.equal(receipt.room.readback_verified, true);
+  assert.deepEqual(await dispatch.deliver(assignment), receipt);
+  // A lost bridge response/restart reconciles the same durable IDs, not new copies.
+  assert.deepEqual(await dispatcher(agents).deliver(assignment), receipt);
+  await assert.rejects(dispatch.deliver({ ...assignment, text: "Changed instruction" }), /conflict/);
+  await assert.rejects(dispatcher(agents).deliver({ ...assignment, text: "Changed after restart" }), /different request payload/);
+  const [a, b] = await Promise.all([dispatch.deliver({ ...assignment, id: "concurrent" }), dispatch.deliver({ ...assignment, id: "concurrent" })]);
+  assert.equal(a.room.message_id, b.room.message_id);
+  // Room failure after DM: no downstream receipt until all five copies verify.
+  const realGet = agents.governance.messages.get.bind(agents.governance.messages);
+  let corrupt = true;
+  agents.governance.messages.get = async (id) => {
+    const copy = await realGet(id);
+    return corrupt ? { ...copy, channel: { id: "wrong-room" } } : copy;
+  };
+  await assert.rejects(dispatch.deliver({ ...assignment, id: "room-retry" }), /room readback/);
+  corrupt = false;
+  const recovered = await dispatch.deliver({ ...assignment, id: "room-retry" });
+  assert.equal(recovered.room.readback_verified, true);
+  const page = await agents.trainer.messages.list(receipt.room.name, { limit: 100 });
+  assert.equal(page.filter((row) => JSON.parse(row.text).id === "room-retry").length, 1);
   console.log(
-    "Relay SDK round trip, recipient identity and duplicate delivery: passed.",
+    "Relay SDK: real DM + five-role room, duplicates, concurrent send, restart, conflicting payload, wrong room and partial-delivery recovery passed.",
   );
 } finally {
   child.kill("SIGTERM");

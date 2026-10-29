@@ -1,4 +1,7 @@
 export type View =
+  | "briefing"
+  | "chat"
+  | "terse"
   | "overview"
   | "experiments"
   | "environments"
@@ -107,6 +110,38 @@ export type Config = {
   strategies: string[];
 };
 export type Campaign = {
+  briefing?: {
+    as_of: string;
+    phase: string;
+    experiment_number: number;
+    experiment_limit: number;
+    experiment_id: string | null;
+    strategy: string | null;
+    hypothesis: string | null;
+    progress?: { stage: string; done: number; total: number };
+    director: {
+      input_recorded: boolean;
+      failure_examples: number | null;
+      previous_results: number | null;
+      development_score_seen: number | null;
+      final_test_data_provided: boolean;
+    };
+    oversight: {
+      decision: string;
+      decision_scope: string;
+      checks: { label: string; state: string }[];
+      blocked_proposals: number;
+      last_block: Review | null;
+      regression_scope: string;
+    };
+    execution: {
+      terse_worlds: number;
+      rl_rollouts: number;
+      relay_deliveries: number;
+      settled_compute_seconds: number;
+      time_limit_seconds: number;
+    };
+  };
   id: string;
   name: string;
   status: string;
@@ -149,6 +184,17 @@ export type Event = {
   recipient?: Agent;
   category?: string;
   relay_id?: string;
+  receipt?: {
+    delivered: boolean;
+    recipient_readback_verified: boolean;
+    room?: {
+      name: string;
+      id: string;
+      message_id: string;
+      readback_verified: boolean;
+      readers: Agent[];
+    };
+  };
   experiment_id?: string;
   metric?: Metric;
 };

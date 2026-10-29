@@ -140,6 +140,8 @@ def main():
     terminal_frames = 0
     probe_shown = False
     probe_at = None
+    camera_view = "briefing"
+    tour_step = 0
     previous_stage = None
     terminal_seen = False
     store.patch(
@@ -169,6 +171,10 @@ def main():
             state = store.get(args.campaign)
             if state is None:
                 raise RuntimeError("The recorded campaign disappeared from the evidence store")
+            from services.core.briefing import build
+
+            manifest["frames"][-1]["report"] = build(state, store.events(args.campaign))
+            manifest["frames"][-1]["camera_view"] = camera_view
             if state["status"] != previous_stage:
                 previous_stage = state["status"]
                 manifest["markers"].append(
@@ -193,6 +199,7 @@ def main():
                         "wait", "--fn", "document.body.innerText.includes('Checkpoint promotion was blocked')"
                     )
                     probe_shown = True
+                    camera_view = "governance"
                     probe_at = time.monotonic()
                     manifest["markers"].append(
                         {
@@ -202,9 +209,23 @@ def main():
                         }
                     )
                 elif probe_at and time.monotonic() - probe_at > 20:
-                    browser("find", "role", "button", "click", "--name", "Overview", "--exact")
-                    browser("wait", "--text", "Research overview")
-                    probe_at = None
+                    tours = [
+                        ("Agent chat", "Research room", "chat"),
+                        ("Durable actors", "The memory behind the research.", "terse"),
+                        ("Training briefing", "What the research director sees", "briefing"),
+                    ]
+                    label, heading, camera_view = tours[tour_step]
+                    browser("find", "role", "button", "click", "--name", label, "--exact")
+                    browser("wait", "--text", heading)
+                    tour_step += 1
+                    probe_at = time.monotonic() if tour_step < len(tours) else None
+                    manifest["markers"].append(
+                        {
+                            "stage": f"camera_{camera_view}",
+                            "elapsed_seconds": time.monotonic() - video_started,
+                            "timestamp": store.now(),
+                        }
+                    )
             except (RuntimeError, subprocess.TimeoutExpired) as error:
                 # An optional camera tour is never allowed to stop the continuous video.
                 manifest.setdefault("navigation_errors", []).append(
@@ -217,6 +238,7 @@ def main():
                 if not terminal_frames and state["status"] == "completed":
                     browser("find", "role", "button", "click", "--name", "Results", "--exact")
                     browser("wait", "--text", "Read the model's work")
+                    camera_view = "results"
                 terminal_frames += 1
                 if terminal_frames >= 4:
                     break

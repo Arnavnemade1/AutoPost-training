@@ -5,7 +5,6 @@ import os
 import subprocess
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -77,34 +76,6 @@ def provision():
         "owner=forge-lab",
     )
     az("network", "nsg", "create", "-g", GROUP, "-n", NSG, "--location", REGION)
-    public_ip = httpx.get("https://api.ipify.org", timeout=15).text.strip()
-    import ipaddress
-
-    ipaddress.ip_address(public_ip)
-    az(
-        "network",
-        "nsg",
-        "rule",
-        "create",
-        "-g",
-        GROUP,
-        "--nsg-name",
-        NSG,
-        "-n",
-        "forge-ssh-local-only",
-        "--priority",
-        "100",
-        "--source-address-prefixes",
-        public_ip + "/32",
-        "--destination-port-ranges",
-        "22",
-        "--protocol",
-        "Tcp",
-        "--access",
-        "Allow",
-        "--direction",
-        "Inbound",
-    )
     if not key.exists():
         subprocess.run(
             ["ssh-keygen", "-t", "ed25519", "-f", str(key), "-N", "", "-C", "forge-ephemeral-evaluator"],

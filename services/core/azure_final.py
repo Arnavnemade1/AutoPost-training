@@ -7,9 +7,58 @@ import subprocess
 import tarfile
 import time
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import httpx
 from services.core import store
-from services.core.training import sha
+from forge_training.artifacts import file_sha256 as sha
+
+
+def ensure_worker(worker, cancelled):
+    """Wake only the lab-owned evaluator, with a fresh bounded shutdown schedule."""
+    if worker.get("resource_group") != "forge-eval-338fedca" or worker.get("name") != "forge-evaluator":
+        raise ValueError("Evaluator resource is outside the authorized Forge worker")
+
+    def az(*arguments):
+        response = subprocess.run(
+            ["az", "vm", *arguments, "-g", worker["resource_group"], "-n", worker["name"], "-o", "json"],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if response.returncode:
+            raise RuntimeError(
+                "Azure evaluator startup failed. Check the configured subscription and VM access."
+            )
+        return json.loads(response.stdout) if response.stdout.strip() else None
+
+    shutdown = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%H%M")
+    az("auto-shutdown", "--location", "centralus", "--time", shutdown)
+    started = False
+    deadline = time.monotonic() + 240
+    while time.monotonic() < deadline:
+        if cancelled():
+            az("deallocate", "--no-wait")
+            raise InterruptedError("Evaluator startup cancelled")
+        state = az(
+            "get-instance-view",
+            "--query",
+            "{power:instanceView.statuses,agent:instanceView.vmAgent.statuses}",
+        )
+        running = any(
+            s.get("code") == "PowerState/running" for s in (state.get("power") or []) if isinstance(s, dict)
+        )
+        ready = any(
+            s.get("code") == "ProvisioningState/succeeded"
+            for s in (state.get("agent") or [])
+            if isinstance(s, dict)
+        )
+        if running and ready:
+            return
+        if not running and not started:
+            az("start")
+            started = True
+        time.sleep(2)
+    raise TimeoutError("Azure evaluator did not become ready within its startup window")
 
 
 def evaluate(campaign_id, rows, config, adapter, expected_sha, cancelled):
@@ -21,6 +70,7 @@ def evaluate(campaign_id, rows, config, adapter, expected_sha, cancelled):
     worker = json.loads(metadata.read_text())
     if worker["resource_group"] != "forge-eval-338fedca":
         raise ValueError("Evaluator resource is outside the authorized Forge group")
+    ensure_worker(worker, cancelled)
     url, key = os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     headers = {"apikey": key, "Authorization": "Bearer " + key}
     progress_path = f"{campaign_id}/independent-progress.json"
