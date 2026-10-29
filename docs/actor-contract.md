@@ -87,9 +87,11 @@ The campaign is the sole best-checkpoint authority. It requires:
   improvement over the previously approved best.
 
 Checks are deterministic, but the evidence is attested by authorized services.
-Registering a checksum does not read a file or reproduce a benchmark. Independent
-file verification, regression execution, final-evaluation permissions and review
-revocation belong to Phase 5. The Phase 2 tests use explicitly synthetic evidence;
+Registering a checksum does not read a file or reproduce a benchmark. Since Phase 5
+the orchestrator's reviewer re-derives checkpoint and report hashes from file bytes,
+re-checks training data and protocol, runs a held-out regression suite and cites a
+preserved evidence bundle in every decision (`services/orchestrator/src/governance.ts`).
+Final-evaluation permissions belong to Phase 8; review revocation is not implemented. The Phase 2 tests use explicitly synthetic evidence;
 they are not training performance evidence.
 
 ## Mathematical worlds

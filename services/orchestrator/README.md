@@ -36,8 +36,8 @@ The tiny model is not expected to improve; its score has no benchmark significan
 `research` runs an autonomous campaign under the director policy and writes
 `research-report.json` and `ledger.json` under `artifacts/research-<profile>-<timestamp>/`.
 `fixture` uses the offline tiny model (about 25 seconds). `qwen` prepares a pinned
-GSM8K **train**-split partition (128 train, 16 development; the test split is never
-read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on Apple MPS; it needs the
+GSM8K **train**-split partition (128 train, 16 development, 16 regression; the test
+split is never read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on Apple MPS; it needs the
 model and dataset in the local Hugging Face cache and takes tens of minutes. Neither
 profile provisions paid compute.
 
@@ -50,6 +50,7 @@ profile provisions paid compute.
 | `src/reconcile.ts` | Reports unsent, unacknowledged, unannounced-completion and expired-lease work from actor state; settles unmeasured local cost at the reserved bound |
 | `src/director.ts` | Pure decision policy: diagnosis, two exploratory recipes, measured ranking, revision operator, stop rules |
 | `src/recipes.ts` | Data role materializes a recipe (training subset and config) from the campaign template; reviewer recomputes and compares it |
+| `src/governance.ts` | Reviewer: independent artifact, data, protocol and regression checks; preserved evidence bundle; terminal governance decision |
 | `src/research.ts` | Message-driven campaign: each role reacts to Relay messages; director decides after a round's measurements are recorded; coordinator settles terminal reservations |
 | `scripts/scenario.ts` | The Phase 3 fault-injection lifecycle used by `test` and `demo` |
 | `scripts/research.ts` | Provisions a profile, freezes the baseline and runs a research campaign |
@@ -99,8 +100,34 @@ while execution stays authorized by the deterministic checks below.
 Every decision cites ledger-verified evidence. Before any compute, the reviewer
 requires the director's ledger launch, recomputes the recipe's data selection from the
 allowed partition, and checks the validated config against the template, frozen
-protocol and limits. Checkpoint governance is deferred to Phase 5: no terminal
-governance decision is recorded, so no checkpoint is promoted.
+protocol and limits.
+
+## Checkpoint governance
+
+When the director stops, it sends the development-selected candidates (at most two, in
+rank order) to the reviewer (`src/governance.ts`). The reviewer trusts no worker or
+evaluator message. It:
+
+- recomputes the checkpoint directory hash and evaluation report hash from the files
+  and compares both with the experiment and registry records, and re-verifies the run
+  manifest;
+- re-derives the recipe's data selection from the allowed partition and compares it
+  with the bytes the run actually staged and trained on; development data must be the
+  frozen set;
+- checks the evaluation report against the frozen protocol, dataset, counts and
+  checkpoint;
+- checks for regressions: no development example the baseline answered may become
+  wrong, and the candidate may not score below the untrained model on a held-out
+  regression suite that no recipe can train on (`maxDropBps: 0`).
+
+The reviewer writes an evidence bundle under `governance/`, then records a terminal
+`GovernanceActor` decision citing the bundle's hash. An approved candidate is promoted
+by the director, subject to the campaign's own improvement threshold. After a veto,
+the director records a corrective ledger decision and reviews the next-ranked candidate.
+A veto is final; no promotion path can override it.
+
+`npm run research -- fixture --inject-tamper` is labeled failure injection: it alters
+the first reviewed checkpoint after registration, to exercise the veto path.
 
 ## Trust and limits
 
@@ -108,9 +135,12 @@ This local harness holds every role's Relay token and Terse signing key in one p
 Deployed roles need separate processes and credentials. Relay channels are routing,
 not authorization. Recipients poll; Relay inbox acknowledgements and push subscriptions
 are not used. Only the local Relaycast engine has been exercised, not a hosted Relay
-workspace. Evaluator reproduction shares host and code with the worker; independent
-evaluation is Phase 5. The director's working state is in memory and is not resumed
-after a process crash; the ledger keeps its record. Selecting among candidates on a
-small development set can overfit it. See the
-[Phase 3](../../docs/verification/phase3-local.md) and
-[Phase 4](../../docs/verification/phase4-local.md) verification records.
+workspace. Evaluator reproduction and governance review share host, code and process
+with the worker, but use separate keys and re-derive facts from bytes rather than
+messages; separate infrastructure and the sealed final evaluator are Phase 8. The
+director's working state is in memory and is not resumed after a process crash; the
+ledger keeps its record. Selecting among candidates on a small development set can
+overfit it. See the
+[Phase 3](../../docs/verification/phase3-local.md),
+[Phase 4](../../docs/verification/phase4-local.md) and
+[Phase 5](../../docs/verification/phase5-local.md) verification records.

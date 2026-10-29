@@ -11,7 +11,7 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after Phase 4
+## Current status after Phase 5
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
@@ -31,9 +31,14 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   development results with no human selection: 0/16 baseline, then 3/16 and 4/16,
   then 6/16 for the selected recipe; a further revision scored 4/16 and stopped it.
   This is a 16-example custom-scorer diagnostic, not a benchmark result.
-- Phases 5–8: planned; no governance approval, promotion or final evaluation claimed.
+- Phase 5: an independent reviewer re-derives artifact hashes, data access, protocol and
+  regressions from bytes before a terminal, evidence-bound decision. A labeled injected
+  tamper was vetoed, both promotion paths refused it, and the director fell back to the
+  next candidate. In the real Qwen campaign the selected candidate passed every check
+  (held-out regression suite 0/16 to 6/16) and was promoted.
+- Phases 6–8: planned; no GRPO, dashboard or sealed final evaluation is claimed.
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
-  CI passed on `3f03a63`; Phase 4 runs in the same scoped workflows.
+  CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
 
 ## Collaboration boundaries
 
@@ -166,6 +171,10 @@ controlled failure injection. Final evaluation remains outside agent access.
 
 Suggested owner: governance workstream. Hard checks should begin with Phase 2;
 this phase verifies the complete enforcement path.
+
+Implemented in `services/orchestrator/src/governance.ts` and the director's promotion
+stage. See [local verification](verification/phase5-local.md) for the labeled fault
+injection, the real promoted Qwen candidate, and the remaining isolation limits.
 
 ## Phase 6 — Real reward-driven training
 
