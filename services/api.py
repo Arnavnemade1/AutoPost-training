@@ -7,12 +7,12 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from services.core import production, store
 from services.core.contracts import CampaignConfig
-from services.core.engine import actor, governance, probe, spawn
+from services.core.engine import actor, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
 
@@ -62,11 +62,15 @@ async def local_boundary(request: Request, call_next):
 @app.get("/health")
 def health():
     services = {}
-    for name, url in [("terse", "http://127.0.0.1:7100"), ("relay", "http://127.0.0.1:7529/health")]:
+    terse = os.getenv("DURABLE_ACTORS_CONTROL_PLANE_URL", "http://127.0.0.1:7100")
+    for name, url in [("terse", terse), ("relay", bridge_url() + "/health")]:
         try:
             r = httpx.get(url, timeout=3)
-            services[name] = {"connected": r.status_code < 500, "mode": "Local runtime"}
-        except httpx.HTTPError:
+            mode = "Local runtime"
+            if name == "relay" and r.status_code < 500:
+                mode = "Hosted workspace" if r.json().get("workspace") == "hosted" else "Local workspace"
+            services[name] = {"connected": r.status_code < 500, "mode": mode}
+        except (httpx.HTTPError, ValueError):
             services[name] = {"connected": False, "mode": "Unavailable"}
     services["director"] = {
         "connected": bool(os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")),
@@ -162,6 +166,20 @@ def events(cid: str, after: str | None = None):
     if not store.get(cid):
         raise HTTPException(404, "Campaign not found")
     return store.events(cid, after)
+
+
+@app.get("/campaigns/{cid}/relay/search")
+def relay_search(cid: str, q: str = Query(min_length=1, max_length=200)):
+    """Agent Relay's own full-text search over the campaign's research room."""
+    if not store.get(cid):
+        raise HTTPException(404, "Campaign not found")
+    try:
+        r = httpx.get(bridge_url() + "/search", params={"campaign_id": cid, "q": q}, timeout=10)
+        r.raise_for_status()
+        rows = r.json()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Agent Relay search is unavailable") from None
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("message_id"), str)]
 
 
 @app.post("/campaigns/{cid}/cancel")

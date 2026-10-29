@@ -37,6 +37,10 @@ class Message(BaseModel):
     category: str
     text: str
     experiment_id: str | None = None
+    # "dm": a 1:1 handoff in the recipient's Relay inbox. "room": a decision or announcement
+    # in the campaign's research room; with reply_to, a thread reply under that room message.
+    route: Literal["dm", "room"] = "dm"
+    reply_to: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 class Action(BaseModel):
