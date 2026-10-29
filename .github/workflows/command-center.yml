@@ -14,6 +14,9 @@ on:
       - 'scripts/**'
       - 'package*.json'
       - 'pyproject.toml'
+      - 'eslint.config.mjs'
+      - 'tsconfig.json'
+      - 'next.config.ts'
       - '.github/workflows/command-center.yml'
   pull_request:
     paths:
@@ -29,6 +32,9 @@ on:
       - 'scripts/**'
       - 'package*.json'
       - 'pyproject.toml'
+      - 'eslint.config.mjs'
+      - 'tsconfig.json'
+      - 'next.config.ts'
       - '.github/workflows/command-center.yml'
 permissions:
   contents: read
