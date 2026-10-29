@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import uuid
+from contextlib import suppress
 from pathlib import Path
 import httpx
 from services.core import store
@@ -19,6 +20,16 @@ def governance(campaign_id):
 
 def bridge_url():
     return os.getenv("FORGE_RELAY_BRIDGE", "http://127.0.0.1:7529")
+
+
+def bridge_headers():
+    """The bridge refuses callers without the per-launch secret that scripts/lab.py issues.
+    The secret file wins over the environment, so an API reused across launches stays
+    in step with a restarted bridge."""
+    token = os.getenv("FORGE_RELAY_BRIDGE_TOKEN", "")
+    with suppress(OSError):
+        token = (store.DATA / "relay-bridge.token").read_text().strip() or token
+    return {"Authorization": "Bearer " + token}
 
 
 def send(campaign_id, sender, recipient, category, text, experiment_id=None, route="dm", reply_to=None):
@@ -40,7 +51,9 @@ def send(campaign_id, sender, recipient, category, text, experiment_id=None, rou
     last_error = None
     for _ in range(3):
         try:
-            r = httpx.post(bridge_url() + "/message", json=message.model_dump(), timeout=30)
+            r = httpx.post(
+                bridge_url() + "/message", json=message.model_dump(), headers=bridge_headers(), timeout=30
+            )
             r.raise_for_status()
             receipt = r.json()
             if not receipt.get("delivered") or not receipt.get("message_id"):
@@ -71,6 +84,7 @@ def react(campaign_id, sender, relay_message_id, emoji):
     try:
         r = httpx.post(
             bridge_url() + "/react",
+            headers=bridge_headers(),
             json={
                 "campaign_id": campaign_id,
                 "sender": sender,

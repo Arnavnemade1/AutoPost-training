@@ -4,8 +4,18 @@ import { createServer } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dispatcher, pushWaiter, roles } from "./delivery.mjs";
 import { relayConfig } from "./config.mjs";
+import { refuse } from "./boundary.mjs";
 
 const config = relayConfig(process.env);
+// Per-launch secret shared with the bridge's only callers (scripts/lab.py hands it to the
+// API, which hands it to campaign workers). Without it the bridge does not start.
+const token = process.env.FORGE_RELAY_BRIDGE_TOKEN ?? "";
+if (token.length < 32) {
+  console.error(
+    "FORGE_RELAY_BRIDGE_TOKEN (32+ characters) is required; start Forge with npm run lab",
+  );
+  process.exit(2);
+}
 await mkdir("data", { recursive: true });
 let saved;
 try {
@@ -88,6 +98,11 @@ async function body(req) {
 
 const server = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
+  const refused = refuse(req, { port: config.bridgePort, token });
+  if (refused) {
+    res.writeHead(refused.status);
+    return res.end(JSON.stringify({ error: refused.error }));
+  }
   try {
     const url = new URL(req.url, "http://bridge");
     if (url.pathname === "/health")

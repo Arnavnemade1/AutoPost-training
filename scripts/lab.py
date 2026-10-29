@@ -1,6 +1,7 @@
 """Start the complete local lab, reusing healthy services and owning only new processes."""
 
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -70,6 +71,16 @@ try:
     # Agent Relay: the local engine by default; a hosted workspace when .env (or the shell)
     # sets FORGE_RELAY_WORKSPACE_KEY. The key goes only to the bridge's environment.
     relay_env = os.environ | {k: v for k, v in settings.items() if k.startswith("FORGE_RELAY_") and v}
+    # Per-launch bridge secret: only the bridge and the API (and the campaign workers it
+    # spawns) hold it. A bridge reused from an earlier launch keeps that launch's secret.
+    token_file = ROOT / "data" / "relay-bridge.token"
+    if not (healthy("http://127.0.0.1:7529/health") and token_file.exists()):
+        token_file.unlink(missing_ok=True)
+        fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(secrets.token_urlsafe(32))
+    bridge_token = token_file.read_text().strip()
+    relay_env["FORGE_RELAY_BRIDGE_TOKEN"] = bridge_token
     if not relay_env.get("FORGE_RELAY_WORKSPACE_KEY"):
         start(
             "relaycast",
@@ -91,6 +102,7 @@ try:
         "api",
         [sys.executable, "-m", "uvicorn", "services.api:app", "--host", "127.0.0.1", "--port", "8000"],
         "http://127.0.0.1:8000/health",
+        env=os.environ | {"FORGE_RELAY_BRIDGE_TOKEN": bridge_token},
     )
     start("web", ["npm", "run", "dev"], "http://127.0.0.1:3000")
     print(

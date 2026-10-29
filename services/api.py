@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from services.core import production, store
 from services.core.contracts import CampaignConfig
-from services.core.engine import actor, bridge_url, governance, probe, spawn
+from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
 
@@ -174,7 +174,12 @@ def relay_search(cid: str, q: str = Query(min_length=1, max_length=200)):
     if not store.get(cid):
         raise HTTPException(404, "Campaign not found")
     try:
-        r = httpx.get(bridge_url() + "/search", params={"campaign_id": cid, "q": q}, timeout=10)
+        r = httpx.get(
+            bridge_url() + "/search",
+            params={"campaign_id": cid, "q": q},
+            headers=bridge_headers(),
+            timeout=10,
+        )
         r.raise_for_status()
         rows = r.json()
     except (httpx.HTTPError, ValueError):

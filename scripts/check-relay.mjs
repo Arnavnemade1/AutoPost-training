@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
+import { request } from "node:http";
+import { createServer } from "node:net";
 import { AgentRelay } from "@agent-relay/sdk";
 import { RelayCast } from "@relaycast/sdk";
 import { dispatcher, pushWaiter, roles } from "../services/relay/delivery.mjs";
@@ -33,6 +35,7 @@ child.stderr.on("data", (chunk) => {
   errors = (errors + chunk.toString()).slice(-3000);
 });
 let observer;
+let bridge;
 try {
   const baseUrl = await new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -290,10 +293,132 @@ try {
       0,
       `${role} inbox drained`,
     );
+
+  // The bridge's local boundary: only Forge's own server processes may drive the agents.
+  const port = await new Promise((done) => {
+    const probe = createServer().listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => done(port));
+    });
+  });
+  const secret = "check-" + "x".repeat(40);
+  const bridgeEnv = {
+    PATH: process.env.PATH,
+    FORGE_RELAY_URL: baseUrl,
+    FORGE_RELAY_BRIDGE_PORT: String(port),
+    FORGE_RELAY_CREDENTIALS: join(directory, "bridge-credentials.json"),
+  };
+  const missing = spawn(
+    process.execPath,
+    [resolve("services/relay/bridge.mjs")],
+    {
+      cwd: directory,
+      env: bridgeEnv,
+      stdio: "ignore",
+    },
+  );
+  assert.equal(
+    (await once(missing, "exit"))[0],
+    2,
+    "the bridge refuses to start without a token",
+  );
+  bridge = spawn(process.execPath, [resolve("services/relay/bridge.mjs")], {
+    cwd: directory,
+    env: { ...bridgeEnv, FORGE_RELAY_BRIDGE_TOKEN: secret },
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  await new Promise((done, fail) => {
+    const timer = setTimeout(
+      () => fail(new Error("Bridge startup timed out")),
+      30000,
+    );
+    bridge.stdout.on("data", (chunk) => {
+      if (String(chunk).includes("bridge ready")) {
+        clearTimeout(timer);
+        done();
+      }
+    });
+  });
+  const call = (method, path, headers = {}, body) =>
+    new Promise((done, fail) => {
+      const req = request(
+        {
+          host: "127.0.0.1",
+          port,
+          method,
+          path,
+          headers: { host: `127.0.0.1:${port}`, ...headers },
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => done(res.statusCode));
+        },
+      );
+      req.on("error", fail);
+      req.end(body);
+    });
+  const auth = { authorization: `Bearer ${secret}` };
+  const search = "/search?campaign_id=mechanics&q=checkpoint";
+  const reactBody = JSON.stringify({
+    campaign_id: "mechanics",
+    sender: "evaluator",
+    message_id: posted.message_id,
+    emoji: "eyes",
+  });
+  assert.equal(await call("GET", "/health"), 200, "health needs no token");
+  assert.equal(
+    await call("GET", search, { ...auth, host: `evil.example:${port}` }),
+    403,
+    "rebound Host",
+  );
+  assert.equal(
+    await call("GET", search, { ...auth, origin: "https://evil.example" }),
+    403,
+    "foreign Origin",
+  );
+  assert.equal(
+    await call("GET", search, { ...auth, origin: "http://127.0.0.1:3000" }),
+    403,
+    "any browser Origin",
+  );
+  assert.equal(await call("GET", search), 401, "missing token");
+  assert.equal(
+    await call("GET", search, { authorization: "Bearer wrong" }),
+    401,
+    "wrong token",
+  );
+  assert.equal(
+    await call(
+      "POST",
+      "/react",
+      { ...auth, "content-type": "text/plain" },
+      reactBody,
+    ),
+    415,
+    "a form-style POST",
+  );
+  assert.equal(await call("GET", search, auth), 200, "the legitimate caller");
+  // The bridge minted its own workspace, so the legitimate write is a fresh handoff.
+  const handoff = JSON.stringify({
+    ...assignment,
+    id: "via-bridge",
+    campaign_id: "bridge-check",
+  });
+  assert.equal(
+    await call(
+      "POST",
+      "/message",
+      { ...auth, "content-type": "application/json" },
+      handoff,
+    ),
+    200,
+    "the legitimate caller can hand off work",
+  );
   console.log(
-    "Relay SDK: DM inbox ack, push wake, room read receipts, thread reply, reaction, search, duplicates, concurrent send, restart, conflicting payload, forged copy and partial-delivery recovery passed.",
+    "Relay SDK: DM inbox ack, push wake, room read receipts, thread reply, reaction, search, duplicates, concurrent send, restart, conflicting payload, forged copy, partial-delivery recovery and the bridge's local boundary passed.",
   );
 } finally {
+  bridge?.kill("SIGTERM");
   await observer?.messaging?.events?.disconnect?.().catch(() => undefined);
   child.kill("SIGTERM");
   const kill = setTimeout(() => child.kill("SIGKILL"), 5000);

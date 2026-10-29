@@ -43,10 +43,11 @@ def journal(tmp_path, monkeypatch):
 
 
 def test_send_records_route_thread_and_receipt(journal, monkeypatch):
+    monkeypatch.setenv("FORGE_RELAY_BRIDGE_TOKEN", "per-launch-secret")
     posted = []
 
-    def post(url, json, timeout):
-        posted.append((url, json))
+    def post(url, json, timeout, headers=None):
+        posted.append((url, json, headers))
         return httpx.Response(
             200,
             json={
@@ -64,6 +65,7 @@ def test_send_records_route_thread_and_receipt(journal, monkeypatch):
     )
     assert receipt["message_id"] == "r2"
     assert posted[0][1]["route"] == "room" and posted[0][1]["reply_to"] == "r1"
+    assert posted[0][2] == {"Authorization": "Bearer per-launch-secret"}
     events = store.events("c1")
     assert [e["kind"] for e in events] == ["message_pending", "message"]
     delivered = events[1]
@@ -76,7 +78,7 @@ def test_unconfirmed_delivery_pauses_the_campaign(journal, monkeypatch):
     monkeypatch.setattr(
         engine.httpx,
         "post",
-        lambda url, json, timeout: httpx.Response(
+        lambda url, json, timeout, headers=None: httpx.Response(
             200, json={"delivered": False}, request=httpx.Request("POST", url)
         ),
     )
@@ -86,7 +88,7 @@ def test_unconfirmed_delivery_pauses_the_campaign(journal, monkeypatch):
 
 
 def test_reaction_is_recorded_and_never_blocks(journal, monkeypatch):
-    def post(url, json, timeout):
+    def post(url, json, timeout, headers=None):
         assert url.endswith("/react") and json["emoji"] == "white_check_mark"
         return httpx.Response(
             200,
@@ -99,7 +101,7 @@ def test_reaction_is_recorded_and_never_blocks(journal, monkeypatch):
     event = store.events("c3")[-1]
     assert event["kind"] == "reaction" and event["relay_id"] == "r1"
 
-    def down(url, json, timeout):
+    def down(url, json, timeout, headers=None):
         raise httpx.ConnectError("bridge down")
 
     monkeypatch.setattr(engine.httpx, "post", down)
@@ -110,8 +112,8 @@ def test_reaction_is_recorded_and_never_blocks(journal, monkeypatch):
 @live
 def test_real_relay_dm_room_thread_and_reaction():
     dm = message()
-    first = httpx.post(BRIDGE + "/message", json=dm, timeout=30).json()
-    second = httpx.post(BRIDGE + "/message", json=dm, timeout=30).json()
+    first = httpx.post(BRIDGE + "/message", json=dm, headers=engine.bridge_headers(), timeout=30).json()
+    second = httpx.post(BRIDGE + "/message", json=dm, headers=engine.bridge_headers(), timeout=30).json()
     assert first["message_id"] == second["message_id"]
     assert first["route"] == "dm" and first["recipient_readback_verified"] is True
     assert [r["name"] for r in first["read_by"]] == ["trainer"]
@@ -120,6 +122,7 @@ def test_real_relay_dm_room_thread_and_reaction():
     post = httpx.post(
         BRIDGE + "/message",
         json=message(sender="trainer", recipient="governance", category="CHECKPOINT_SAVED", route="room"),
+        headers=engine.bridge_headers(),
         timeout=30,
     ).json()
     assert {r["name"] for r in post["read_by"]} == {"director", "data", "evaluator", "governance"}
@@ -133,6 +136,7 @@ def test_real_relay_dm_room_thread_and_reaction():
             route="room",
             reply_to=post["message_id"],
         ),
+        headers=engine.bridge_headers(),
         timeout=30,
     ).json()
     assert reply["route"] == "thread" and reply["thread_parent_id"] == post["message_id"]
@@ -145,6 +149,7 @@ def test_real_relay_dm_room_thread_and_reaction():
             "message_id": post["message_id"],
             "emoji": "white_check_mark",
         },
+        headers=engine.bridge_headers(),
         timeout=30,
     ).json()
     assert any(r["emoji"] == "white_check_mark" and "governance" in r["agents"] for r in reacted["reactions"])
