@@ -67,7 +67,7 @@ cap Apple GPU memory so a job fails rather than swapping; both are passed to Pyt
 
 | File | Responsibility |
 | --- | --- |
-| `src/relay.ts` | Registers role participants; sends unsent outbox messages with idempotency keys; recipients consume their Relay channel, verify sender, channel and exact bytes against the durable message, then acknowledge |
+| `src/relay.ts` | Registers role participants; sends unsent outbox messages as Relay DMs with idempotency keys; recipients drain their durable Relay inbox, verify sender, DM route and exact bytes against the durable message, acknowledge in Forge, then ack the Relay delivery (forged copies are failed in Relay). See `docs/agent-relay.md` |
 | `src/worker.ts` | Allowlisted training jobs; fenced lease renewed at a third of the campaign's `maxLeaseMs`; runs reuse the frozen baseline; GRPO jobs get a world gateway per lease generation; evidence checks of the Python run bundle and, for GRPO, of rewards against world journals with step replay; evaluator reproduction in a separate process |
 | `src/worlds.ts` | World gateway: loopback endpoint with a per-job token; one data-role reset and one worker-role step per completion, in concurrent lanes, with request IDs that make retries replay receipts; `verifyWorldRollouts` checks a run's rewards against each world's journal |
 | `src/evaluations.ts` | Untrained-model evaluations cached by campaign, experiment label, model, data and protocol; batched evaluation adopted only if it matches batch size 1 |
