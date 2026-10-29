@@ -1,6 +1,6 @@
 import { AgentRelay } from "@agent-relay/sdk";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   clients,
@@ -47,6 +47,50 @@ async function writeDataset(directory: string, name: string, lines: string[], ma
   };
 }
 const regressionPolicy = { maxDropBps: 0, maxDevRegressions: 0 };
+/**
+ * The dashboard's only view of actor state: snapshots read with public actor reads and
+ * written as files, so the dashboard never holds actor credentials. Atomic replace.
+ */
+async function exportLive(
+  output: string,
+  actors: ReturnType<typeof clients>,
+  campaignId: string,
+  status: "running" | "finished" | "failed",
+  about: Document,
+): Promise<void> {
+  const read = (actor: "ResearchLedgerActor" | "ResearchCampaignActor" | "ResearchWorkflowActor") =>
+    actors.owner.read(actor, campaignId, "getSnapshot");
+  const [campaign, ledger, workflow] = await Promise.all([
+    read("ResearchCampaignActor"),
+    read("ResearchLedgerActor"),
+    read("ResearchWorkflowActor"),
+  ]);
+  const experiments: Document = {};
+  for (const experimentId of Object.keys((campaign?.proposals as Document | undefined) ?? {}))
+    experiments[experimentId] = await actors.owner.read(
+      "ExperimentActor",
+      experimentId,
+      "getSnapshot",
+    );
+  const directory = join(output, "live");
+  await mkdir(directory, { recursive: true });
+  const partial = join(directory, `state.json.${process.pid}.partial`);
+  await writeFile(
+    partial,
+    JSON.stringify({
+      schemaVersion: 1,
+      ...about,
+      status,
+      updatedAt: new Date().toISOString(),
+      campaign,
+      ledger,
+      workflow,
+      experiments,
+    }),
+  );
+  await rename(partial, join(directory, "state.json"));
+}
+
 /** Every GRPO setting is stated, so the reviewer pins all of them (unset defaults are not). */
 function grpoSettings(overrides: Document): Document {
   return {
@@ -514,8 +558,38 @@ export async function runResearch(
       }
       return results;
     };
+    const about = {
+      profile: name,
+      method,
+      campaignId: profile.campaignId,
+      model: { modelId: model.model_id, revision: model.revision, status: model.model_status },
+      startingAdapter: start,
+      baseline: {
+        reportSha256: baselineSha256,
+        numExamples: baseline.num_examples,
+        numCorrect: baseline.num_correct,
+      },
+    };
+    // Snapshots every 2 seconds; a failed read (for example during a restart) skips a tick.
+    let exporting = Promise.resolve();
+    const exporter = setInterval(() => {
+      exporting = exporting
+        .then(() => exportLive(output, actors, profile.campaignId, "running", about))
+        .catch(() => undefined);
+    }, 2000);
     const started = Date.now();
-    const outcome = await research.run();
+    let outcome: Awaited<ReturnType<typeof research.run>>;
+    try {
+      outcome = await research.run();
+    } catch (error) {
+      clearInterval(exporter);
+      await exporting;
+      await exportLive(output, actors, profile.campaignId, "failed", about).catch(() => undefined);
+      throw error;
+    }
+    clearInterval(exporter);
+    await exporting;
+    await exportLive(output, actors, profile.campaignId, "finished", about);
     const read = (
       actor: "ResearchLedgerActor" | "ResearchCampaignActor" | "ResearchWorkflowActor",
     ) => actors.owner.read(actor, profile.campaignId, "getSnapshot");

@@ -16,7 +16,9 @@ selected candidate moved a 16-example development diagnostic from 0/16 to 6/16, 
 small custom-scorer results, mostly answer-format learning, not a benchmark claim.
 A Qwen GRPO campaign continuing that checkpoint found no improvement: its best
 development candidate (7/16) regressed on held-out problems (6/16 to 4/16) and was
-vetoed. Dashboard and sealed final evaluation remain later phases.
+vetoed. A research command center renders campaigns from stored files and records them
+with 100x and 120x exports (verified on a fixture campaign). Sealed final evaluation
+remains the last phase.
 
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
 - [Architecture and trust boundaries](docs/architecture.md)
@@ -25,6 +27,8 @@ vetoed. Dashboard and sealed final evaluation remain later phases.
 - [Durable actor setup, tests and demo](packages/terse-actors/README.md)
 - [Actor integration contract](docs/actor-contract.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
+- [Research dashboard and recorder](apps/web/README.md)
+- [Phase 7 verification](docs/verification/phase7-local.md)
 - [Phase 6 verification](docs/verification/phase6-local.md)
 - [Phase 5 verification](docs/verification/phase5-local.md)
 - [Infrastructure performance](docs/verification/performance-local.md)

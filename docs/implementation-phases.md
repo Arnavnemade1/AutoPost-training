@@ -11,7 +11,7 @@ Beating arbitrary existing models is an aspiration, not an acceptance criterion 
 can promise. Report the named baseline, frozen evaluation settings, sample counts,
 uncertainty, and limitations. A valid campaign can conclude **no improvement found**.
 
-## Current status after Phase 6
+## Current status after Phase 7
 
 - Phase 0: model/data revisions and local training runtime verified; live sponsor
   infrastructure, GPU-provider billing, final-evaluation permissions, and event rules pending.
@@ -50,7 +50,15 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   checkpoint the development-selected 7/16 candidate fell from 6/16 to 4/16 on the
   held-out suite and was vetoed, as was the next
   ([Phase 6 verification](verification/phase6-local.md)).
-- Phases 7–8: planned; no dashboard or sealed final evaluation is claimed.
+- Phase 7: a loopback research command center renders a campaign from stored files only
+  (actor snapshots exported every 2 seconds, reports, run bundles, evidence), with every
+  score linked to its file and hash. A recorder captures its one-screen live view while a
+  campaign runs and exports 100x and 120x videos with FFmpeg; a recorder that cannot start
+  is shown and blocks the campaign. Gates verified on a recorded fixture campaign: zero
+  axe-core violations (desktop, mobile, light, dark), displayed scores equal to files,
+  frame-exact playable exports. The real Qwen campaign has not been recorded
+  ([Phase 7 verification](verification/phase7-local.md)).
+- Phase 8: planned; no sealed final evaluation is claimed.
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
 
@@ -223,6 +231,11 @@ visible before campaign start. UI scaffolding can proceed in parallel after even
 contracts settle, with fixtures visibly labeled as fixtures.
 
 Suggested owner: frontend/capture workstream. Depends on stable event contracts.
+
+Implemented in `apps/web/` (dashboard, recorder and launcher) with live actor snapshots
+from `services/orchestrator/scripts/research.ts`. The [local verification](verification/phase7-local.md)
+records each gate check, the recorded fixture campaign and the limits: the recording is
+of the dashboard rendered headless, in VP8 WebM, and the real Qwen campaign is unrecorded.
 
 ## Phase 8 — Freeze, independently evaluate, rehearse, package
 

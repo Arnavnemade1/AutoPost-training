@@ -4,8 +4,9 @@ The system separates research decisions, authoritative state, compute, and indep
 verification. The training core, durable actors and Relay dispatch to the worker are
 implemented and tested locally, including deterministic evidence-driven experiment
 selection, evidence-bound checkpoint governance and GRPO driven by world transitions
-(the gate verified on an offline fixture; real Qwen campaigns found no improvement). This is the target architecture; separately hosted
-evaluation and the UI remain future integrations.
+(the gate verified on an offline fixture; real Qwen campaigns found no improvement), and a
+recorded research dashboard. This is the target architecture; separately hosted
+evaluation remains a future integration.
 
 ```mermaid
 flowchart TD
@@ -46,8 +47,8 @@ flowchart TD
 | Authoritative state | `packages/terse-actors/` | Implemented Terse campaign, experiment, governance, math-world, registry, workflow-outbox and research-ledger actors; [integration contract](actor-contract.md) |
 | Common contracts | `packages/contracts/` (planned) | Versioned actor/message/event schemas; consume worker-generated JSON Schema |
 | Independent evaluation | `services/orchestrator/src/governance.ts`; `services/evaluator/` (planned) | Implemented: byte-level artifact verification, held-out regression suite, evidence-bound governance decisions. Planned: established benchmark harness and protected final evaluation |
-| Research interface | `apps/web/` (planned) | Research graph, metrics, environments, artifacts, governance, recording state |
-| Capture/export | `scripts/record/`, `scripts/render-video/` (planned) | Faithful source recording, playable accelerated exports, recording manifests |
+| Research interface | `apps/web/` | Implemented loopback dashboard rendered from stored files and exported actor snapshots: research graph, budgets, experiments, training metrics, world transitions, governance, before/after examples, agent messages, recording state, downloads |
+| Capture/export | `apps/web/src/recorder.ts`, `apps/web/scripts/record-campaign.ts` | Implemented headless capture of the live view during a campaign, real-time VP8 source and 100x/120x FFmpeg exports, decoded frame-count verification, recording manifests; a failed preflight blocks the campaign |
 
 ## Agent synchronization
 

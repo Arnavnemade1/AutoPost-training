@@ -1,0 +1,21 @@
+{
+  "name": "@forge/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "bun test --timeout 300000",
+    "format": "prettier --write src scripts tests",
+    "format:check": "prettier --check src scripts tests",
+    "serve": "bun scripts/serve.ts",
+    "record": "bun scripts/record-campaign.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "axe-core": "4.14.0",
+    "bun": "1.4.2",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3"
+  }
+}

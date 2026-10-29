@@ -43,6 +43,9 @@ The tiny model is not expected to improve; its score has no benchmark significan
 
 `research` runs an autonomous campaign under the director policy and writes
 `research-report.json` and `ledger.json` under `artifacts/research-<profile>-<timestamp>/`.
+While it runs it also writes `live/state.json` every 2 seconds: campaign, ledger,
+workflow-outbox and experiment snapshots from public actor reads, which the research
+dashboard (`apps/web/`) reads instead of connecting to actors.
 `fixture` uses the offline tiny model (about 25 seconds). `qwen` prepares a pinned
 GSM8K **train**-split partition (128 train, 16 development, 16 regression; the test
 split is never read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on Apple MPS; it needs the
