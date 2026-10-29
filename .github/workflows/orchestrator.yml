@@ -54,3 +54,9 @@ jobs:
       - name: Relay and Terse dispatch with real optimization and fault injection
         working-directory: services/orchestrator
         run: npm test
+      - name: Phase 3 dispatch over the hosted Agent Relay engine
+        working-directory: services/orchestrator
+        env:
+          # Each run creates a throwaway workspace (no account needed) and deletes it.
+          FORGE_RELAY_URL: https://cast.agentrelay.com
+        run: npm test -- tests/phase3.test.ts

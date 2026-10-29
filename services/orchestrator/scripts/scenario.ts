@@ -1,6 +1,4 @@
-import { AgentRelay } from "@agent-relay/sdk";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { once } from "node:events";
 import { join } from "node:path";
 import {
   clients,
@@ -19,7 +17,7 @@ import {
   type ReceiveReport,
 } from "../src/relay.js";
 import { TrainingBridge, prepareJob, pythonJson, readJson } from "../src/worker.js";
-import { launchRelay } from "./local-relay.js";
+import { openRelay, type RelayTarget } from "./relay-target.js";
 
 /** Resolves true only for the expected failure code; unexpected errors propagate. */
 async function rejects(action: () => Promise<unknown>, code: string): Promise<boolean> {
@@ -98,13 +96,10 @@ export async function runScenario(output: string, python: string): Promise<Docum
   };
   const authority = localAuthority([campaign]);
   let runtime = await launch(authority, join(output, "terse"));
-  let relayServer: Awaited<ReturnType<typeof launchRelay>> | undefined;
+  let relayTarget: RelayTarget | undefined;
   try {
-    relayServer = await launchRelay(output);
-    const relay = await AgentRelay.createWorkspace({
-      name: "forge-local-mechanics",
-      baseUrl: relayServer.url,
-    });
+    relayTarget = await openRelay(output);
+    const relay = await relayTarget.createWorkspace("forge-relay-mechanics");
     let participants = await registerParticipants(relay);
     let actors = clients(authority, runtime);
     let dispatcher = new RelayDispatcher(campaign, actors, participants);
@@ -256,16 +251,9 @@ export async function runScenario(output: string, python: string): Promise<Docum
     });
 
     // FAULT: SIGKILL both persistent services after delivery, before the worker subscribes.
-    const relayUrl = relayServer.url,
-      relayPort = Number(new URL(relayUrl).port);
-    const relayExit = once(relayServer.process, "exit");
-    relayServer.process.kill("SIGKILL");
-    await relayExit;
-    relayServer = await launchRelay(output, relayPort);
-    const recoveredRelay = new AgentRelay({
-      workspaceKey: relay.workspaceKey,
-      baseUrl: relayServer.url,
-    });
+    // A remote engine is not ours to kill; every Relay client is dropped and reconnected.
+    const relayRestart = await relayTarget.restart();
+    const recoveredRelay = relayTarget.connect(relay.workspaceKey!);
     const reconnected = {} as Participants;
     for (const role of participantRoles)
       reconnected[role] = await recoveredRelay.workspace.reconnect({
@@ -425,13 +413,15 @@ export async function runScenario(output: string, python: string): Promise<Docum
       phase: 3,
       mode: "scripted-role-handlers-with-real-Relay-and-Terse",
       relaySdk: "14.0.0",
-      relayEngine: "12.0.0",
+      relayEngine:
+        relayTarget.kind === "local" ? "@relaycast/engine 12.0.0 (loopback)" : relayTarget.url,
+      relayWorkspaces: relayTarget.workspaces,
       terse: "0.14.0",
       faultsInjected: [
         "lost-send-response",
         "duplicate-relay-copy",
         "forged-relay-copy",
-        "relay-sigkill",
+        relayRestart,
         "terse-sigkill",
         "worker-crash-after-completion",
         "duplicate-work-notification",
@@ -472,7 +462,7 @@ export async function runScenario(output: string, python: string): Promise<Docum
     await writeFile(join(output, "verification.json"), JSON.stringify(report, null, 2));
     return report;
   } finally {
-    await relayServer?.stop();
+    await relayTarget?.stop();
     await runtime.stop();
   }
 }

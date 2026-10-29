@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import time
 import hashlib
+import httpx
 from fastapi.testclient import TestClient
 from services import api
 from services.core import store
@@ -122,3 +123,26 @@ def test_production_scan_round_trip_and_campaign_reference(tmp_path, monkeypatch
         assert missing.status_code == 404
         assert c.post("/campaigns", json={"production_scan": "../x"}).status_code == 422
         assert c.post("/production/scans", json={"name": "x", "traces": "", "extra": 1}).status_code == 422
+
+
+def test_health_reports_the_engine_the_relay_bridge_uses(monkeypatch):
+    bridges = {
+        "local": {"local": True, "transport": "SDK 14.0.0 · Engine 12.0.0", "endpoint": "127.0.0.1:7528"},
+        "hosted": {
+            "local": False,
+            "transport": "SDK 14.0.0 · Relaycast API v1",
+            "endpoint": "cast.agentrelay.com",
+        },
+    }
+    for kind, bridge in bridges.items():
+
+        def get(url, timeout, bridge=bridge):
+            return httpx.Response(200, json={"ok": True, **bridge} if url.endswith("/health") else {})
+
+        monkeypatch.setattr(api.httpx, "get", get)
+        with TestClient(api.app, base_url=LOCAL) as c:
+            relay = c.get("/health").json()["services"]["relay"]
+        assert relay["connected"] is True
+        assert relay["mode"] == ("Local runtime" if kind == "local" else "Hosted Relaycast")
+        assert relay["transport"] == bridge["transport"]
+        assert relay["endpoint"] == bridge["endpoint"]

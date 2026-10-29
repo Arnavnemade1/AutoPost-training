@@ -15,6 +15,10 @@ children = []
 logs = []
 (ROOT / "data").mkdir(exist_ok=True)
 settings = dotenv_values(ROOT / ".env")
+# Unset or loopback: this command runs a local Relaycast engine. Otherwise the bridge uses
+# that engine, e.g. the hosted https://cast.agentrelay.com.
+RELAY_URL = settings.get("FORGE_RELAY_URL") or os.environ.get("FORGE_RELAY_URL") or "http://127.0.0.1:7528"
+LOCAL_RELAY = httpx.URL(RELAY_URL).host in ("127.0.0.1", "localhost")
 
 
 def healthy(url):
@@ -24,13 +28,15 @@ def healthy(url):
         return False
 
 
-def start(name, cmd, url):
+def start(name, cmd, url, env=None):
     if healthy(url):
         print(f"{name}: using existing service", flush=True)
         return
     log = (ROOT / "data" / f"{name}.log").open("a")
     logs.append(log)
-    child = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=log, start_new_session=True)
+    child = subprocess.Popen(
+        cmd, cwd=ROOT, stdout=log, stderr=log, start_new_session=True, env={**os.environ, **(env or {})}
+    )
     children.append(child)
     for _ in range(90):
         if child.poll() is not None:
@@ -67,17 +73,23 @@ try:
         [str(ROOT / ".venv/bin/durable-actors"), "generate", "--out-dir", "services/actors/generated"],
         check=True,
     )
+    if LOCAL_RELAY:
+        start(
+            "relaycast",
+            [
+                "node",
+                "services/relay/server.mjs",
+                "data/relaycast.db",
+                "7528",
+            ],
+            "http://127.0.0.1:7528",
+        )
     start(
-        "relaycast",
-        [
-            "node",
-            "services/relay/server.mjs",
-            "data/relaycast.db",
-            "7528",
-        ],
-        "http://127.0.0.1:7528",
+        "relay-bridge",
+        ["node", "services/relay/bridge.mjs"],
+        "http://127.0.0.1:7529/health",
+        {"FORGE_RELAY_URL": RELAY_URL},
     )
-    start("relay-bridge", ["node", "services/relay/bridge.mjs"], "http://127.0.0.1:7529/health")
     start(
         "api",
         [sys.executable, "-m", "uvicorn", "services.api:app", "--host", "127.0.0.1", "--port", "8000"],

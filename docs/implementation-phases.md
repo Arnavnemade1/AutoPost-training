@@ -101,12 +101,13 @@ Initial findings:
   and execute a real optimization/reload smoke test.
 - Agent Relay's unversioned introduction and versioned 7.1.1 messaging pages describe
   different interfaces. Phase 3 selected npm `@agent-relay/sdk@14.0.0` and tested it
-  against `@relaycast/engine@12.0.0` locally; a hosted Relay workspace is unverified.
+  against `@relaycast/engine@12.0.0` locally, then against the hosted engine at
+  `cast.agentrelay.com` ([hosted Relay verification](verification/relay-hosted.md)).
 - Terse has active lifecycle changes upstream. Persistence and serialized execution
   must be tested using the selected installed version.
 - The event page was not readable through the documentation fetch. Event rules,
   prebuilt-code eligibility, and submission requirements remain unverified.
-- No GPU provider, paid compute allocation, live Relay workspace, Terse deployment,
+- No GPU provider, paid compute allocation, Agent Relay Cloud account, Terse deployment,
   or recording setup has been verified by this workstream.
 
 ## Phase 1 — Measurable training core (first implementation)
@@ -163,7 +164,8 @@ Implemented under `services/orchestrator/` with `ResearchWorkflowActor` in
 `packages/terse-actors/`. The [actor contract](actor-contract.md) describes the
 outbox, and [local verification](verification/phase3-local.md) records each gate
 check, injected fault and limitation. Gates were met locally against a loopback
-Relaycast engine, not a hosted Relay workspace. Role handlers are scripted; Phase 4
+Relaycast engine; the same suite later passed against the hosted engine
+([hosted Relay verification](verification/relay-hosted.md)). Role handlers are scripted; Phase 4
 replaces the director's fixed choices with evidence-driven selection.
 
 ## Phase 4 — Evidence-driven autonomous experiment selection

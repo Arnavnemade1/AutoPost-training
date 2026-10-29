@@ -66,6 +66,13 @@ def health():
         try:
             r = httpx.get(url, timeout=3)
             services[name] = {"connected": r.status_code < 500, "mode": "Local runtime"}
+            if name == "relay" and r.status_code == 200:
+                bridge = r.json()
+                services[name].update(
+                    mode="Local runtime" if bridge.get("local", True) else "Hosted Relaycast",
+                    transport=bridge.get("transport"),
+                    endpoint=bridge.get("endpoint"),
+                )
         except httpx.HTTPError:
             services[name] = {"connected": False, "mode": "Unavailable"}
     services["director"] = {

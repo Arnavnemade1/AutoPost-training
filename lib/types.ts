@@ -214,7 +214,13 @@ export type Health = {
   version: string;
   services: Record<
     string,
-    { connected: boolean; mode: string; model?: string }
+    {
+      connected: boolean;
+      mode: string;
+      model?: string;
+      transport?: string;
+      endpoint?: string;
+    }
   >;
 };
 export const TERMINAL = ["completed", "failed", "cancelled", "interrupted"];

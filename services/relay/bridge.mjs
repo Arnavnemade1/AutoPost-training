@@ -1,20 +1,31 @@
 import { AgentRelay } from "@agent-relay/sdk";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dispatcher, roles } from "./delivery.mjs";
 
-const baseUrl = process.env.FORGE_RELAY_URL || "http://127.0.0.1:7528";
+const baseUrl = (
+  process.env.FORGE_RELAY_URL || "http://127.0.0.1:7528"
+).replace(/\/+$/, "");
+const local = ["127.0.0.1", "localhost"].includes(new URL(baseUrl).hostname);
 const names = roles;
 await mkdir("data", { recursive: true });
 let saved;
 try {
   saved = JSON.parse(await readFile("data/relay-credentials.json", "utf8"));
+  // Credentials belong to one engine; a key for the local engine means nothing hosted.
+  if ((saved.baseUrl ?? "http://127.0.0.1:7528") !== baseUrl) saved = undefined;
 } catch {
   /* First boot. */
 }
 const relay = saved
   ? new AgentRelay({ workspaceKey: saved.key, baseUrl })
-  : await AgentRelay.createWorkspace({ name: "Forge Research Lab", baseUrl });
+  : // Hosted workspace names are global and idempotent (the key is returned only on first
+    // creation), so the name carries a random suffix.
+    await AgentRelay.createWorkspace({
+      name: `Forge Research Lab ${randomUUID().slice(0, 8)}`,
+      baseUrl,
+    });
 const agents = {};
 const tokens = saved?.tokens || {};
 for (const name of names) {
@@ -25,7 +36,7 @@ for (const name of names) {
 }
 await writeFile(
   "data/relay-credentials.json",
-  JSON.stringify({ key: relay.workspaceKey, tokens }),
+  JSON.stringify({ baseUrl, key: relay.workspaceKey, tokens }),
   { mode: 0o600 },
 );
 
@@ -38,8 +49,11 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           ok: true,
           agents: names,
-          transport: "Agent Relay 14 / Relaycast 8.10.1",
-          local: true,
+          transport: local
+            ? "SDK 14.0.0 · Engine 12.0.0"
+            : "SDK 14.0.0 · Relaycast API v1",
+          local,
+          endpoint: new URL(baseUrl).host,
         }),
       );
     if (req.method !== "POST" || req.url !== "/message") {
@@ -58,8 +72,9 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({ error: error.message }));
   }
 });
-server.listen(7529, "127.0.0.1", () =>
-  console.log("Forge Agent Relay bridge ready on 7529"),
+const port = Number(process.env.FORGE_RELAY_BRIDGE_PORT || 7529);
+server.listen(port, "127.0.0.1", () =>
+  console.log(`Forge Agent Relay bridge ready on ${port}`),
 );
 process.on("SIGTERM", () => {
   server.close();

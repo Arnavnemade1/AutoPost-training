@@ -872,8 +872,9 @@ export function ConnectionsView({ health }: { health: Health | null }) {
       icon: "message",
       description:
         "Real assignments, findings and corrections between five registered research identities.",
-      version: "SDK 14.0.0 · Engine 8.10.1",
-      endpoint: "127.0.0.1:7528",
+      version:
+        health?.services.relay?.transport || "SDK 14.0.0 · Engine 12.0.0",
+      endpoint: health?.services.relay?.endpoint || "127.0.0.1:7528",
     },
     {
       id: "director",
