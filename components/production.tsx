@@ -13,6 +13,17 @@ import { Dialog } from "./dialog";
 import { Icon } from "./icon";
 import { Empty, PanelHeader } from "./views";
 
+// Measured on scan-d2f134cd: 24 training steps left every held-out production
+// failure unfixed (forge-f530d7fa); 96 steps fixed 11 of 33 (forge-ad0318ee).
+const PRODUCTION_CAMPAIGN = {
+  strategies: ["targeted_sft", "broad_sft"],
+  max_experiments: 2,
+  train_steps: 96,
+  dev_samples: 24,
+  final_samples: 24,
+  max_seconds: 5400,
+};
+
 const PAGE = 6;
 const TRACES_LIMIT = 8_000_000;
 const LABELS_LIMIT = 2_000_000;
@@ -306,7 +317,7 @@ function ScanReport({
         body: JSON.stringify({
           name: `Production failures · ${scan.name}`.slice(0, 80),
           production_scan: scan.id,
-          strategies: ["targeted_sft", "broad_sft"],
+          ...PRODUCTION_CAMPAIGN,
         }),
       });
       onCampaign(campaign);

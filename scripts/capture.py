@@ -37,6 +37,10 @@ def main():
     parser.add_argument("--campaign")
     parser.add_argument("--launch", action="store_true")
     parser.add_argument(
+        "--production-scan",
+        help="With --launch: start from the Production failures page and click 'Train on these failures'",
+    )
+    parser.add_argument(
         "--wait-for-idle", action="store_true", help="Queue one capture until the GPU campaign is terminal"
     )
     parser.add_argument("--no-tour", action="store_true", help="Keep the camera on the command center")
@@ -70,7 +74,25 @@ def main():
     start = datetime.now(timezone.utc).isoformat()
     client = httpx.Client(timeout=60)
     prelaunch = None
-    if args.launch:
+    if args.launch and args.production_scan:
+        known = {s["id"] for s in client.get("http://127.0.0.1:8000/campaigns").json()}
+        browser("find", "role", "button", "click", "--name", "Production failures", "--exact")
+        browser("wait", "--fn", "document.body.innerText.includes('Train on these failures')")
+        browser("wait", "--fn", f"document.body.innerText.includes({json.dumps(args.production_scan)})")
+        time.sleep(6)  # let the viewer read the scan before training starts
+        prelaunch = ROOT / "artifacts" / "prelaunch-recording.png"
+        browser("screenshot", str(prelaunch))
+        prelaunch_time = time.monotonic()
+        browser("find", "role", "button", "click", "--name", "Train on these failures")
+        for _ in range(60):
+            fresh = [s for s in client.get("http://127.0.0.1:8000/campaigns").json() if s["id"] not in known]
+            if fresh:
+                args.campaign = fresh[0]["id"]
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError("Campaign did not initialize; prelaunch capture is preserved")
+    elif args.launch:
         known = {s["id"] for s in client.get("http://127.0.0.1:8000/campaigns").json()}
         browser("find", "role", "button", "click", "--name", "New campaign")
         for name, value in [
