@@ -39,3 +39,31 @@ class ResourceLimits(Contract):
     min_disk_free_gib: Annotated[float, Field(ge=1)] = 8.0
     max_output_mib: Annotated[int, Field(ge=1, le=2048)] = 256
     mps_memory_fraction: Annotated[float, Field(gt=0, le=0.45)] = 0.3
+
+
+class AblationVariant(Contract):
+    """One predeclared protocol variant. Only prompt and length settings may vary."""
+
+    name: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")]
+    num_fewshot: Annotated[int, Field(ge=0, le=5)] | None = None
+    apply_chat_template: bool | None = None
+    max_new_tokens: Annotated[int, Field(ge=1, le=1024)] | None = None
+    max_prompt_tokens: Annotated[int, Field(ge=32, le=4096)] | None = None
+
+
+class AblationSpec(Contract):
+    variants: Annotated[list[AblationVariant], Field(min_length=2, max_length=6)]
+
+
+def ablation_protocols(
+    base: HarnessProtocol, spec: AblationSpec
+) -> list[tuple[str, HarnessProtocol]]:
+    protocols = []
+    for variant in spec.variants:
+        overrides = variant.model_dump(exclude={"name"}, exclude_none=True)
+        protocols.append((variant.name, HarnessProtocol(**{**base.model_dump(), **overrides})))
+    if len({name for name, _ in protocols}) != len(protocols):
+        raise ValueError("Ablation variant names must be unique")
+    if len({p.model_dump_json() for _, p in protocols}) != len(protocols):
+        raise ValueError("Ablation variants must produce distinct protocols")
+    return protocols

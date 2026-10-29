@@ -50,6 +50,34 @@ repeated selection make development results exploratory even when a p-value is s
 Only development reports emit suggested next experiments. They never copy evaluation
 answers into training. A strict gain with a flexible-score decline blocks release.
 
+## Prompt and length ablation
+
+A development gain can come from formatting or from the other policy being cut off by the
+completion cap (the saved-output audit found both). `ablation` reruns one baseline/candidate
+pair under predeclared protocol variants before any training recipe is selected:
+
+```sh
+forge-harness ablation \
+  --config /absolute/path/to/experiment.json \
+  --checkpoint /absolute/path/to/run/checkpoint \
+  --expected-hash <adapter-directory-sha256> \
+  --protocol examples/harness-qwen-development.json \
+  --variants examples/harness-qwen-ablation.json \
+  --limits examples/harness-local-limits.json \
+  --output /new/ablation-directory
+```
+
+Variants may change only `num_fewshot`, `apply_chat_template`, `max_new_tokens` and
+`max_prompt_tokens`; seed, model, device and precision stay fixed. Two to six distinct,
+uniquely named variants are allowed. The variant list is written to `ablation.json` before
+generation starts, and each variant is an ordinary sealed development bundle under
+`variant-<name>/`. `summary.json` reports each variant's strict and flexible deltas and
+truncation counts, the examples that gained in every variant, and a verdict: **robust**
+(every variant passes the development release gate), **fragile** (only some do) or
+**no_gain**. `gain_without_truncation` says whether any variant in which neither policy
+hit the cap still passes. `verify` recomputes the summary from the variant evidence. The
+run is development-only and exploratory; it does not replace a larger disjoint set.
+
 ## Resource behavior
 
 Every generation job takes the existing host model-job lock, disables automatic batch

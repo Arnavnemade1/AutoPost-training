@@ -17,8 +17,8 @@ from .artifacts import (
 from .config import load_config
 from .data import load_dataset, load_tasks, verify_separation
 from .harness import harness_identity, task_path
-from .harness_analysis import compare_harness
-from .harness_config import HarnessProtocol, ResourceLimits
+from .harness_analysis import compare_harness, summarize_ablation
+from .harness_config import AblationSpec, HarnessProtocol, ResourceLimits, ablation_protocols
 from .harness_resources import output_bytes, preflight_resources, supervised
 
 
@@ -46,6 +46,11 @@ def verify_bundle(root: Path, expected: str | None = None) -> dict:
         for side, report in (("baseline", baseline), ("candidate", candidate)):
             if report.get("raw_sha256") != file_sha256(root / f"{side}.raw.json"):
                 raise ValueError("Raw harness evidence checksum mismatch")
+    if (root / "ablation.json").exists():
+        if summarize_ablation(ablation_entries(root)) != json.loads(
+            (root / "summary.json").read_text()
+        ):
+            raise ValueError("Ablation summary differs from variant evidence")
     return {
         "status": "verified",
         "files": len(actual),
@@ -289,3 +294,71 @@ def audit_legacy(run: Path, output: Path) -> dict:
         },
     )
     return {**seal_bundle(output), "comparison": comparison}
+
+
+def ablation_entries(root: Path) -> list[dict]:
+    plan = json.loads((root / "ablation.json").read_text())
+    entries = []
+    for variant in plan["variants"]:
+        directory = root / f"variant-{variant['name']}"
+        verify_bundle(directory)
+        baseline = json.loads((directory / "baseline.json").read_text())
+        if baseline["protocol"] != variant["protocol"]:
+            raise ValueError(f"Variant {variant['name']} ran a different protocol")
+        entries.append(
+            {
+                "name": variant["name"],
+                "protocol": variant["protocol"],
+                "comparison": json.loads((directory / "comparison.json").read_text()),
+            }
+        )
+    return entries
+
+
+def ablation_run(
+    config_path: Path,
+    checkpoint: Path,
+    expected_hash: str,
+    output: Path,
+    base: HarnessProtocol,
+    spec: AblationSpec,
+    limits: ResourceLimits,
+) -> dict:
+    """Run predeclared prompt/length variants of one development pair, then summarize.
+
+    The variant list is written before any generation so it cannot be chosen after
+    seeing results. Each variant is an ordinary sealed development bundle.
+    """
+    protocols = ablation_protocols(base, spec)
+    new_directory(output, limits)
+    write_json(
+        output / "ablation.json",
+        {
+            "schema_version": 1,
+            "base_protocol": base.model_dump(),
+            "candidate_sha256": expected_hash,
+            "variants": [{"name": n, "protocol": p.model_dump()} for n, p in protocols],
+        },
+    )
+    declared = file_sha256(output / "ablation.json")
+    try:
+        for name, protocol in protocols:
+            development_run(
+                config_path,
+                checkpoint,
+                expected_hash,
+                output / f"variant-{name}",
+                protocol,
+                limits,
+            )
+        if file_sha256(output / "ablation.json") != declared:
+            raise ValueError("Ablation plan changed during execution")
+        summary = summarize_ablation(ablation_entries(output))
+        write_json(output / "summary.json", summary)
+        return {"status": "completed", **seal_bundle(output), "summary": summary}
+    except BaseException as error:
+        write_json(
+            output / "failure.json",
+            {"status": "failed", "error": str(error), "partial_results_are_not_scores": True},
+        )
+        raise
