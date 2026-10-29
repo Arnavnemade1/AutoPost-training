@@ -239,7 +239,7 @@ async function provision(
         manifest: join(fixture, "data/train.manifest.json"),
       },
       base: { data: "full", learningRate: 0.01, maxSteps: 6 },
-      limits: { ...limits, minLearningRate: 0.001, maxLearningRate: 0.1, maxSteps: 24 },
+      limits: { ...limits, minLearningRate: 0.001, maxLearningRate: 0.01, maxSteps: 24 },
       costMicroUsd: 100000,
       maxExperiments: 4,
       timeouts: { runMs: 420000, evaluationMs: 300000 },
