@@ -1,13 +1,20 @@
 import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
+const port = process.env.PORT || "3000";
+const trustedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+const trustedOrigins = new Set([...trustedHosts].map((h) => `http://${h}`));
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params;
+  // Check Host on every method: a DNS-rebound page reaches this server under
+  // its own hostname with a matching Origin, so Origin === Host proves nothing.
+  if (!trustedHosts.has(request.headers.get("host") ?? "")) {
+    return Response.json({ detail: "Untrusted host" }, { status: 403 });
+  }
   const origin = request.headers.get("origin");
-  const host = request.headers.get("host") || request.nextUrl.host;
-  if (request.method === "POST" && origin && new URL(origin).host !== host) {
+  if (origin && !trustedOrigins.has(origin)) {
     return Response.json(
       { detail: "Untrusted request origin" },
       { status: 403 },

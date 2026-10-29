@@ -40,14 +40,22 @@ async def lifespan(_app):
 app = FastAPI(title="Forge research control plane", lifespan=lifespan)
 
 
+API_PORT = httpx.URL(os.environ.get("FORGE_API_URL", "http://127.0.0.1:8000")).port or 8000
+TRUSTED_HOSTS = {f"127.0.0.1:{API_PORT}", f"localhost:{API_PORT}"}
+TRUSTED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
+
+
 @app.middleware("http")
 async def local_boundary(request: Request, call_next):
-    if request.method not in {"GET", "HEAD", "OPTIONS"}:
-        origin = request.headers.get("origin")
-        if origin and origin not in {"http://localhost:3000", "http://127.0.0.1:3000"}:
-            from fastapi.responses import JSONResponse
+    # Every method checks Host: a DNS-rebound page reaches 127.0.0.1 under its
+    # own hostname, so a same-origin check alone would let it read and mutate.
+    from fastapi.responses import JSONResponse
 
-            return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
+    if request.headers.get("host") not in TRUSTED_HOSTS:
+        return JSONResponse({"detail": "Untrusted host"}, status_code=403)
+    origin = request.headers.get("origin")
+    if origin and origin not in TRUSTED_ORIGINS:
+        return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
     return await call_next(request)
 
 

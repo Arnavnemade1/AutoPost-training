@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from services import api
 from services.core import store
 
+LOCAL = "http://127.0.0.1:8000"
+
 
 def test_single_gpu_slot_serializes_concurrent_launches(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DATA", tmp_path)
@@ -30,7 +32,7 @@ def test_single_gpu_slot_serializes_concurrent_launches(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "actor", lambda _: CampaignAuthority())
     monkeypatch.setattr(api, "governance", lambda _: GovernanceAuthority())
     monkeypatch.setattr(api, "spawn", spawn)
-    with TestClient(api.app) as c:
+    with TestClient(api.app, base_url=LOCAL) as c:
 
         def create(_):
             return c.post("/campaigns", json={}).status_code
@@ -46,7 +48,7 @@ def test_single_gpu_slot_serializes_concurrent_launches(tmp_path, monkeypatch):
 
 
 def test_unknown_config_rejected_and_cross_origin_mutations_blocked():
-    with TestClient(api.app) as c:
+    with TestClient(api.app, base_url=LOCAL) as c:
         assert c.post("/campaigns", json={"arbitrary_command": "no"}).status_code == 422
         assert (
             c.post("/campaigns", json={}, headers={"origin": "https://untrusted.example"}).status_code == 403
@@ -73,9 +75,20 @@ def test_download_serves_exact_bytes_and_blocks_tampering_and_path_escape(tmp_pa
             ],
         }
     )
-    with TestClient(api.app) as client:
+    with TestClient(api.app, base_url=LOCAL) as client:
         response = client.get("/campaigns/download/artifacts/good")
         assert response.status_code == 200 and response.content == content
         target.write_bytes(b"changed")
         assert client.get("/campaigns/download/artifacts/good").status_code == 409
         assert client.get("/campaigns/download/artifacts/escape").status_code == 404
+
+
+def test_dns_rebound_hosts_are_refused_for_reads_and_writes():
+    # A rebound page reaches 127.0.0.1 with its own Host and a matching Origin.
+    rebound = {"host": "evil.example:8000", "origin": "http://evil.example:8000"}
+    with TestClient(api.app, base_url=LOCAL) as c:
+        assert c.get("/campaigns", headers=rebound).status_code == 403
+        assert c.get("/campaigns", headers={"host": "evil.example:8000"}).status_code == 403
+        assert c.post("/campaigns", json={}, headers=rebound).status_code == 403
+        assert c.get("/campaigns").status_code == 200
+        assert c.get("/campaigns", headers={"origin": "http://127.0.0.1:3000"}).status_code == 200
