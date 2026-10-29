@@ -318,7 +318,7 @@ export function ExperimentDetail({
               Seed: campaign?.config.seed,
               Dataset: "openai/gsm8k, disjoint train slice",
               "Reward version": "exact-answer-v1",
-              Precision: "float16 on Metal or CUDA",
+              Precision: `float16 on ${e.training?.device?.name ?? "Metal or CUDA"}`,
             }).map(([k, v]) => (
               <div key={k}>
                 <span>{k}</span>

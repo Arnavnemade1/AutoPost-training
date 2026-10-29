@@ -12,6 +12,7 @@ import {
   View,
   agentNames,
   duration,
+  hardwareLabel,
 } from "@/lib/types";
 import { ForgeMark, Icon } from "./icon";
 import { Benchmark, LossChart, ResearchGraph } from "./charts";
@@ -361,6 +362,13 @@ export function Lab() {
                 {health?.services.relay.connected ? "Connected" : "Offline"}
               </small>
             </button>
+            <button onClick={() => navigate("connections")}>
+              <span
+                className={`static-dot ${health?.compute ? "" : "muted-dot"}`}
+              />
+              <span>Compute</span>
+              <small>{computeName(health)}</small>
+            </button>
           </div>
           <button className="docs-link" onClick={() => setDialog("docs")}>
             <Icon name="book" size={17} />
@@ -521,6 +529,14 @@ export function Lab() {
                     </span>
                     <span className="meta-divider" />
                     <span>GSM8K subset</span>
+                    {hardwareLabel(campaign.hardware) && (
+                      <>
+                        <span className="meta-divider" />
+                        <span title="Hardware that runs this campaign's training and evaluation">
+                          {hardwareLabel(campaign.hardware)}
+                        </span>
+                      </>
+                    )}
                   </div>
                   <div className="campaign-status">
                     <Status value={campaign.status} />
@@ -568,7 +584,7 @@ export function Lab() {
                       </div>
                       <span className="tag">
                         <Icon name="chip" size={14} />
-                        Local GPU ready
+                        {computeName(health)} ready
                       </span>
                     </div>
                   )}
@@ -1039,7 +1055,11 @@ export function Lab() {
             <p>
               Launch a campaign with an objective, an experiment count and a
               compute time limit. The initial supported model is
-              Qwen2.5-0.5B-Instruct. Runs execute on the local GPU.
+              Qwen2.5-0.5B-Instruct. Runs execute on{" "}
+              {health?.compute?.backend === "modal"
+                ? `a Modal NVIDIA ${health.compute.gpu} GPU`
+                : "the local GPU"}
+              .
             </p>
             <h3>02 / Follow real experiments</h3>
             <p>
@@ -1066,8 +1086,10 @@ export function Lab() {
               <Icon name="info" />
               <span>
                 The current release uses SFT and a disclosed GSM8K subset with a
-                custom numeric scorer. The full official benchmark harness,
-                broad safety testing and cloud GPU scheduling are not enabled.
+                custom numeric scorer.{" "}
+                {health?.compute?.backend === "modal"
+                  ? "The full official benchmark harness and broad safety testing are not enabled. Each campaign runs on one Modal GPU at a time."
+                  : "The full official benchmark harness, broad safety testing and cloud GPU scheduling are not enabled."}
               </span>
             </div>
           </div>
@@ -1279,4 +1301,10 @@ function SearchDialog({
       </div>
     </Dialog>
   );
+}
+
+function computeName(health: Health | null) {
+  return health?.compute?.backend === "modal"
+    ? `Modal ${health.compute.gpu}`
+    : "Local GPU";
 }
