@@ -19,6 +19,7 @@ from services.core.engine import (
     cancelled,
     checkpoint_zip,
     governance,
+    react,
     send,
     transition,
 )
@@ -248,7 +249,8 @@ def run(cid):
 
                 store.patch(cid, apply)
 
-            send(cid, "director", "data", "EXPERIMENT_PROPOSED", proposal["hypothesis"], expid)
+            # The director's decision is announced to the whole research room.
+            send(cid, "director", "data", "EXPERIMENT_PROPOSED", proposal["hypothesis"], expid, route="room")
             review = add_review(
                 cid,
                 {
@@ -276,6 +278,15 @@ def run(cid):
                 "trainer",
                 "EXPERIMENT_APPROVED",
                 f"Provenance checked. {len(train_rows)} permitted training rows. LoRA rank {proposal['lora_rank']}, learning rate {proposal['learning_rate']}, {config['train_steps']} steps.",
+                expid,
+            )
+            send(
+                cid,
+                "director",
+                "trainer",
+                "TRAINING_ASSIGNED",
+                f"Run {expid} ({proposal['strategy'].replace('_', ' ')}) within {reservation} reserved seconds. "
+                "Report the checkpoint to the evaluator, not to me.",
                 expid,
             )
             transition(
@@ -351,6 +362,16 @@ def run(cid):
                 "TRAINING_COMPLETED",
                 f"{expid} saved. Weights changed: {result['weights_changed']}. SHA-256 {result['sha256'][:16]}. Reload independently for evaluation.",
                 expid,
+            )
+            # Governance answers in this checkpoint's thread once the evidence is in.
+            checkpoint_post = send(
+                cid,
+                "trainer",
+                "governance",
+                "CHECKPOINT_SAVED",
+                f"{expid} checkpoint is ready for independent review. SHA-256 {result['sha256'][:16]}.",
+                expid,
+                route="room",
             )
             transition(cid, "evaluating", "Loading the saved adapter into a fresh model for evaluation")
             experiment.update("evaluating", "{}")
@@ -455,6 +476,9 @@ def run(cid):
                     f"{expid} passed independent checks. Development change: {(evaluation['score'] - baseline['score']) * 100:+.1f} percentage points.",
                     expid,
                 )
+                verdict = (
+                    f"Approved for promotion. Integrity, regression and provenance checks passed for {expid}."
+                )
             else:
                 send(
                     cid,
@@ -464,6 +488,20 @@ def run(cid):
                     f"{expid} will not be promoted. Choose the next experiment using these findings.",
                     expid,
                 )
+                reasons = "; ".join(code.replace("_", " ").capitalize() for code in review["reason_codes"])
+                verdict = f"Not promoted. {reasons or 'No improvement over the current best'}."
+            promoted = best is not None and best["id"] == expid
+            send(
+                cid,
+                "governance",
+                "trainer",
+                "CHECKPOINT_VERDICT",
+                verdict,
+                expid,
+                route="room",
+                reply_to=checkpoint_post["message_id"],
+            )
+            react(cid, "governance", checkpoint_post["message_id"], "white_check_mark" if promoted else "x")
         # Selection freezes before protected data is read. No improvement is a valid outcome.
         selection = best["key"] if best else "baseline"
         actor(cid).freeze_selection(selection)
@@ -570,6 +608,7 @@ def run(cid):
             "governance",
             "CAMPAIGN_COMPLETED",
             f"Final evaluation complete. {VERDICT_SUMMARY[final['improvement_claim']]} All sample-level evidence preserved.",
+            route="room",
         )
         transition(cid, "completed", "Research complete. Evidence package ready.")
         from services.core.cloud import mirror

@@ -43,7 +43,8 @@ the loopback suite (`.github/workflows/orchestrator.yml`).
   anonymous Relaycast workspaces.
 - Separate processes and credentials per role. One process still holds every Relay
   token, as in the local harness.
-- Push delivery. Recipients still poll; Relay inbox acknowledgements and push
-  subscriptions are not used.
+- Push delivery against the hosted engine. On `forge/relay-core` recipients drain their Relay
+  inbox, ack each delivery and are woken by an observer push stream (`docs/agent-relay.md`);
+  that path is verified against the loopback engine only.
 - Hosted rate limits or quotas under a long real-model campaign. Only the fixture
   campaign ran against the hosted engine.

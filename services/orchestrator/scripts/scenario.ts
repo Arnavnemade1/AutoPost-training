@@ -116,6 +116,7 @@ export async function runScenario(output: string, python: string): Promise<Docum
       viaReconciliation: 0,
       duplicateCopies: 0,
       rejectedCopies: 0,
+      alreadyHandled: 0,
     };
     const receive = async (
       role: (typeof participantRoles)[number],
@@ -148,8 +149,8 @@ export async function runScenario(output: string, python: string): Promise<Docum
     );
     invariant(lostSendResponse, "lost-response injection executed");
     await dispatcher.flush();
-    const researcherHistory = await participants.data.messages.list("forge-data", { limit: 100 });
-    invariant(researcherHistory.length === 1, "transport retry did not duplicate the post");
+    const researcherInbox = await participants.data.inbox.list({ limit: 100 });
+    invariant(researcherInbox.items.length === 1, "transport retry did not duplicate the DM");
 
     await receive("data", async () => {
       await dispatcher.publish(
@@ -242,11 +243,11 @@ export async function runScenario(output: string, python: string): Promise<Docum
       (d) => d.message.kind === "TRAINING_ASSIGNMENT",
     )!.message;
     await participants.coordinator.sendMessage({
-      to: "#forge-worker",
+      to: "@forge-worker",
       text: canonical(assignment),
     });
     await participants.director.sendMessage({
-      to: "#forge-worker",
+      to: "@forge-worker",
       text: canonical({ ...assignment, body: { ...assignment.body, jobId: "forged-job" } }),
     });
 
@@ -349,11 +350,11 @@ export async function runScenario(output: string, python: string): Promise<Docum
         newTrainingAuthorized: false,
       });
     });
-    await dispatcher.flush();
-    // FAULT: later chatter pushes the correction off a one-message page (Relaycast lists
-    // newest first), so the recipient must reconcile it from the outbox's recorded Relay ID.
+    // FAULT: earlier chatter fills a one-item inbox page (the Relay inbox is FIFO), so the
+    // recipient must reconcile the correction from the outbox's recorded Relay ID.
     for (const text of ["status: correction noted", "status: awaiting new evidence"])
-      await participants.director.sendMessage({ to: "#forge-data", text });
+      await participants.director.sendMessage({ to: "@forge-data", text });
+    await dispatcher.flush();
     const correctionReceipt = await receive(
       "data",
       async () => undefined,
@@ -361,7 +362,20 @@ export async function runScenario(output: string, python: string): Promise<Docum
     );
     invariant(
       correctionReceipt.viaReconciliation === 1 && correctionReceipt.viaRelay === 0,
-      "a message missing from the channel page is reconciled from the outbox",
+      "a message missing from the inbox page is reconciled from the outbox",
+    );
+    // The reconciled correction's Relay delivery is still queued: it is closed without
+    // re-running the handler, the same path as a Relay ack lost after the Forge ack.
+    const staleReceipt = await receive("data", async () => {
+      throw new Error("handler must not re-run for acknowledged work");
+    });
+    invariant(staleReceipt.alreadyHandled === 1, "a stale Relay delivery is acked, not re-run");
+    const inboxes: Record<string, number> = {};
+    for (const role of participantRoles)
+      inboxes[role] = (await participants[role].inbox.list({ limit: 200 })).items.length;
+    invariant(
+      Object.values(inboxes).every((n) => n === 0),
+      "every Relay inbox is drained: each delivery was acked or failed",
     );
     await settleAtReservedBound(dispatcher, experimentId, join(output, "cost", "tiny-lora.json"));
     const vetoHonored = await rejects(
@@ -425,12 +439,15 @@ export async function runScenario(output: string, python: string): Promise<Docum
         "terse-sigkill",
         "worker-crash-after-completion",
         "duplicate-work-notification",
-        "message-beyond-channel-page",
+        "message-beyond-inbox-page",
+        "relay-ack-after-reconciliation",
       ],
       preflightBlocked,
       transport,
       workerReceipt,
       correctionReceipt,
+      staleReceipt,
+      relayInboxesAfterRun: inboxes,
       reconciliation: { afterRestart, earlyCompletion, final },
       messages: deliveries.map((d) => ({
         sequence: d.sequence,
