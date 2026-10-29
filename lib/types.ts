@@ -185,6 +185,14 @@ export type Campaign = {
   cancel_requested?: boolean;
   recording?: { status: string };
 };
+export type RelayDelivery = {
+  role: Agent;
+  delivery_id: string | null;
+  state: string;
+  read_at: string | null;
+  source: "inbox" | "readback";
+};
+export type RelayReaction = { emoji: string; count: number; agents: Agent[] };
 export type Event = {
   id: string;
   timestamp: string;
@@ -193,16 +201,34 @@ export type Event = {
   agent: Agent;
   recipient?: Agent;
   category?: string;
+  /** Forge message ID; message_pending carries it inside `message`. */
+  message_id?: string;
+  message?: {
+    id: string;
+    recipient?: Agent;
+    route?: "dm" | "room";
+    category?: string;
+  };
   relay_id?: string;
+  route?: "dm" | "room" | "thread";
+  thread_parent_id?: string | null;
+  emoji?: string;
+  reactions?: RelayReaction[];
   receipt?: {
     delivered: boolean;
     recipient_readback_verified: boolean;
+    route?: "dm" | "room" | "thread";
+    conversation_id?: string | null;
+    woke_by?: "push" | "inbox-sweep";
+    deliveries?: RelayDelivery[];
+    read_by?: { name: Agent; read_at: string | null }[];
     room?: {
       name: string;
       id: string;
-      message_id: string;
-      readback_verified: boolean;
-      readers: Agent[];
+      /** Earlier receipts copied every DM into the room. */
+      message_id?: string;
+      readback_verified?: boolean;
+      readers?: Agent[];
     };
   };
   experiment_id?: string;
