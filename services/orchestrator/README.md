@@ -25,6 +25,7 @@ FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm test
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run demo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen
+# Real-model runs default to Apple mps; set FORGE_DEVICE=cuda or cpu elsewhere.
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture-grpo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen-grpo \
   --start-adapter /absolute/path/to/approved/sft/checkpoint
@@ -58,6 +59,17 @@ GSM8K **train**-split partition (128 train, 16 development, 16 regression; the t
 split is never read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on Apple MPS; it needs the
 model and dataset in the local Hugging Face cache and takes tens of minutes. Neither
 profile provisions paid compute.
+
+The worker runs with `HF_HUB_OFFLINE=1`, so on a fresh machine cache exactly the pinned
+model and the GSM8K **train** file first (never the test file):
+
+```sh
+"$FORGE_PYTHON" -c "from huggingface_hub import snapshot_download as s; s('Qwen/Qwen2.5-0.5B-Instruct', revision='7ae557604adf67be50417f59c2c2f167def9a775')"
+"$FORGE_PYTHON" -c "from huggingface_hub import hf_hub_download as h; h('openai/gsm8k', repo_type='dataset', revision='740312add88f781978c0658806c59bc2815b9866', filename='main/train-00000-of-00001.parquet')"
+```
+
+Off Apple hardware set `FORGE_DEVICE=cpu` (or `cuda`). On an 8-core Arm CPU VM the `qwen`
+campaign took 92 minutes and its 128-step extension exceeded the one-hour run budget.
 
 `fixture-grpo` runs the same campaign with method `grpo` on an offline tiny model
 warm-started on the answer format (about 40 seconds); `--from-sft` first trains a short

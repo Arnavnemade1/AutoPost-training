@@ -34,7 +34,10 @@ vetoed. A research command center renders campaigns from stored files and record
 with 100x and 120x exports (verified on a fixture campaign). Sealed final evaluation
 is now implemented as a separate, one-attempt evaluator with a pinned EleutherAI
 harness, paired development diagnostics, resource guards, checkpoint freeze and
-release bundles. No sealed final evaluation or benchmark improvement is claimed.
+release bundles. No sealed final evaluation or benchmark improvement is claimed. A clean-machine
+Azure reproduction of the Qwen campaign, ablated under the official harness, showed the
+6/16 gain is answer-format specific (zero-shot strict 0/16 for both policies), so the
+release gate refused it ([record](docs/verification/azure-cpu-campaign.md)).
 
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
 - [Architecture and trust boundaries](docs/architecture.md)

@@ -147,3 +147,76 @@ def compare_harness(baseline: dict, candidate: dict) -> dict:
             "This measures GSM8K only; it does not establish general or safety superiority.",
         ],
     }
+
+
+def summarize_ablation(entries: list[dict]) -> dict:
+    """Ask whether a development gain survives every predeclared prompt/length variant.
+
+    Each entry holds a variant ``name``, its ``protocol`` and the paired ``comparison``.
+    All variants must evaluate the same examples, so per-example stability is comparable.
+    """
+    if len(entries) < 2:
+        raise ValueError("An ablation needs at least two variants")
+    ids = None
+    variants = []
+    for entry in entries:
+        comparison = entry["comparison"]
+        if comparison["role"] != "development":
+            raise ValueError("Ablations run on development data only")
+        strict, flexible = comparison["metrics"]["strict"], comparison["metrics"]["flexible"]
+        if ids is None:
+            ids = strict["num_examples"]
+        elif strict["num_examples"] != ids:
+            raise ValueError("Ablation variants evaluated different example counts")
+        variants.append(
+            {
+                "name": entry["name"],
+                "protocol": {
+                    k: entry["protocol"][k]
+                    for k in (
+                        "num_fewshot",
+                        "apply_chat_template",
+                        "max_new_tokens",
+                        "max_prompt_tokens",
+                    )
+                },
+                "strict_delta_percentage_points": strict["delta_percentage_points"],
+                "flexible_delta_percentage_points": flexible["delta_percentage_points"],
+                "strict": {k: strict[k] for k in ("baseline_correct", "candidate_correct")},
+                "flexible": {k: flexible[k] for k in ("baseline_correct", "candidate_correct")},
+                "truncation": comparison["truncation"],
+                "release_gate_passed": comparison["development_release_gate"]["passed"],
+                "improved_ids": comparison["improved_ids"],
+                "regressed_ids": comparison["regressed_ids"],
+            }
+        )
+    passed = [v["release_gate_passed"] for v in variants]
+    verdict = "robust" if all(passed) else "fragile" if any(passed) else "no_gain"
+    stable = set(variants[0]["improved_ids"])
+    regressed: set[str] = set()
+    for variant in variants:
+        stable &= set(variant["improved_ids"])
+        regressed |= set(variant["regressed_ids"])
+    # A gain that appears only where generations were cut off is a length artifact.
+    uncapped = [
+        v for v in variants if v["truncation"]["baseline"] == v["truncation"]["candidate"] == 0
+    ]
+    return {
+        "role": "development",
+        "num_examples": ids,
+        "variants": variants,
+        "verdict": verdict,
+        "rule": (
+            "robust: every variant improves strict accuracy without a flexible drop; "
+            "fragile: only some do; no_gain: none do."
+        ),
+        "stable_strict_gain_ids": sorted(stable),
+        "strict_regression_ids_any_variant": sorted(regressed),
+        "uncapped_variants": [v["name"] for v in uncapped],
+        "gain_without_truncation": any(v["release_gate_passed"] for v in uncapped),
+        "limitations": [
+            "Variants are predeclared, but all run on development data: exploratory only.",
+            "A robust verdict on a small set still needs a larger disjoint development set.",
+            "Flexible extraction can select an incidental number; it is a secondary diagnostic.",
+        ],
+    }

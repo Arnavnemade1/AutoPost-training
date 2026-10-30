@@ -92,7 +92,7 @@ logs remain preserved. Neither emits a comparison or a benchmark score.
 The private registry enforces the one-attempt workflow, but same-user local execution
 is not an adversarial security boundary. Deploy the evaluator under a separate OS
 owner/container before calling it independent. Source/runtime hashes and task identity
-are pinned; clean-machine reproduction has not yet been executed. The complete sealed
+are pinned; clean-machine reproduction of the test suites passed ([record](clean-machine.md)); a clean-machine model run has not been executed. The complete sealed
 run, matching two-minute demo recording, and current event-rule acceptance remain pending.
 
 See the [harness runbook](../../services/training-core/HARNESS.md) and the upstream
