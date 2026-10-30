@@ -167,12 +167,16 @@ export function Briefing({
         <div>
           <span>Best approved · development</span>
           <strong className={c.best ? "accent-text" : ""}>
-            {count(c.best?.evaluation)}
+            {c.best || !TERMINAL.includes(c.status)
+              ? count(c.best?.evaluation)
+              : "None"}
           </strong>
           <p>
             {c.best
               ? `${c.best.id} · development selection only`
-              : "A candidate needs evidence and approval"}
+              : TERMINAL.includes(c.status)
+                ? "No checkpoint beat the original, so it was kept"
+                : "A candidate needs evidence and approval"}
           </p>
         </div>
       </section>
