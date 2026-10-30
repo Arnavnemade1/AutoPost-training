@@ -1,7 +1,7 @@
 # Logos on the landing page (`/`)
 
 The "Built with" strip shows only software Forge depends on, using each project's own
-mark. Every file in `public/site/logos/` was downloaded on 2026-10-29 from the source
+mark. Every file in `public/site/logos/` was downloaded from the source
 below and recolored to one neutral grey (`#6b6b6b`, 5.3:1 on white). Geometry is
 unchanged: no path was drawn or edited.
 

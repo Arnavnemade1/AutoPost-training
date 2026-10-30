@@ -53,7 +53,7 @@ beside the default one on other ports: Terse `--port` plus
 `FORGE_RELAY_URL`, `FORGE_RELAY_BRIDGE`, `FORGE_API_URL` and `FORGE_WEB_PORT` for the
 API, and `PORT`/`--port` for Next.
 
-## Measured (October 29, 2026)
+## Measured
 
 Smoke test (`scripts/modal-smoke.py 8 8`): cuda, `NVIDIA H100 80GB HBM3`, torch
 2.14.1+cu130; 8 development rows in 28.0 GPU seconds (3.5 s per row); 8 training steps,

@@ -1,6 +1,6 @@
 # Clean-machine reproduction (test suites)
 
-Date: 2026-10-29. Commit: `ca8bc3d`. Machine: fresh Linux x86_64 cloud container, 4 CPU
+Commit: `ca8bc3d`. Machine: fresh Linux x86_64 cloud container, 4 CPU
 cores, 15 GB RAM, no GPU, no prior Forge state, caches or credentials. Outbound network
 went through a policy proxy that denied `download.pytorch.org`, `huggingface.co` and
 `management.azure.com`.

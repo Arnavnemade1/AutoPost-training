@@ -1,6 +1,6 @@
 # Hosted Agent Relay verification
 
-Date: 2026-10-29. Branch `forge/autonomous-lab`, macOS arm64, SDK `@agent-relay/sdk@14.0.0`,
+Branch `forge/autonomous-lab`, macOS arm64, SDK `@agent-relay/sdk@14.0.0`,
 hosted engine `https://cast.agentrelay.com` (Relaycast v1 API).
 
 Until this record, every Relay check ran against a loopback `@relaycast/engine`. The same

@@ -1,6 +1,6 @@
 # Azure CPU campaign reproduction and prompt/length ablation
 
-Date: 2026-10-29. Source: commit `1e88a54`, shipped to the VM as a `git archive` and
+Source: commit `1e88a54`, shipped to the VM as a `git archive` and
 verified by SHA-256 (`cd2d9951…e418`) before unpacking. Machine: Azure Standard_D8ps_v5
 (8 Arm cores, 32 GB, no GPU), Ubuntu 24.04, centralus, no inbound ports. Stack pinned as
 in CI: Python 3.11, torch 2.9.0 CPU, transformers 4.57.1, peft 0.17.1, lm_eval 0.4.9.2,

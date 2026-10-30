@@ -1,7 +1,7 @@
 # Landing page reference measurements
 
 The Forge landing page (`/`) borrows the layout system, type metrics, spacing and
-motion of a public infrastructure landing page studied on 2026-10-29. This file records
+motion of a public infrastructure landing page. This file records
 what was measured, so every value on the landing page (`/`) can be traced to a number. No logos,
 illustrations, images, icons, fonts or copy were taken from it; only measurements.
 
