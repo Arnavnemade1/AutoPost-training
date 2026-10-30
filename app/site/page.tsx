@@ -198,8 +198,8 @@ export default function SitePage() {
           <div className={s.container}>
             <div className={s.heroText}>
               <h1 className={s.h1}>
-                <span className={s.soft}>Turn your agent&apos;s mistakes </span>
-                into your own model
+                <span className={s.soft}>Post-training, </span>
+                fully automated
               </h1>
               <p className={`${s.lead} ${s.heroSub}`}>
                 Forge reads your agent&apos;s real conversations, trains a

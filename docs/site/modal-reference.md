@@ -199,3 +199,22 @@ illustration that changes state every 5.05 s through 4 states per 20.2 s loop (L
 mistakes, Train, Result), each state entering with the measured figure transition
 (opacity, 16px translate, 3px blur, 500ms out-quart) and the DotGrid behind it brightening
 under the pointer like the reference particles.
+
+## Client libraries visible from outside
+
+Method: fetched the homepage HTML with curl, read the SvelteKit start script
+(`node_ids: [0, 30, 214]`), then followed every static and dynamic `import()` from the
+entry chunks and those three route nodes (117 chunks, 2.3 MB under `/_app/immutable/`).
+Searched them for package names, globals, version strings and license banners. No code
+was reused.
+
+| Library | Evidence | Role there | Used on Forge |
+| --- | --- | --- | --- |
+| SvelteKit + Svelte 5 | `/_app/immutable/entry/start.*.js`, `__sveltekit_*` global, `https://svelte.dev/e/async_derived_orphan` errors, `$$slots`/`$$events` props, `svelte-*` class hashes | Framework | No: Forge's page is Next.js, matching the repo |
+| three.js r180 | `__THREE__=\`180\``, `THREE.Quaternion` warnings, `isWebGL2:!0` in chunk `CIVZvFSw2` (523 KB); a hero chunk marks its context `__marketingWebgl` and builds a 2D glyph atlas | Renders the hero particle art and the product-panel animations | No: that art is their illustration. Forge's hero is a DOM replay of real campaign data; its dot field is React Bits DotGrid on raw WebGL2 (no three.js needed for points) |
+| lucide (Svelte icons) | icon objects like `{name:\`hard-drive\`,size:24,node:[[\`path\`…` in 5 chunks | UI icons | Forge keeps its own icon set (`components/icon.tsx`), same 24px / 1.5 stroke family |
+| sonner | `[data-sonner-toast]` rules and `sonner-*` keyframes in CSS | Toasts | Not needed |
+| Animation library | none found: no GSAP, ScrollTrigger, Lenis, framer-motion/motion, popmotion, Lottie, Rive, react-spring or Svelte `tweened` | Motion is CSS transitions (Tailwind utilities with custom `ease-v2-out-quart`), CSS keyframes and `requestAnimationFrame` loops (11 chunks) | Forge uses the same approach: CSS transitions with the measured curves and an rAF timeline that runs only on screen |
+| Smooth scroll | none (`scroll-behavior: auto`; in-page jumps are JS-eased) | | Same: a 550 ms out-quart JS scroll for the side nav |
+| Fonts | `@font-face` in `0.*.css`: ABC Diatype (licensed), Inter Variable, DM Mono ("rolled"), Fira Mono, Goga | Diatype for all UI text, DM Mono for code | Geist (OFL) for Diatype; **DM Mono (OFL) for code, the same family** |
+| Syntax highlighting | no Shiki, Prism or highlight.js; code spans are colored by hand-written markup | | Forge's code card is plain, typed text |

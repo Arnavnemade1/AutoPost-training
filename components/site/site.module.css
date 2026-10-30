@@ -21,7 +21,7 @@
   --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
   --pad: 64px;
   --header: 64px;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --mono: var(--site-mono), "IBM Plex Mono", ui-monospace, monospace;
 
   background: var(--bg);
   color: var(--fg);

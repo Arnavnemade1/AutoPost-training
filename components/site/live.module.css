@@ -10,7 +10,7 @@
   --line-strong: #dcdcdc;
   --chip: #f2f2f2;
   --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --mono: var(--site-mono), "IBM Plex Mono", ui-monospace, monospace;
   color: var(--fg);
 }
 .mono {
@@ -33,16 +33,22 @@
   translate: 0 16px;
   filter: blur(3px);
   pointer-events: none;
+  /* Leaving: quick fade so two states never overlap (the reference morph completes
+     inside one 500 ms sample). */
   transition:
-    opacity 500ms var(--ease-out),
-    translate 500ms var(--ease-out),
-    filter 500ms var(--ease-out);
+    opacity 200ms var(--ease-out),
+    translate 200ms var(--ease-out),
+    filter 200ms var(--ease-out);
 }
 .sceneOn {
   opacity: 1;
   translate: 0 0;
   filter: none;
   pointer-events: auto;
+  transition:
+    opacity 500ms var(--ease-out) 150ms,
+    translate 500ms var(--ease-out) 150ms,
+    filter 500ms var(--ease-out) 150ms;
 }
 .rise {
   animation: rise 250ms var(--ease-out) both;
@@ -213,8 +219,8 @@
   border: 1px solid var(--line);
 }
 .flagQ {
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 14px;
+  line-height: 20px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -257,8 +263,8 @@
 }
 .msgText {
   margin: 2px 0 0;
-  font-size: 13px;
-  line-height: 19px;
+  font-size: 14px;
+  line-height: 20px;
   color: var(--muted);
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -270,8 +276,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  width: min(720px, 100%);
-  justify-self: center;
+  padding: 0 12px;
 }
 .chart {
   display: block;
@@ -324,15 +329,15 @@
 .bigNum,
 .bigNumSm {
   margin: 8px 0 20px;
-  font-size: 64px;
-  line-height: 64px;
+  font-size: 96px;
+  line-height: 96px;
   font-weight: 500;
   letter-spacing: -1.6px;
   font-variant-numeric: tabular-nums;
 }
 .bigNumSm {
-  font-size: 44px;
-  line-height: 48px;
+  font-size: 64px;
+  line-height: 72px;
   letter-spacing: -0.9px;
 }
 .of {
@@ -347,12 +352,12 @@
 }
 .squares {
   display: grid;
-  grid-template-columns: repeat(12, 14px);
-  gap: 6px;
+  grid-template-columns: repeat(12, 18px);
+  gap: 8px;
 }
 .square {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 3px;
   border: 1px solid var(--line-strong);
   background: #ffffff;
@@ -798,11 +803,20 @@
     line-height: 22px;
   }
   .bigNum {
-    font-size: 52px;
-    line-height: 56px;
+    font-size: 64px;
+    line-height: 68px;
+  }
+  .bigNumSm {
+    font-size: 48px;
+    line-height: 52px;
   }
   .squares {
     grid-template-columns: repeat(11, 14px);
+    gap: 6px;
+  }
+  .square {
+    width: 14px;
+    height: 14px;
   }
   .roles span:last-child {
     font-size: 11px;
