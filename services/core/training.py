@@ -9,13 +9,12 @@ import time
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, PeftModel, get_peft_model
-from datasets import load_dataset
-from huggingface_hub import hf_hub_download
 from forge_training.config import Example
-from forge_training.data import verify_separation
 from forge_training.modeling import prompt_for
+from forge_training.tasks import GSM8K_TASK
 from forge_training.training import encode_completion, collate_completion
 from services.core.contracts import MODEL_ID, MODEL_REVISION, model_spec  # noqa: F401
+from services.core.packs.gsm8k import benchmark_data  # noqa: F401  (the original GSM8K loader)
 from services.core.protocol import (  # noqa: F401  (re-exported for the runner)
     DATASET_REVISION,
     PROMPT_VERSION,
@@ -24,50 +23,6 @@ from services.core.protocol import (  # noqa: F401  (re-exported for the runner)
     extract,
     sha,
 )
-
-
-def benchmark_data(config):
-    # Training and dev are disjoint slices of the official train split. Test stays sealed.
-    path = hf_hub_download(
-        "openai/gsm8k",
-        repo_type="dataset",
-        revision=DATASET_REVISION,
-        filename="main/train-00000-of-00001.parquet",
-    )
-    ds = load_dataset("parquet", data_files={"train": path}, split="train")
-    ids = list(range(len(ds)))
-    random.Random(config["seed"]).shuffle(ids)
-    dev_ids = ids[: config["dev_samples"]]
-    train_ids = ids[config["dev_samples"] : config["dev_samples"] + 384]
-    train = [dict(ds[i]) | {"id": f"train-{i}"} for i in train_ids]
-    dev = [dict(ds[i]) | {"id": f"train-{i}"} for i in dev_ids]
-    verify_separation([Example(**r) for r in train], [Example(**r) for r in dev])
-
-    # Only the final evaluator calls this closure after checkpoint selection is frozen.
-    def sealed():
-        from services.core import store
-
-        path = hf_hub_download(
-            "openai/gsm8k",
-            repo_type="dataset",
-            revision=DATASET_REVISION,
-            filename="main/test-00000-of-00001.parquet",
-        )
-        test = load_dataset("parquet", data_files={"sealed": path}, split="sealed")
-        exposed = {
-            p["id"]
-            for s in store.campaigns()
-            for p in s.get("final", {}).get("baseline", {}).get("predictions", [])
-        }
-        exposed.update(p for campaign in store.campaigns() for p in campaign.get("sealed_ids", []))
-        available = [i for i in range(len(test)) if f"test-{i}" not in exposed]
-        if len(available) < config["final_samples"]:
-            raise ValueError("Insufficient unqueried final examples; refuse test-set reuse")
-        rng = random.Random(config["seed"] + 1)
-        chosen = rng.sample(available, config["final_samples"])
-        return [dict(test[i]) | {"id": f"test-{i}"} for i in chosen]
-
-    return train, dev, sealed
 
 
 def device_name():
@@ -134,11 +89,14 @@ def unload(model):
         torch.cuda.empty_cache()
 
 
-def predict(model, tokenizer, rows):
-    """Greedy answers for a batch of rows. With one row this is exactly the original protocol."""
-    texts = [prompt_for(tokenizer, row["question"]) for row in rows]
+def predict(model, tokenizer, rows, task=GSM8K_TASK):
+    """Greedy answers for a batch of rows. With one row this is exactly the original protocol.
+
+    Scoring happens in protocol.collect, on this machine, with the task's checker.
+    """
+    texts = [prompt_for(tokenizer, row["question"], task.instruction) for row in rows]
     inputs = tokenizer(texts, return_tensors="pt", padding=True).to(model.device)
-    limit = model_spec(getattr(model, "forge_model_id", None))["max_new_tokens"]
+    limit = task.max_new_tokens or model_spec(getattr(model, "forge_model_id", None))["max_new_tokens"]
     tokens = model.generate(
         **inputs, do_sample=False, max_new_tokens=limit, pad_token_id=tokenizer.eos_token_id
     )
@@ -154,40 +112,50 @@ def predict(model, tokenizer, rows):
         if end is not None:
             generated = generated[: end + 1]
         output = tokenizer.decode(generated, skip_special_tokens=True)
-        answer, expected = extract(output), extract(row["answer"])
         predictions.append(
             {
                 "id": row["id"],
                 "question": row["question"],
                 "output": output,
-                "answer": answer,
-                "expected": expected,
-                "correct": equal(answer, expected),
                 "finish_reason": "stop" if end is not None else "length",
             }
         )
     return predictions
 
 
-def generate(model, tokenizer, rows, cancelled, batch_size=1):
+def generate(model, tokenizer, rows, cancelled, batch_size=1, task=GSM8K_TASK):
     model.eval()
     with torch.inference_mode():
         for start in range(0, len(rows), batch_size):
             if cancelled():
                 raise InterruptedError("Campaign stopped")
-            yield from predict(model, tokenizer, rows[start : start + batch_size])
+            yield from predict(model, tokenizer, rows[start : start + batch_size], task)
 
 
-def evaluate(model, tokenizer, rows, progress, cancelled, split="development", worlds=None, batch_size=1):
+def evaluate(
+    model, tokenizer, rows, progress, cancelled, split="development", worlds=None, batch_size=1, pack=None
+):
+    from services.core import packs
+
+    pack = pack or packs.get()
     started = time.monotonic()
-    stream = generate(model, tokenizer, rows, cancelled, batch_size)
+    stream = generate(model, tokenizer, rows, cancelled, batch_size, pack.task)
     model_id = getattr(model, "forge_model_id", None)
     return collect(
-        rows, stream, progress, split, worlds, started, device_info(), batch_size, model_id=model_id
+        rows,
+        stream,
+        progress,
+        split,
+        worlds,
+        started,
+        device_info(),
+        batch_size,
+        model_id=model_id,
+        pack=pack,
     )
 
 
-def train(proposal, config, rows, folder, progress, cancelled):
+def train(proposal, config, rows, folder, progress, cancelled, task=GSM8K_TASK):
     torch.manual_seed(config["seed"])
     random.seed(config["seed"])
     device = device_info()
@@ -218,8 +186,8 @@ def train(proposal, config, rows, folder, progress, cancelled):
         sampled = sampled[: max(32, len(sampled) // 2)]
     random.Random(config["seed"]).shuffle(sampled)
     random.Random(config["seed"]).shuffle(production)
-    # Each step trains one record, so targeted runs see production failures first.
-    if proposal["strategy"] == "targeted_sft":
+    # Each step trains one record, so targeted and distilled runs see production failures first.
+    if proposal["strategy"] in ("targeted_sft", "distill_sft"):
         sampled = production + sampled
     else:
         sampled = sampled + production
@@ -229,7 +197,8 @@ def train(proposal, config, rows, folder, progress, cancelled):
     excluded = []
     for row in sampled:
         try:
-            records.append(encode_completion(tokenizer, Example(**row), 768))
+            example = Example(id=row["id"], question=row["question"], answer=row["answer"])
+            records.append(encode_completion(tokenizer, example, 768, task.instruction))
             accepted.append(row)
         except ValueError:
             excluded.append(row["id"])
@@ -272,7 +241,7 @@ def train(proposal, config, rows, folder, progress, cancelled):
                 "train_ids": [r["id"] for r in accepted],
                 "excluded_oversize_ids": excluded,
                 "max_sequence_length": 768,
-                "prompt_version": PROMPT_VERSION,
+                "prompt_version": task.prompt_version,
                 "model_id": spec["id"],
                 "model_revision": spec["revision"],
                 "lora_targets": spec["lora_targets"],

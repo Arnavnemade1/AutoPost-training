@@ -1,9 +1,10 @@
 """Skimmable status reports derived exclusively from persisted research evidence."""
 
-from services.core import store
+from services.core import packs, store
 
 
 def build(snapshot, events):
+    pack = packs.get(snapshot.get("config", {}).get("task_pack"))
     experiments = snapshot.get("experiments", [])
     active = next(
         (e for e in experiments if e["status"] in {"training", "evaluating", "approved", "proposed"}),
@@ -33,7 +34,7 @@ def build(snapshot, events):
             "state": "verified" if evidence.get("artifact_verified") else "pending",
         },
         {
-            "label": "Arithmetic regression review",
+            "label": pack.regression_title,
             "state": checkpoint["decision"] if checkpoint else "pending",
         },
     ]
@@ -85,7 +86,7 @@ def build(snapshot, events):
             "checks": checks,
             "blocked_proposals": len(blocked),
             "last_block": blocked[-1] if blocked else None,
-            "regression_scope": "Four arithmetic questions. This is a limited regression check, not a broad safety evaluation.",
+            "regression_scope": pack.regression_label,
         },
         "execution": {
             "terse_worlds": len(snapshot.get("environments", [])),

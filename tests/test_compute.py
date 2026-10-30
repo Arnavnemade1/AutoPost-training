@@ -38,15 +38,13 @@ class FakeRemote:
                     if cancelled():
                         raise InterruptedError("Campaign stopped")
                     answer = self.answers.get(row["id"], protocol.extract(row["answer"]))
+                    # Like the Modal function: raw output only. Scoring happens on this machine.
                     yield (
                         "prediction",
                         {
                             "id": row["id"],
                             "question": row["question"],
                             "output": f"#### {answer}",
-                            "answer": answer,
-                            "expected": protocol.extract(row["answer"]),
-                            "correct": protocol.equal(answer, protocol.extract(row["answer"])),
                             "finish_reason": "stop",
                         },
                     )
@@ -133,6 +131,10 @@ def test_remote_evaluation_streams_progress_and_keeps_worlds_local():
     assert [h["name"] for h in hardware] == [None, "NVIDIA H100 80GB HBM3"]
     assert remote.jobs[0]["adapter"] is None
     assert set(remote.jobs[0]["rows"][0]) == {"id", "question", "answer"}
+    # The prompt travels with the job; the checker stays local.
+    assert remote.jobs[0]["task"]["task_id"] == "gsm8k"
+    assert [p["answer"] for p in result["predictions"]] == ["2", "5", "6"]
+    assert [p["expected"] for p in result["predictions"]] == ["2", "4", "6"]
 
 
 def test_remote_evaluation_sends_the_saved_adapter_bytes(tmp_path):

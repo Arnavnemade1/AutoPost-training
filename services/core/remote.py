@@ -94,10 +94,12 @@ def execute(job, events):
     """Run one evaluation or training job. Progress streams through `events` as it happens."""
     import tempfile
 
+    from forge_training.tasks import GSM8K_TASK, TaskSpec
     from services.core import training
 
     import torch
 
+    task = TaskSpec.model_validate(job["task"]) if job.get("task") else GSM8K_TASK
     started = time.monotonic()
     torch.cuda.reset_peak_memory_stats()
     device = training.device_info()
@@ -106,7 +108,7 @@ def execute(job, events):
         model, tokenizer = _model(job.get("adapter"), job.get("model_id"))
         count = 0
         # Batch size 1, exactly the local protocol: batched greedy decoding changes predictions.
-        for prediction in training.generate(model, tokenizer, job["rows"], lambda: False):
+        for prediction in training.generate(model, tokenizer, job["rows"], lambda: False, task=task):
             events.put(("prediction", prediction))
             count += 1
         return {
@@ -127,6 +129,7 @@ def execute(job, events):
             folder,
             lambda metric: events.put(("metric", metric)),
             lambda: False,  # A local stop cancels this function call outright.
+            task=task,
         )
         files = {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()}
         result["peak_gpu_memory_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)

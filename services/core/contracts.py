@@ -49,6 +49,8 @@ class CampaignConfig(BaseModel):
     name: str = Field(default="Mathematical reasoning", min_length=3, max_length=80)
     model_id: Literal["Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen3.5-4B"] = DEFAULT_MODEL_ID
     benchmark: Literal["gsm8k-subset"] = "gsm8k-subset"
+    # The task this campaign improves. Built-in: gsm8k; uploaded packs are checked by the API.
+    task_pack: str = Field(default="gsm8k", pattern=r"^[a-z0-9][a-z0-9-]{1,63}$")
     final_backend: Literal["shared_scorer", "lm_eval_azure"] = "shared_scorer"
     objective: str = Field(
         default="Improve multi-step mathematical reasoning without benchmark leakage.",
@@ -61,9 +63,11 @@ class CampaignConfig(BaseModel):
     dev_samples: int = Field(default=12, ge=4, le=100)
     final_samples: int = Field(default=12, ge=4, le=100)
     seed: int = Field(default=42, ge=0, le=2147483647)
-    strategies: list[Literal["broad_sft", "targeted_sft", "grpo"]] = Field(
+    strategies: list[Literal["broad_sft", "targeted_sft", "distill_sft", "grpo", "dpo"]] = Field(
         default_factory=lambda: ["broad_sft", "targeted_sft"], min_length=1
     )
+    # A teacher dataset prepared for this task pack (teacher distillation).
+    synthetic_dataset: str | None = Field(default=None, pattern=r"^syn-[0-9a-f]{8}$")
     production_scan: str | None = Field(default=None, pattern=r"^scan-[0-9a-f]{8}$")
 
 

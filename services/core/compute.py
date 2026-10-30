@@ -13,7 +13,7 @@ import os
 import time
 from pathlib import Path
 
-from services.core import protocol
+from services.core import packs, protocol
 
 BACKENDS = ("local", "modal")
 # Files a saved adapter needs to be reloaded elsewhere. Tokenizer files are recreated from the
@@ -56,11 +56,20 @@ class Local:
     def unload(self, model):
         self.training.unload(model)
 
-    def evaluate(self, model, tokenizer, rows, progress, cancelled, split="development", worlds=None):
-        return self.training.evaluate(model, tokenizer, rows, progress, cancelled, split=split, worlds=worlds)
+    def evaluate(
+        self, model, tokenizer, rows, progress, cancelled, split="development", worlds=None, pack=None
+    ):
+        if pack is not None and pack.kind == "preference":
+            from services.core.preference import score_pairs
 
-    def train(self, proposal, config, rows, folder, progress, cancelled):
-        return self.training.train(proposal, config, rows, folder, progress, cancelled)
+            return score_pairs(model, tokenizer, rows, progress, cancelled, split=split, pack=pack)
+        return self.training.evaluate(
+            model, tokenizer, rows, progress, cancelled, split=split, worlds=worlds, pack=pack
+        )
+
+    def train(self, proposal, config, rows, folder, progress, cancelled, pack=None):
+        task = (pack or packs.get()).task
+        return self.training.train(proposal, config, rows, folder, progress, cancelled, task=task)
 
     def close(self):
         pass
@@ -101,13 +110,20 @@ class Remote:
     def unload(self, model):
         pass
 
-    def evaluate(self, model, tokenizer, rows, progress, cancelled, split="development", worlds=None):
+    def evaluate(
+        self, model, tokenizer, rows, progress, cancelled, split="development", worlds=None, pack=None
+    ):
+        pack = pack or packs.get()
+        if pack.kind == "preference":
+            raise RuntimeError("Preference evaluation runs on the local backend only")
         started = time.monotonic()
         job = {
             "kind": "evaluate",
             "rows": [{k: r[k] for k in ("id", "question", "answer")} for r in rows],
             "adapter": model.adapter,
             "model_id": model.model_id,
+            # The prompt travels with the job; the checker stays here and scores what returns.
+            "task": pack.task.model_dump(mode="json"),
         }
         done = {}
 
@@ -122,7 +138,7 @@ class Remote:
 
         events = stream()
         evaluation = protocol.collect(
-            rows, events, progress, split, worlds, started, None, model_id=model.model_id
+            rows, events, progress, split, worlds, started, None, model_id=model.model_id, pack=pack
         )
         for _ in events:  # Drain to the final result; a surplus prediction is a protocol error.
             raise RuntimeError("Remote evaluation returned more predictions than rows")
@@ -135,12 +151,13 @@ class Remote:
             evaluation["peak_gpu_memory_gb"] = done["peak_gpu_memory_gb"]
         return evaluation
 
-    def train(self, proposal, config, rows, folder, progress, cancelled):
+    def train(self, proposal, config, rows, folder, progress, cancelled, pack=None):
         job = {
             "kind": "train",
             "proposal": proposal,
             "config": config,
             "rows": [{k: r[k] for k in ("id", "question", "answer")} for r in rows],
+            "task": (pack or packs.get()).task.model_dump(mode="json"),
         }
         done = {}
         for kind, value in self.client.call(job, cancelled):
