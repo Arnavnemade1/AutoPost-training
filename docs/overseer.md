@@ -147,3 +147,19 @@ because anyone can send a correction and a judge can be wrong.
 
 The cycle runs every `FORGE_OVERSEER_SECONDS` (60 by default, 0 to turn it off) inside the lab
 API. **Check now** on the page, or `python -m services.core.overseer cycle`, runs it at once.
+
+## Measured end to end
+
+1. **Ingest.** 64 real Qwen2.5-0.5B answers (the traces behind `scan-d2f134cd`) were posted to
+   `POST /overseer/traces` as source `support-bot`.
+2. **One cycle.** The free checks flagged 62. The Azure gpt-6-luna judge, sampling at 10%,
+   judged 5 random-sample traces and failed 2 (40%, 95% interval 11.8% to 76.9%).
+3. **Labels.** 64 reviewer labels were entered through `POST /overseer/labels`, and
+   **Send 64 labeled to the lab** exported `scan-ee5bfbec`. Its detector audit: precision
+   100% (62 of 62), recall 98.4%, 0 false alarms.
+4. **Train on these failures.** Campaign `forge-1d447446` (Modal H100, 15:32) fixed 8 of the
+   33 held-out production failures (0/33 to 8/33, validated). The sealed final went from 0/24
+   to 8/24, validated, with exp-002 (broad_sft) selected.
+
+Setup note: the Supabase migration above must be applied before the lab's pull succeeds.
+Without it, every cycle stops with a 404 from `forge_traces`.

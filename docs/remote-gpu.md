@@ -94,3 +94,29 @@ Read this table carefully:
   subsets and are not a paired comparison.
 - **Cost.** The whole task (image builds, two smoke tests, this campaign) metered $1.88
   on Modal.
+
+## Qwen3.5-4B campaign
+
+Campaign `forge-20daea85`, run on the H100 with the "Train on these failures"
+configuration on scan `scan-d2f134cd`: targeted_sft + broad_sft, 2 experiments, 96 steps,
+24 development and 24 final questions. All five roles were model-backed (Azure OpenAI
+gpt-6-luna, [agents](agents.md)).
+
+| | Qwen3.5-4B, base | Best checkpoint |
+| --- | --- | --- |
+| Development | 21/24 | exp-001 and exp-002: 20/24, not promoted |
+| Held-out production failures | 27/33 | 27/33 |
+| Sealed final | 19/24 | 19/24, original model kept; no improvement claimed |
+| Wall time | 24:13 | |
+
+Reading the result:
+
+- **No improvement, correctly.** The 4B already answers most of these questions, and most
+  production failures came from the 0.5B's traffic. Both checkpoints scored lower on
+  development, so governance promoted neither, and the council's model review advised holding
+  both. The campaign kept the original model.
+- **The director repeated itself.** It proposed targeted_sft at learning rate 1e-4 and rank 8
+  twice. Training is deterministic, so exp-002's adapter matched exp-001's byte for byte
+  (SHA-256 `11cf3daa...`). The director now gets one more chance when it repeats, and a
+  second repeat ends research instead of rerunning the same training.
+- **Speed.** About 20 s per 4B answer at batch 1 with 512 new tokens.
