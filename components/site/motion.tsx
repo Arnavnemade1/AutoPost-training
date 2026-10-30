@@ -163,8 +163,7 @@ export type Quote = {
   initials: string;
   from: string;
   to: string;
-  category: string;
-  time: string;
+  route: string;
   text: string;
 };
 
@@ -210,7 +209,7 @@ export function QuoteCarousel({ quotes }: { quotes: Quote[] }) {
                   <span className={s.eyebrowIcon}>
                     <Icon name="message" size={12} />
                   </span>
-                  From the recorded run
+                  What the agents said
                 </span>
                 <blockquote>{q.text}</blockquote>
               </div>
@@ -220,9 +219,7 @@ export function QuoteCarousel({ quotes }: { quotes: Quote[] }) {
                   <span>
                     {q.from} to {q.to}
                   </span>
-                  <span>
-                    {q.category} · {q.time} UTC
-                  </span>
+                  <span>{q.route}</span>
                 </span>
               </figcaption>
             </figure>
@@ -247,8 +244,7 @@ export function QuoteCarousel({ quotes }: { quotes: Quote[] }) {
             ))}
           </div>
           <p className={s.sideNote}>
-            Real Agent Relay messages from campaign forge-e84925eb, quoted word
-            for word.
+            Messages from a real Forge run, in plain words.
           </p>
         </div>
       </div>

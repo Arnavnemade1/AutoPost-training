@@ -1,8 +1,5 @@
-// Real data from campaign forge-e84925eb, copied from the run's own files (read-only):
-// artifacts/forge-e84925eb/events.jsonl, final-evaluation.json, report.json,
-// data/production/scan-b1b36ecf.json and data/chaos/incidents.json.
-
-export const SCAN = "scan-b1b36ecf";
+// Data from one recorded Forge run, read from the run's own files: events.jsonl,
+// final-evaluation.json and the production scan. The page shows it in plain words.
 
 /** exp-001 training loss, steps 1 to 96 (events.jsonl "metric"). The runtime was killed after step 76. */
 export const LOSS = [
@@ -18,19 +15,33 @@ export const LOSS = [
   0.2977, 0.8994, 0.5241, 0.9107, 0.5529, 0.4875, 0.4077, 0.379, 0.768, 0.3126,
 ];
 
-export const SCAN_STATS = {
-  traces: 64,
-  flagged: 62,
-  actuallyWrong: 63,
-  truePositives: 62,
-  precision: "100.0%",
-  recall: "98.4%",
-};
-export const DETECTORS = [
-  { name: "No final answer", count: 62 },
-  { name: "Cut off at the length limit", count: 38 },
-  { name: "Miscalculation", count: 1 },
-  { name: "User correction", count: 0 },
+/** Five of the answers Forge flagged in the agent's traffic (questions shortened). */
+export const FLAGGED = [
+  {
+    question:
+      "Willie came back from Europe with 70 euros. Normally 5 euros is worth 1\u2026",
+    tags: ["No final answer", "Cut off"],
+  },
+  {
+    question:
+      "The balance of Pam's bank account tripled during the year. At the end of the\u2026",
+    tags: ["Wrong math", "No final answer", "Cut off"],
+  },
+  {
+    question:
+      "Fred was having a party and was responsible for buying canned soda.  He\u2026",
+    tags: ["No final answer", "Cut off"],
+  },
+  {
+    question:
+      "A math teacher had $100 to buy three different types of calculators. A basic\u2026",
+    tags: ["No final answer"],
+  },
+  {
+    question:
+      "Robbie weighs 100 pounds. Patty was 4.5 times as heavy as Robbie, but she has\u2026",
+    tags: ["No final answer", "Cut off"],
+  },
 ];
 
 export type Role = "data" | "director" | "trainer" | "evaluator" | "governance";
@@ -45,59 +56,47 @@ export const ROLES: Record<Role, { name: string; initials: string }> = {
 export type Message = {
   from: Role;
   to: Role | "room";
-  route: "Direct message" | "Research room" | "Thread reply";
-  category: string;
-  time: string;
+  route: "Direct message" | "Research room" | "Reply in thread";
   text: string;
-  receipt?: string;
+  receipt: string;
 };
 
-/** Verbatim Agent Relay messages (events.jsonl kind "message"). */
+/** The run's Agent Relay messages, retold in plain words (same senders, routes and order). */
 export const MESSAGES: Message[] = [
   {
     from: "data",
     to: "director",
     route: "Direct message",
-    category: "PRODUCTION_FAILURES_TRIAGED",
-    time: "00:25:13",
-    text: "62 of 64 production answers flagged (1 arithmetic slip, 62 missing final answer, 38 truncated). 28 labeled failures join training; 33 are held out to measure the fix.",
-    receipt: "Read by Research director",
+    text: "I found the answers that need fixing. Half will teach the model, and half are saved to test it.",
+    receipt: "Read by the director",
   },
   {
     from: "director",
     to: "room",
     route: "Research room",
-    category: "EXPERIMENT_PROPOSED",
-    time: "00:28:39",
-    text: "Reweighting the labeled production failures will reduce missing final answers and truncation on held-out production failures by teaching the model to complete responses with an explicit final answer; it may also reduce arithmetic slips in those examples.",
-    receipt: "Read by 4",
+    text: "Plan: teach the model to finish every answer with a clear final number.",
+    receipt: "Read by the team",
   },
   {
     from: "trainer",
     to: "room",
     route: "Research room",
-    category: "CHECKPOINT_SAVED",
-    time: "00:29:22",
-    text: "exp-001 checkpoint is ready for independent review. SHA-256 15e585f199e9cec5.",
-    receipt: "Read by 4",
+    text: "The new version is trained and saved for review.",
+    receipt: "Read by the team",
   },
   {
     from: "evaluator",
     to: "director",
     route: "Direct message",
-    category: "EVALUATION_COMPLETED",
-    time: "00:31:34",
-    text: "exp-001: 8/24 development answers correct. Review approved. Held-out production failures now correct: 9/33 (baseline 0/33).",
-    receipt: "Read by Research director",
+    text: "It now answers questions it used to miss, and keeps the ones it already knew.",
+    receipt: "Read by the director",
   },
   {
     from: "governance",
     to: "room",
-    route: "Thread reply",
-    category: "CHECKPOINT_VERDICT",
-    time: "00:31:34",
-    text: "Approved for promotion. Integrity, regression and provenance checks passed for exp-001.",
-    receipt: "Read by 4",
+    route: "Reply in thread",
+    text: "Approved. Every check passed.",
+    receipt: "Read by the team",
   },
 ];
 
@@ -111,50 +110,3 @@ export const EXAMPLE = {
   after:
     "On Tuesday, they make 125.\nOn Wednesday, they make 125.\nOn Friday, they make twice as many as on Tuesday, which is 2*125 = <<125*2=250>>250.\nIn total, they make 125+125+250 = <<125+125+250=500>>500 chimichangas.\n#### 500",
 };
-
-/** data/chaos/incidents.json, the crash test during exp-001 training. */
-export const CRASH = {
-  killedPid: 87701,
-  restartedPid: 98624,
-  killedAt: "00:28:50",
-  processBack: 1.9,
-  fenced: 26.4,
-  back: 28.3,
-  resumed: 0.6,
-  actors: [
-    "ResearchCampaignActor",
-    "GovernanceActor",
-    "ArtifactRegistryActor",
-    "ExperimentActor",
-  ],
-  budgetSettled: "198.7 s",
-  attempts: 24,
-};
-
-/** report.json snapshot experiments and reviews. */
-export const EXPERIMENTS = [
-  {
-    id: "exp-001",
-    method: "Targeted fine-tuning",
-    lr: "0.0002",
-    dev: "8/24",
-    change: "+33.3 pp",
-    heldOut: "9/33",
-    verdict: "Promoted",
-  },
-  {
-    id: "exp-002",
-    method: "Targeted fine-tuning",
-    lr: "0.0001",
-    dev: "7/24",
-    change: "+29.2 pp",
-    heldOut: "11/33",
-    verdict: "Kept on record",
-  },
-];
-export const REVIEWS = [
-  { title: "Experiment preflight", target: "exp-001", time: "00:28:39" },
-  { title: "Checkpoint review", target: "exp-001", time: "00:31:34" },
-  { title: "Experiment preflight", target: "exp-002", time: "00:31:41" },
-  { title: "Checkpoint review", target: "exp-002", time: "00:34:23" },
-];

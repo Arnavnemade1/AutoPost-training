@@ -14,9 +14,9 @@ import {
 } from "@/components/site/motion";
 import {
   AgentFlow,
-  AuditCard,
+  FlagList,
   RecoveryTimeline,
-  TypedCode,
+  ShipSteps,
   TypedExample,
 } from "@/components/site/live";
 import {
@@ -24,17 +24,17 @@ import {
   TeamDrawing,
   TracesDrawing,
 } from "@/components/site/drawings";
-import { EXPERIMENTS, MESSAGES, REVIEWS, ROLES } from "@/components/site/data";
+import { MESSAGES, ROLES } from "@/components/site/data";
 import s from "@/components/site/site.module.css";
 
-// Every number on this page comes from campaign forge-e84925eb. Sources are listed in
-// components/site/data.ts and docs/site/modal-reference.md.
+// Written for a first-time visitor: plain words, and the before/after example is the proof.
+// The only number on the page is the run time in the closing line.
 
 const SIDE = [
   { id: "production", label: "Mistakes", icon: "production" },
   { id: "agents", label: "Agents", icon: "chat" },
   { id: "durable", label: "Memory", icon: "terse" },
-  { id: "training", label: "Proof", icon: "results" },
+  { id: "training", label: "Your model", icon: "results" },
 ];
 
 // Official marks only; every one is a dependency in pyproject.toml or package.json.
@@ -80,40 +80,18 @@ const BUILT_WITH: Logo[] = [
 const QUOTES: Quote[] = MESSAGES.map((m) => ({
   initials: ROLES[m.from].initials,
   from: ROLES[m.from].name,
-  to: m.to === "room" ? "the research room" : ROLES[m.to].name,
-  category: m.category,
-  time: m.time,
+  to: m.to === "room" ? "the whole team" : ROLES[m.to].name,
+  route: m.route,
   text: m.text,
 }));
 
-const ACTORS = [
-  ["ResearchCampaign", "The goal, the budget and the best checkpoint"],
-  ["Experiment", "Settings, worker leases and results"],
-  ["Governance", "A signed approval for each checkpoint"],
-  ["ArtifactRegistry", "Every saved file and its checksum"],
-  ["RLWorld", "Math worlds that score each answer"],
-  ["ResearchLedger", "Every diagnosis, idea and decision"],
-];
-
-const LAUNCH = `await fetch("/api/lab/campaigns", {
-  method: "POST",
-  body: JSON.stringify({
-    production_scan: "scan-b1b36ecf",
-    strategies: ["targeted_sft", "broad_sft"],
-    max_experiments: 2,
-    train_steps: 96,
-    dev_samples: 24,
-    final_samples: 24,
-  }),
-});`;
-
-const ARTIFACTS = [
-  ["Dataset provenance", "00:25:13"],
-  ["Baseline evaluation", "00:28:32"],
-  ["exp-001 LoRA weights", "00:29:22"],
-  ["exp-001 checkpoint bundle", "00:29:22"],
-  ["Sealed final evaluation", "00:36:46"],
-  ["Research report", "00:36:46"],
+const KEEPS = [
+  ["Goal and budget", "What the run is for and what it may spend"],
+  ["Experiments", "Every setting and every result"],
+  ["Approvals", "A signed decision for each new version"],
+  ["Saved files", "Every file, with a fingerprint to check it"],
+  ["Practice problems", "The worlds that score each answer"],
+  ["Research notes", "Every idea and decision, in order"],
 ];
 
 function Eyebrow({
@@ -153,36 +131,31 @@ function Feature({
   );
 }
 
-function Scale({
-  before,
-  after,
-  n,
+function RecordList({
+  title,
+  icon,
+  items,
 }: {
-  before: number;
-  after: number;
-  n: number;
+  title: string;
+  icon: string;
+  items: [string, string][];
 }) {
-  const x = (v: number) => `${(v / n / 0.5) * 100}%`;
   return (
-    <div className={s.scale} aria-hidden="true">
-      <div className={s.scaleTrack} />
-      <div
-        className={s.scaleSpan}
-        style={{ left: x(before), width: `calc(${x(after)} - ${x(before)})` }}
-      />
-      <span className={`${s.dot} ${s.dotBefore}`} style={{ left: x(before) }} />
-      <span className={`${s.dot} ${s.dotAfter}`} style={{ left: x(after) }} />
-      <span className={s.dotLabel} style={{ left: x(before) }}>
-        {before}/{n}
-      </span>
-      <span className={s.dotLabel} style={{ left: x(after) }}>
-        {after}/{n}
-      </span>
-      <div className={s.scaleTicks}>
-        <span>0%</span>
-        <span>25%</span>
-        <span>50%</span>
-      </div>
+    <div className={s.recordCard}>
+      <div className={s.recordHead}>{title}</div>
+      <ul className={s.ledger}>
+        {items.map(([name, note]) => (
+          <li key={name}>
+            <span className={s.tick}>
+              <Icon name={icon} size={14} />
+            </span>
+            <span>
+              {name}
+              <span className={s.note}>{note}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -210,8 +183,8 @@ export default function SitePage() {
                 <Link href="/" className={s.btn}>
                   Open the lab
                 </Link>
-                <a href="#results" className={s.btnGhost}>
-                  See the results
+                <a href="#example" className={s.btnGhost}>
+                  See the example
                 </a>
               </div>
             </div>
@@ -228,12 +201,14 @@ export default function SitePage() {
           </div>
         </section>
 
-        {/* One question, before and after */}
+        {/* The proof: one question, before and after */}
         <section className={s.section} id="example">
           <div className={s.container}>
             <div className={s.sectionHead}>
-              <Eyebrow icon="target">Example</Eyebrow>
-              <h2 className={s.h2}>One question, before and after</h2>
+              <Eyebrow icon="target">See it learn</Eyebrow>
+              <h2 className={s.h2}>
+                Questions it used to miss, it now gets right
+              </h2>
             </div>
             <TypedExample />
           </div>
@@ -253,25 +228,24 @@ export default function SitePage() {
                   <div className={s.blockText}>
                     <h3 className={s.h3}>It finds the mistakes</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Upload your agent&apos;s conversations. Forge flags the
-                      answers that went wrong, with no answer key.
+                      Upload your agent&apos;s conversations. Forge spots the
+                      answers that need fixing, all by itself.
                     </p>
                     <div className={s.features}>
-                      <Feature icon="search" title="Four checks">
-                        A missing final answer, a reply that was cut off, a
-                        miscalculation, or a correction from the user.
+                      <Feature icon="search" title="It checks every answer">
+                        Missing answers, replies that were cut off, math slips
+                        and corrections from users.
                       </Feature>
-                      <Feature icon="target" title="Checked by people">
-                        Reviewers confirmed all 62 flagged answers. Forge caught
-                        62 of the 63.
+                      <Feature icon="target" title="Its flags hold up">
+                        Every answer it flagged was confirmed by a person.
                       </Feature>
-                      <Feature icon="lock" title="Test questions set aside">
-                        Anything that matches the final test is removed first.
+                      <Feature icon="lock" title="The final test stays private">
+                        Anything that matches the final test is set aside first.
                       </Feature>
                     </div>
                   </div>
                   <div className={s.visual}>
-                    <AuditCard />
+                    <FlagList />
                   </div>
                 </article>
 
@@ -279,9 +253,9 @@ export default function SitePage() {
                   <div className={s.blockText}>
                     <h3 className={s.h3}>Five agents do the work</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      A data researcher, a director, a trainer, an evaluator and
-                      a governance council. They talk over Agent Relay, and
-                      every message is kept.
+                      A researcher, a director, a trainer, a tester and a
+                      council that approves. They talk to each other, and every
+                      message is kept.
                     </p>
                     <div className={s.features}>
                       <Feature icon="message" title="Direct messages">
@@ -289,14 +263,13 @@ export default function SitePage() {
                         starting.
                       </Feature>
                       <Feature icon="chat" title="A shared room">
-                        Plans, checkpoints and results are posted for the whole
-                        team.
+                        Plans and results are posted for the whole team.
                       </Feature>
                       <Feature icon="governance" title="Replies in threads">
-                        The council answers under each checkpoint.
+                        The council answers right under each new version.
                       </Feature>
                       <Feature icon="check" title="Read receipts">
-                        You can see who read each message, and when.
+                        You can see who read each message.
                       </Feature>
                     </div>
                   </div>
@@ -311,20 +284,18 @@ export default function SitePage() {
                       A record you can always resume from
                     </h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Budgets, reviews and checkpoints live in Terse durable
-                      actors, so a run picks up exactly where it was.
+                      Every goal, approval and saved file lives in a permanent
+                      record, so a run picks up exactly where it was.
                     </p>
                     <div className={s.features}>
                       <Feature icon="alert" title="Stopped on purpose">
-                        In the recorded run we force-stopped the runtime during
-                        training.
+                        We force-stopped Forge in the middle of training.
                       </Feature>
-                      <Feature icon="refresh" title="Back in 28.3 seconds">
-                        All 4 actors came back exactly as they were.
+                      <Feature icon="refresh" title="Back in seconds">
+                        Every record came back exactly as it was.
                       </Feature>
-                      <Feature icon="clock" title="Every second counted once">
-                        Training continued 0.6 seconds later. 198.7 seconds of
-                        compute, counted once.
+                      <Feature icon="clock" title="Right where it left off">
+                        Training carried on from the very same step.
                       </Feature>
                     </div>
                   </div>
@@ -335,40 +306,38 @@ export default function SitePage() {
 
                 <article className={s.block} id="training">
                   <div className={s.blockText}>
-                    <h3 className={s.h3}>It proves the result</h3>
+                    <h3 className={s.h3}>A model that is yours</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Forge tests the new model on questions it never trained
-                      on. Then you download it.
+                      Forge tests the new model on brand-new questions. Then you
+                      download it and run it wherever you like.
                     </p>
                     <div className={s.features}>
                       <Feature
                         icon="production"
-                        title="Saved-for-later failures"
+                        title="Tested on new questions"
                       >
-                        Half of the real failures are kept for testing. 0 of 33
-                        became 9 of 33.
+                        Some real mistakes are kept aside to check the model
+                        after training.
                       </Feature>
-                      <Feature icon="lock" title="A final test, opened once">
-                        1 of 24 became 6 of 24.
+                      <Feature icon="lock" title="A fair final exam">
+                        The final test opens only after the best version is
+                        chosen.
                       </Feature>
-                      <Feature icon="governance" title="A council approves">
-                        The council promotes the checkpoint with the best
-                        practice score.
+                      <Feature icon="governance" title="The best version wins">
+                        The council promotes the version that did best in
+                        practice.
                       </Feature>
                       <Feature icon="download" title="Yours to keep">
                         Download the model, the report and every step of the
                         research.
                       </Feature>
                     </div>
-                    <a href="#results" className={`${s.btn} ${s.blockButton}`}>
-                      See the results
+                    <a href="#example" className={`${s.btn} ${s.blockButton}`}>
+                      See the example
                     </a>
                   </div>
                   <div className={s.visual}>
-                    <TypedCode
-                      title="Start a campaign from your failures"
-                      code={LAUNCH}
-                    />
+                    <ShipSteps />
                   </div>
                 </article>
               </div>
@@ -376,12 +345,12 @@ export default function SitePage() {
           </div>
         </section>
 
-        {/* How it works */}
+        {/* Under the hood */}
         <section className={`${s.section} ${s.band}`} id="platform">
           <div className={s.container}>
             <div className={`${s.sectionHead} ${s.narrow}`}>
               <Eyebrow icon="environments">Under the hood</Eyebrow>
-              <h2 className={s.h2}>Every step leaves evidence you can check</h2>
+              <h2 className={s.h2}>Every step leaves a trail you can check</h2>
             </div>
             <div className={s.cols3}>
               <div className={s.col}>
@@ -401,8 +370,8 @@ export default function SitePage() {
                 </div>
                 <h3 className={s.h3}>The team checks its own work</h3>
                 <p className={s.body}>
-                  The trainer hands each checkpoint to the evaluator, and the
-                  council reviews it against a fixed policy.
+                  The trainer hands each new version to the tester, and the
+                  council reviews it before anything is promoted.
                 </p>
               </div>
               <div className={s.col}>
@@ -412,95 +381,57 @@ export default function SitePage() {
                 </div>
                 <h3 className={s.h3}>Every step is signed and saved</h3>
                 <p className={s.body}>
-                  Each change carries a signature and goes into a journal, so
-                  the whole run can be replayed.
+                  Each change is signed and written down, so the whole run can
+                  be replayed.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Results */}
+        {/* Results, in plain words */}
         <section className={`${s.section} ${s.ruleTop}`} id="results">
           <div className={s.container}>
             <div className={`${s.sectionHead} ${s.narrow}`}>
               <Eyebrow icon="results">Results</Eyebrow>
-              <h2 className={s.h2}>Measured on questions it had never seen</h2>
+              <h2 className={s.h2}>It learns from its own mistakes</h2>
             </div>
-            <div className={s.resultsPanel}>
-              <div className={s.resultRow}>
-                <div className={s.resultLabel}>
-                  <h3>Saved-for-later production failures</h3>
-                  <p className={s.small}>
-                    Real failures from the traffic, kept out of training.
-                  </p>
-                </div>
-                <Scale before={0} after={9} n={33} />
-                <div className={s.gain}>
-                  <div className={s.gainNum}>
-                    +27.3<small>pp</small>
-                  </div>
-                  <p className={s.small}>95% interval +12.1 to +42.4</p>
-                </div>
-              </div>
-              <div className={s.resultRow}>
-                <div className={s.resultLabel}>
-                  <h3>Final test</h3>
-                  <p className={s.small}>
-                    24 grade-school math questions, opened once at the end.
-                  </p>
-                </div>
-                <Scale before={1} after={6} n={24} />
-                <div className={s.gain}>
-                  <div className={s.gainNum}>
-                    +20.8<small>pp</small>
-                  </div>
-                  <p className={s.small}>95% interval +4.2 to +37.5</p>
-                </div>
-              </div>
-            </div>
-            <p className={s.resultsMeta}>
-              Campaign forge-e84925eb · Qwen2.5-0.5B-Instruct · about 12 minutes
-              · paired bootstrap 95% intervals
-            </p>
             <div className={s.cols4}>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
                   <Icon name="check" size={16} />
-                  Every right answer kept
+                  Fixes what it missed
                 </h3>
                 <p className={s.body}>
-                  Every question the original model answered correctly, the new
-                  one still does.
+                  After training, it answers questions it used to miss.
                 </p>
               </div>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
-                  <Icon name="experiments" size={16} />
-                  Picked on practice questions
+                  <Icon name="refresh" size={16} />
+                  Keeps what it knew
                 </h3>
                 <p className={s.body}>
-                  The best checkpoint is chosen from practice scores, so the
-                  test stays fair.
+                  Everything it already answered well, it still answers well.
                 </p>
               </div>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
                   <Icon name="lock" size={16} />
-                  One attempt
+                  Measured fairly
                 </h3>
                 <p className={s.body}>
-                  Each model answers the final test exactly once.
+                  It is tested on brand-new questions, held back from training.
                 </p>
               </div>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
-                  <Icon name="info" size={16} />
-                  What improved
+                  <Icon name="download" size={16} />
+                  Yours to run
                 </h3>
                 <p className={s.body}>
-                  A small model learned to finish its answers in the expected
-                  format.
+                  You download the model and own it, along with what it costs to
+                  run.
                 </p>
               </div>
             </div>
@@ -516,104 +447,73 @@ export default function SitePage() {
                 <h2 className={s.h2}>Every decision is on the record</h2>
               </div>
               <p>
-                Each message, review, checkpoint and score is saved with the
-                campaign. Trace any number back to where it came from.
+                Each message, review and saved file is kept with the run, so you
+                can trace every result back to where it came from.
               </p>
             </div>
             <div className={s.cards3}>
               <div className={s.card}>
-                <div className={s.recordCard}>
-                  <div className={s.recordHead}>Experiments</div>
-                  <table className={s.table}>
-                    <thead>
-                      <tr>
-                        <th>Run</th>
-                        <th>Practice</th>
-                        <th>Held out</th>
-                        <th>Verdict</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {EXPERIMENTS.map((e) => (
-                        <tr key={e.id}>
-                          <td className={s.mono}>{e.id}</td>
-                          <td className={s.num}>{e.dev}</td>
-                          <td className={s.num}>{e.heldOut}</td>
-                          <td>{e.verdict}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className={s.recordNote}>
-                    Learning rate {EXPERIMENTS[0].lr} and {EXPERIMENTS[1].lr},
-                    96 steps each.
-                  </p>
-                </div>
+                <RecordList
+                  title="Versions"
+                  icon="experiments"
+                  items={[
+                    ["First version", "Promoted by the council"],
+                    ["Second version", "Kept on the record"],
+                  ]}
+                />
                 <h3 className={s.h3sm}>
                   <Icon name="experiments" size={16} />
-                  Experiments with their evidence
+                  Every version, with its evidence
                 </h3>
                 <p className={s.body}>
-                  Each run keeps its settings, scores, checkpoint hash and
-                  verdict.
+                  Each version keeps its settings, its results and the
+                  council&apos;s decision.
                 </p>
               </div>
               <div className={s.card}>
-                <div className={s.recordCard}>
-                  <div className={s.recordHead}>Governance reviews</div>
-                  <ul className={s.ledger}>
-                    {REVIEWS.map((r) => (
-                      <li key={`${r.title}-${r.target}`}>
-                        <span className={s.tick}>
-                          <Icon name="check" size={14} />
-                        </span>
-                        <span>
-                          {r.title}
-                          <span className={s.mono}>
-                            {r.target} · forge-policy-v1 · {r.time}
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <RecordList
+                  title="Council reviews"
+                  icon="check"
+                  items={[
+                    ["Plan check", "Approved before training"],
+                    ["Version review", "Approved after testing"],
+                    ["Plan check", "Approved before training"],
+                    ["Version review", "Approved after testing"],
+                  ]}
+                />
                 <h3 className={s.h3sm}>
-                  <Icon name="governance" size={16} />A governance ledger
+                  <Icon name="governance" size={16} />A signed approval for each
+                  step
                 </h3>
                 <p className={s.body}>
-                  Every review is tied to a policy version and an experiment.
+                  Every review is tied to a written policy.
                 </p>
               </div>
               <div className={s.card}>
-                <div className={s.recordCard}>
-                  <div className={s.recordHead}>Saved files</div>
-                  <ul className={s.ledger}>
-                    {ARTIFACTS.map(([name, time]) => (
-                      <li key={name}>
-                        <span className={s.tick}>
-                          <Icon name="artifacts" size={14} />
-                        </span>
-                        <span>
-                          {name}
-                          <span className={s.mono}>{time} UTC</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <RecordList
+                  title="Saved files"
+                  icon="artifacts"
+                  items={[
+                    ["Where the data came from", "Saved at the start"],
+                    ["The model before training", "Tested and saved"],
+                    ["The new model", "Saved after training"],
+                    ["Final test results", "Saved at the end"],
+                    ["The full report", "Ready to download"],
+                  ]}
+                />
                 <h3 className={s.h3sm}>
                   <Icon name="download" size={16} />
                   Everything is downloadable
                 </h3>
                 <p className={s.body}>
-                  The weights, the report and the full research trace.
+                  The model, the report and the full research trail.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Inverted band: the agents in their own words */}
+        {/* Inverted band: what the agents said */}
         <section
           className={`${s.sectionTight} ${s.dark}`}
           data-header-theme="dark"
@@ -622,7 +522,7 @@ export default function SitePage() {
           <div className={s.container}>
             <QuoteCarousel quotes={QUOTES} />
             <div className={s.tiles}>
-              {ACTORS.map(([name, text]) => (
+              {KEEPS.map(([name, text]) => (
                 <div className={s.tile} key={name}>
                   <strong>{name}</strong>
                   <span>{text}</span>
@@ -641,8 +541,8 @@ export default function SitePage() {
                 <h2 className={s.h2}>Watch every run as it happens</h2>
               </div>
               <p>
-                The research room, every experiment and the results live in one
-                place while the run is going.
+                The agents&apos; conversation, every version and the results
+                live in one place while the run is going.
               </p>
             </div>
             <figure className={s.productShot}>
@@ -651,7 +551,7 @@ export default function SitePage() {
                   src="/site/hero-chat.webp"
                   width={2000}
                   height={1250}
-                  alt="Forge lab: the research room with messages between the five agents"
+                  alt="The Forge lab: the five agents' conversation in the research room"
                   loading="lazy"
                 />
               </div>
@@ -673,12 +573,13 @@ export default function SitePage() {
                 <Link href="/" className={s.btn}>
                   Open the lab
                 </Link>
-                <a href="#results" className={s.btnGhost}>
-                  See the results
+                <a href="#example" className={s.btnGhost}>
+                  See the example
                 </a>
               </div>
               <p className={s.ctaNote}>
-                The recorded run took about 12 minutes from click to model.
+                A full run took about 12 minutes, from one click to a finished
+                model.
               </p>
             </div>
           </div>
@@ -706,15 +607,15 @@ export default function SitePage() {
                     <a href="#durable">Memory</a>
                   </li>
                   <li>
-                    <a href="#training">Proof</a>
+                    <a href="#training">Your model</a>
                   </li>
                 </ul>
               </div>
               <div>
-                <h2>Evidence</h2>
+                <h2>See it work</h2>
                 <ul>
                   <li>
-                    <a href="#example">Example</a>
+                    <a href="#example">The example</a>
                   </li>
                   <li>
                     <a href="#results">Results</a>

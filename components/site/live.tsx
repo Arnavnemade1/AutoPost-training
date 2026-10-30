@@ -1,19 +1,16 @@
 "use client";
-/* Live product illustrations for /site. Each one replays real data from campaign
-   forge-e84925eb (components/site/data.ts) on a timeline. Timelines run only while
+/* Live product illustrations for /site, built from one recorded Forge run
+   (components/site/data.ts) and shown in plain words. Timelines run only while
    on screen and show their final frame under prefers-reduced-motion. Scene swaps use the
    measured figure transition: opacity 0 -> 1, translate 16px -> 0, blur 3px -> 0,
    500ms cubic-bezier(0.165, 0.84, 0.44, 1). */
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 import {
-  CRASH,
-  DETECTORS,
   EXAMPLE,
+  FLAGGED,
   MESSAGES,
   ROLES,
-  SCAN,
-  SCAN_STATS,
   type Message,
   type Role,
 } from "./data";
@@ -114,28 +111,26 @@ export function TypedExample() {
   return (
     <div ref={ref} className={s.example}>
       <div className={s.exampleQ}>
-        <span className={s.kicker}>
-          Final test question · GSM8K {EXAMPLE.id}
-        </span>
+        <span className={s.kicker}>A question from the final test</span>
         <p>{EXAMPLE.question}</p>
       </div>
       <div className={s.exampleCols}>
         {[
           {
             label: "Before Forge",
-            model: "Qwen2.5-0.5B-Instruct",
+            model: "The original model",
             text: before,
             full: EXAMPLE.before,
             done: doneBefore,
-            foot: "Ends at the 256-token limit",
+            foot: "Stops before giving an answer",
           },
           {
             label: "After Forge",
-            model: "Checkpoint exp-001",
+            model: "Trained by Forge",
             text: after,
             full: EXAMPLE.after,
             done: doneAfter,
-            foot: "Final answer: 500",
+            foot: "Answers 500",
           },
         ].map((c) => (
           <div className={s.exampleCol} key={c.label}>
@@ -172,57 +167,39 @@ export function TypedExample() {
           <Icon name="refresh" size={14} />
           Replay
         </button>
-        <span>
-          Both answers exactly as the models wrote them in campaign
-          forge-e84925eb.
-        </span>
+        <span>Both answers exactly as the models wrote them.</span>
       </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Production: detector audit                                           */
+/* Finding mistakes: answers flagged one by one                         */
 /* ------------------------------------------------------------------ */
 
-export function AuditCard() {
-  const { ref, t } = useTimeline(2400, { loop: false });
+export function FlagList() {
+  const { ref, t } = useTimeline(FLAGGED.length * 650 + 3200);
   return (
     <div ref={ref} className={s.card}>
       <div className={s.cardHead}>
-        <span>Scan {SCAN}</span>
-        <span className={s.mono}>{SCAN_STATS.traces} answers</span>
+        <span>Answers Forge flagged</span>
+        <span>From your agent&apos;s traffic</span>
       </div>
-      <div className={s.auditNums}>
-        <div>
-          <span className={s.kicker}>Precision</span>
-          <strong>{SCAN_STATS.precision}</strong>
-          <p>62 of 62 flagged answers were truly wrong</p>
-        </div>
-        <div>
-          <span className={s.kicker}>Recall</span>
-          <strong>{SCAN_STATS.recall}</strong>
-          <p>62 of 63 wrong answers were flagged</p>
-        </div>
-      </div>
-      <ul className={s.detectors}>
-        {DETECTORS.map((d, i) => (
-          <li key={d.name}>
-            <div className={s.detRow}>
-              <span>{d.name}</span>
-              <span className={s.mono}>{d.count}</span>
-            </div>
-            <span className={s.bar}>
-              <span
-                className={s.barFill}
-                style={{
-                  transform: `scaleX(${t > 200 + i * 80 ? d.count / SCAN_STATS.traces : 0})`,
-                  transitionDelay: `${i * 80}ms`,
-                }}
-              />
-            </span>
-          </li>
-        ))}
+      <ul className={s.flagList}>
+        {FLAGGED.map((f, i) =>
+          t > 300 + i * 650 ? (
+            <li key={f.question} className={`${s.flagRow} ${s.rise}`}>
+              <span className={s.flagQ}>{f.question}</span>
+              <span className={s.chips}>
+                {f.tags.map((tag) => (
+                  <span key={tag} className={s.chip}>
+                    {tag}
+                  </span>
+                ))}
+              </span>
+            </li>
+          ) : null,
+        )}
       </ul>
     </div>
   );
@@ -261,10 +238,7 @@ export function AgentFlow() {
         {visible.map((m: Message, i) => {
           const isNew = i === visible.length - 1;
           return (
-            <li
-              key={`${m.time}-${m.category}`}
-              className={`${s.flowRow} ${s.rise}`}
-            >
+            <li key={m.text} className={`${s.flowRow} ${s.rise}`}>
               <div className={s.flowMeta}>
                 <Avatar role={m.from} size={24} />
                 <span className={s.flowWho}>
@@ -279,7 +253,7 @@ export function AgentFlow() {
                 className={`${s.receipt} ${!isNew || inStep > 1100 ? s.receiptOn : ""}`}
               >
                 <Icon name="check" size={12} />
-                {m.receipt} · {m.time} UTC
+                {m.receipt}
               </span>
             </li>
           );
@@ -290,97 +264,77 @@ export function AgentFlow() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Durable actors: crash and recovery                                   */
+/* Memory: stopped on purpose, back exactly as it was                  */
 /* ------------------------------------------------------------------ */
 
-const SPAN = 30; // seconds on the axis
-const PLAY = 5200; // ms to sweep the axis
+// Proportions follow the recorded crash test: restart, records held, back, resume.
+const STEPS = [
+  {
+    at: 0,
+    title: "Stopped on purpose",
+    note: "We force-stopped it mid-training",
+  },
+  { at: 0.07, title: "Restarting", note: "The runtime comes back up" },
+  { at: 0.93, title: "Records restored", note: "Everything exactly as it was" },
+  { at: 0.97, title: "Training resumes", note: "From the very same step" },
+];
+const RECORDS = ["Goal and budget", "Experiments", "Approvals", "Saved files"];
+const SWEEP = 5200;
 export function RecoveryTimeline() {
-  const { ref, t } = useTimeline(PLAY + 3600);
-  const sec = Math.min(SPAN, (t / PLAY) * SPAN);
-  const pct = (v: number) => `${(v / SPAN) * 100}%`;
-  const back = sec >= CRASH.back;
-  const resumed = sec >= CRASH.back + CRASH.resumed;
-  const cells = [
-    {
-      k: "Force-stopped",
-      v: `pid ${CRASH.killedPid}`,
-      on: true,
-      note: `SIGKILL at ${CRASH.killedAt} UTC`,
-    },
-    {
-      k: "Process restarted",
-      v: `${CRASH.processBack} s`,
-      on: sec >= CRASH.processBack,
-      note: `New pid ${CRASH.restartedPid}`,
-    },
-    {
-      k: "Runtime back",
-      v: `${CRASH.back} s`,
-      on: back,
-      note: `Writes held ${CRASH.fenced} s until the old lease ended`,
-    },
-    {
-      k: "Training resumed",
-      v: `+${CRASH.resumed} s`,
-      on: resumed,
-      note: `Same request ID, ${CRASH.attempts} attempts`,
-    },
-  ];
+  const { ref, t } = useTimeline(SWEEP + 3600);
+  const p = Math.min(1, t / SWEEP);
+  const pct = (v: number) => `${v * 100}%`;
+  const back = p >= STEPS[2].at;
   return (
     <div ref={ref} className={s.card}>
       <div className={s.cardHead}>
-        <span>Crash test during exp-001 training</span>
-        <span className={s.mono}>{sec.toFixed(1)} s</span>
+        <span>A test we ran during training</span>
+        <span>{back ? "Recovered" : "Recovering"}</span>
       </div>
       <div className={s.timeline}>
         <div className={s.track}>
           <span
             className={s.segKill}
-            style={{ left: 0, width: pct(Math.min(sec, CRASH.processBack)) }}
+            style={{ left: 0, width: pct(Math.min(p, STEPS[1].at)) }}
           />
-          {sec > CRASH.processBack && (
+          {p > STEPS[1].at && (
             <span
               className={s.segHold}
               style={{
-                left: pct(CRASH.processBack),
-                width: pct(Math.min(sec, CRASH.back) - CRASH.processBack),
+                left: pct(STEPS[1].at),
+                width: pct(Math.min(p, STEPS[2].at) - STEPS[1].at),
               }}
             />
           )}
           {back && (
             <span
               className={s.segBack}
-              style={{ left: pct(CRASH.back), width: pct(sec - CRASH.back) }}
+              style={{ left: pct(STEPS[2].at), width: pct(p - STEPS[2].at) }}
             />
           )}
-          <span className={s.playhead} style={{ left: pct(sec) }} />
-        </div>
-        <div className={s.axis}>
-          <span>0 s</span>
-          <span>10 s</span>
-          <span>20 s</span>
-          <span>30 s</span>
+          <span className={s.playhead} style={{ left: pct(p) }} />
         </div>
       </div>
       <div className={s.cells}>
-        {cells.map((c) => (
-          <div key={c.k} className={`${s.cell} ${c.on ? s.cellOn : ""}`}>
-            <span className={s.kicker}>{c.k}</span>
-            <strong className={s.mono}>{c.v}</strong>
+        {STEPS.map((c) => (
+          <div
+            key={c.title}
+            className={`${s.cell} ${p >= c.at ? s.cellOn : ""}`}
+          >
+            <strong className={s.cellTitle}>{c.title}</strong>
             <p>{c.note}</p>
           </div>
         ))}
       </div>
       <ul className={s.actors}>
-        {CRASH.actors.map((a, i) => (
+        {RECORDS.map((a, i) => (
           <li
             key={a}
-            className={back && sec >= CRASH.back + 0.2 * i ? s.actorOn : ""}
+            className={back && p >= STEPS[2].at + 0.01 * i ? s.actorOn : ""}
           >
             <Icon name="check" size={14} />
-            <span className={s.mono}>{a}</span>
-            <span>identical</span>
+            <span>{a}</span>
+            <span>restored</span>
           </li>
         ))}
       </ul>
@@ -389,30 +343,38 @@ export function RecoveryTimeline() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Code that types itself                                               */
+/* Proof: train, test, approve, download                                */
 /* ------------------------------------------------------------------ */
 
-export function TypedCode({ title, code }: { title: string; code: string }) {
-  const { ref, t } = useTimeline((code.length / 70) * 1000 + 400, {
-    loop: false,
-  });
-  const shown = typed(code, t, 200, 70);
-  const done = shown.length >= code.length;
+const SHIP = [
+  { title: "Train", note: "On the answers it missed" },
+  { title: "Test", note: "On brand-new questions" },
+  { title: "Approve", note: "The governance council signs off" },
+  { title: "Download", note: "Your model, your report, every step" },
+];
+export function ShipSteps() {
+  const { ref, t } = useTimeline(SHIP.length * 900 + 3000);
   return (
-    <div ref={ref} className={s.code}>
+    <div ref={ref} className={s.card}>
       <div className={s.cardHead}>
-        <span>{title}</span>
-        <span className={s.mono}>TypeScript</span>
+        <span>From mistakes to your model</span>
       </div>
-      <div className={s.transcriptWrap}>
-        <pre className={`${s.codeBody} ${s.ghost}`} aria-hidden="true">
-          {code}
-        </pre>
-        <pre className={s.codeBody} aria-label={title}>
-          {shown}
-          {!done && <span className={s.caret} aria-hidden="true" />}
-        </pre>
-      </div>
+      <ol className={s.ship}>
+        {SHIP.map((st, i) => {
+          const done = t > 400 + i * 900;
+          return (
+            <li key={st.title} className={done ? s.shipOn : ""}>
+              <span className={s.tick}>
+                <Icon name={done ? "check" : "clock"} size={14} />
+              </span>
+              <span>
+                <strong>{st.title}</strong>
+                <span>{st.note}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 /* Forge's hero art: one three.js (r180) points cloud that morphs through the five steps of
    campaign forge-e84925eb every 5.05 s, the cadence measured on the reference hero
    (docs/site/modal-reference.md). All geometry is Forge's own and built from the run's data:
-   64 answers with 62 flagged, five agents, the real exp-001 loss curve, 0 -> 9 of 33. */
+   flagged answers, five agents, the real exp-001 loss curve, and before/after bars. */
 import { useEffect, useRef, useState } from "react";
 import {
   BufferAttribute,
@@ -23,22 +23,16 @@ const MORPH = 600; // ms, out-quart (the reference morph lands inside one 500 ms
 const W = 9; // world width the camera always fits
 
 export const STATES = [
-  {
-    label: "Launch",
-    caption: "64 real conversations from your agent's traffic",
-  },
+  { label: "Traffic", caption: "Your agent's real conversations come in" },
   {
     label: "Find mistakes",
-    caption: "62 of 64 answers flagged, with no answer key",
+    caption: "Forge spots the answers that need fixing",
   },
-  { label: "Agents", caption: "Five agents coordinate over Agent Relay" },
-  {
-    label: "Train",
-    caption: "exp-001: 96 training steps, the run's real loss curve",
-  },
+  { label: "Agents", caption: "Five agents plan the fix together" },
+  { label: "Train", caption: "The model learns from its own mistakes" },
   {
     label: "Result",
-    caption: "Held-out failures answered: 0 of 33 before, 9 of 33 after",
+    caption: "Before and after: more questions answered right",
   },
 ];
 
@@ -157,15 +151,17 @@ function buildStates() {
       g() * 0.18,
     );
 
-    // 4. Result: two bars of 33 slots. Before: 0 filled. After: 9 filled.
+    // 4. Result: before and after, as two bars in the same frame. Heights follow the
+    // final test of the recorded run (right answers before vs after), shown unlabeled.
     const bar = i % 2;
     const bx = bar ? 1.3 : -1.3;
-    const slotH = 3.6 / 33;
+    const slots = 24;
+    const slotH = 3.6 / slots;
     const base = -1.8;
-    const fillTop = bar ? 9 * slotH : 0;
-    const isGhost = bar === 0 || r() < 0.3;
+    const fillTop = (bar ? 6 : 1) * slotH;
+    const isGhost = r() < 0.32;
     ghost[i] = isGhost ? 1 : 0;
-    const hy = isGhost ? r() * 33 * slotH : r() * fillTop;
+    const hy = isGhost ? r() * slots * slotH : r() * fillTop;
     set(4, i, bx + (r() - 0.5) * 1.1, base + hy, (r() - 0.5) * 1.1);
   }
   return { states, flag, ghost };
@@ -404,7 +400,7 @@ export function ParticleHero() {
         ref={wrap}
         className={s.artCanvas}
         role="img"
-        aria-label="Animated dots replay campaign forge-e84925eb: traffic, 62 of 64 answers flagged, five agents, the training loss curve, and held-out failures rising from 0 to 9 of 33."
+        aria-label="Animated dots show how Forge works: your agent's conversations come in, the answers that need fixing are found, five agents plan the fix, the model trains, and more questions are answered right afterward."
       />
       <p className={s.artCaption} aria-live="polite">
         {STATES[state].caption}

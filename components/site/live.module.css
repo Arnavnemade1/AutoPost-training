@@ -1,6 +1,5 @@
 /* Live illustrations on /site. Tokens match components/site/site.module.css. */
 .card,
-.code,
 .example {
   --fg: #111111;
   --muted: #5c5c5c;
@@ -12,10 +11,7 @@
   --mono: var(--site-mono), "IBM Plex Mono", ui-monospace, monospace;
   color: var(--fg);
 }
-.mono {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
+
 .kicker {
   display: block;
   font-size: 13px;
@@ -104,8 +100,7 @@
 }
 
 /* ---------- Shared card ---------- */
-.card,
-.code {
+.card {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--line-strong);
@@ -124,59 +119,8 @@
   font-size: 13px;
   color: var(--muted);
 }
-.cardHead .mono {
-  font-size: 12px;
-}
 
 /* Audit */
-.auditNums {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  padding: 20px 16px 4px;
-}
-.auditNums strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 38px;
-  line-height: 44px;
-  font-weight: 500;
-  letter-spacing: -0.6px;
-  font-variant-numeric: tabular-nums;
-}
-.auditNums p {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 19px;
-  color: var(--muted);
-}
-.detectors {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 20px 16px 20px;
-}
-.detRow {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-  line-height: 20px;
-  margin-bottom: 6px;
-}
-.bar {
-  display: block;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--chip);
-  overflow: hidden;
-}
-.barFill {
-  display: block;
-  height: 100%;
-  background: #111111;
-  transform-origin: left center;
-  transition: transform 600ms var(--ease-out);
-}
 
 /* Agents */
 .roles {
@@ -292,14 +236,7 @@
   margin-left: -1px;
   background: #111111;
 }
-.axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--dim);
-}
+
 .cells {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -347,10 +284,7 @@
   opacity: 0.4;
   transition: opacity 250ms var(--ease-out);
 }
-.actors li .mono {
-  color: var(--fg);
-  font-size: 12px;
-}
+
 .actors li > span:last-child {
   margin-left: auto;
 }
@@ -359,15 +293,6 @@
 }
 
 /* Code */
-.codeBody {
-  margin: 0;
-  padding: 16px;
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 21px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 
 /* Typed transcripts */
 .transcriptWrap {
@@ -489,60 +414,16 @@
 }
 
 @media (max-width: 1023px) {
-  .split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .split > .col:last-child {
-    display: none;
-  }
-  .resultScene {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 28px;
-    padding: 0;
-  }
   .exampleCols {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 640px) {
-  .heroBar {
-    padding: 0 12px;
-  }
-  .heroId {
-    display: none;
-  }
-  .steps {
-    width: 100%;
-    justify-content: space-between;
-  }
   .stepTab {
     padding: 0 8px;
     font-size: 13px;
   }
-  .heroBody {
-    padding: 16px;
-  }
-  .terminal {
-    padding: 16px;
-    font-size: 13px;
-    line-height: 22px;
-  }
-  .bigNum {
-    font-size: 64px;
-    line-height: 68px;
-  }
-  .bigNumSm {
-    font-size: 48px;
-    line-height: 52px;
-  }
-  .squares {
-    grid-template-columns: repeat(11, 14px);
-    gap: 6px;
-  }
-  .square {
-    width: 14px;
-    height: 14px;
-  }
+
   .roles span:last-child {
     font-size: 11px;
   }
@@ -562,15 +443,74 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .rise,
-  .numSwap,
-  .barFill,
-  .square,
   .receipt,
   .cell,
   .role,
   .actors li,
   .exampleFoot {
     animation: none;
+    transition: none;
+  }
+}
+
+.cellTitle {
+  display: block;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+}
+.card .flagList {
+  padding: 16px;
+  min-height: 352px;
+}
+.ship {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.ship li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  opacity: 0.4;
+  transition: opacity 250ms var(--ease-out);
+}
+.ship li:last-child {
+  border-bottom: 0;
+}
+.ship .shipOn {
+  opacity: 1;
+}
+.ship li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ship strong {
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 500;
+}
+.ship li > span:last-child > span {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+}
+.tick {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--chip);
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ship li {
     transition: none;
   }
 }

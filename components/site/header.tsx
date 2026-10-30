@@ -27,7 +27,7 @@ export const PRODUCT_LINKS = [
     href: "#training",
     icon: "chip",
     title: "Proof",
-    text: "Scores on questions the model never trained on.",
+    text: "Tested on brand-new questions.",
   },
 ];
 
@@ -137,9 +137,9 @@ export function SiteHeader() {
   return (
     <>
       <div className={s.announce}>
-        <span>The sealed test score went from 1 in 24 to 6 in 24.</span>
-        <a href="#results">
-          See the results <Icon name="arrow" size={14} />
+        <span>Watch a model learn from its own mistakes.</span>
+        <a href="#example">
+          See the example <Icon name="arrow" size={14} />
         </a>
       </div>
       <header
@@ -239,20 +239,18 @@ export function SiteHeader() {
               </ul>
             </div>
             <div className={s.dropCol}>
-              <span className={s.dropLabel}>Latest run</span>
+              <span className={s.dropLabel}>See it learn</span>
               <a
-                href="#results"
+                href="#example"
                 className={s.dropFeature}
                 onClick={() => setOpen(false)}
               >
-                <span className={s.dropStat}>
-                  9<span> of 33</span>
-                </span>
                 <span className={s.dropItemTitle}>
-                  Saved-for-later failures, answered after training
+                  One question, before and after
                 </span>
                 <span className={s.dropItemText}>
-                  Final test: 1 of 24 became 6 of 24.
+                  The same question, answered by the model before and after
+                  Forge.
                 </span>
               </a>
             </div>
