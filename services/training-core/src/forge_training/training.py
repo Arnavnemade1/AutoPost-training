@@ -10,11 +10,14 @@ from pathlib import Path
 
 from .artifacts import EventLog, directory_manifest, manifest_sha256, utc_now, write_json
 from .config import Example, ExperimentConfig
-from .modeling import load_base, parameter_sha256, prompt_for, seed_everything
+from .modeling import PROMPT_INSTRUCTION, load_base, parameter_sha256, prompt_for, seed_everything
 
 
-def encode_completion(tokenizer, example: Example, max_length: int) -> dict:
-    prompt_ids = tokenizer.encode(prompt_for(tokenizer, example.question), add_special_tokens=False)
+def encode_completion(
+    tokenizer, example: Example, max_length: int, instruction: str = PROMPT_INSTRUCTION
+) -> dict:
+    prompt = prompt_for(tokenizer, example.question, instruction)
+    prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
     answer_ids = tokenizer.encode(example.answer, add_special_tokens=False) + [
         tokenizer.eos_token_id
     ]

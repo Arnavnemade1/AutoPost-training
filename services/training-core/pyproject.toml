@@ -24,11 +24,14 @@ train = [
 data = ["datasets==4.3.0"]
 test = ["pytest==8.4.2", "ruff==0.14.3"]
 harness = ["lm_eval==0.4.9.2", "psutil==7.2.2"]
+# JSON-schema checkers for structured-extraction tasks.
+tasks = ["jsonschema==4.26.0"]
 
 [project.scripts]
 forge-train = "forge_training.cli:main"
 forge-harness = "forge_training.harness_cli:main"
 forge-final = "forge_training.final_cli:main"
+forge-distill = "forge_training.distill_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

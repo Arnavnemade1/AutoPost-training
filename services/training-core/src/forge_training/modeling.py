@@ -80,8 +80,8 @@ def load_base(config: ExperimentConfig):
     return model, tokenizer
 
 
-def prompt_for(tokenizer, question: str) -> str:
-    content = f"{PROMPT_INSTRUCTION}\n\n{question}"
+def prompt_for(tokenizer, question: str, instruction: str = PROMPT_INSTRUCTION) -> str:
+    content = f"{instruction}\n\n{question}"
     if tokenizer.chat_template:
         return tokenizer.apply_chat_template(
             [{"role": "user", "content": content}],
