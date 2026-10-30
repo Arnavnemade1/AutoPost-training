@@ -28,10 +28,18 @@ FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm test
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run demo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen
+# Real-model runs default to Apple mps; set FORGE_DEVICE=cuda or cpu elsewhere.
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- fixture-grpo
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run research -- qwen-grpo \
   --start-adapter /absolute/path/to/approved/sft/checkpoint
 ```
+
+Relay engine: every command starts its own loopback Relaycast engine unless
+`FORGE_RELAY_URL` is set. `FORGE_RELAY_URL=https://cast.agentrelay.com` runs the same
+commands over hosted Agent Relay: each run creates an anonymous workspace with a random
+name suffix (no account needed), records its name (never its key) in the report, and
+deletes it on exit unless `FORGE_RELAY_KEEP_WORKSPACE=1`. Against a remote engine the
+Relay SIGKILL fault becomes a full client reconnect from persisted tokens.
 
 Use the npm scripts: they run the pinned Bun 1.4.2. A different global Bun cannot read
 the actors' persisted state (hydration fails with "Unable to deserialize data").
@@ -54,6 +62,17 @@ GSM8K **train**-split partition (128 train, 16 development, 16 regression; the t
 split is never read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on Apple MPS; it needs the
 model and dataset in the local Hugging Face cache and takes tens of minutes. Neither
 profile provisions paid compute.
+
+The worker runs with `HF_HUB_OFFLINE=1`, so on a fresh machine cache exactly the pinned
+model and the GSM8K **train** file first (never the test file):
+
+```sh
+"$FORGE_PYTHON" -c "from huggingface_hub import snapshot_download as s; s('Qwen/Qwen2.5-0.5B-Instruct', revision='7ae557604adf67be50417f59c2c2f167def9a775')"
+"$FORGE_PYTHON" -c "from huggingface_hub import hf_hub_download as h; h('openai/gsm8k', repo_type='dataset', revision='740312add88f781978c0658806c59bc2815b9866', filename='main/train-00000-of-00001.parquet')"
+```
+
+Off Apple hardware set `FORGE_DEVICE=cpu` (or `cuda`). On an 8-core Arm CPU VM the `qwen`
+campaign took 92 minutes and its 128-step extension exceeded the one-hour run budget.
 
 `fixture-grpo` runs the same campaign with method `grpo` on an offline tiny model
 warm-started on the answer format (about 40 seconds); `--from-sft` first trains a short
@@ -121,7 +140,7 @@ recording check reports `not-recorded`; the root command center records its own 
 
 | File | Responsibility |
 | --- | --- |
-| `src/relay.ts` | Registers role participants; sends unsent outbox messages with idempotency keys; recipients consume their Relay channel, verify sender, channel and exact bytes against the durable message, then acknowledge |
+| `src/relay.ts` | Registers role participants; sends unsent outbox messages as Relay DMs with idempotency keys; recipients drain their durable Relay inbox, verify sender, DM route and exact bytes against the durable message, acknowledge in Forge, then ack the Relay delivery (forged copies are failed in Relay). See `docs/agent-relay.md` |
 | `src/worker.ts` | Allowlisted training jobs; fenced lease renewed at a third of the campaign's `maxLeaseMs`; runs reuse the frozen baseline; GRPO jobs get a world gateway per lease generation; evidence checks of the Python run bundle and, for GRPO, of rewards against world journals with step replay; evaluator reproduction in a separate process |
 | `src/worlds.ts` | World gateway: loopback endpoint with a per-job token; one data-role reset and one worker-role step per completion, in concurrent lanes, with request IDs that make retries replay receipts; `verifyWorldRollouts` checks a run's rewards against each world's journal |
 | `src/evaluations.ts` | Untrained-model evaluations cached by campaign, experiment label, model, data and protocol; batched evaluation adopted only if it matches batch size 1 |
@@ -243,8 +262,10 @@ Deployed roles need separate processes and credentials. The world gateway in par
 holds the data role's key, the reward secret and the worker key in this process; a
 deployment needs a separate trusted task service. Relay channels are routing,
 not authorization. Recipients poll; Relay inbox acknowledgements and push subscriptions
-are not used. Only the local Relaycast engine has been exercised, not a hosted Relay
-workspace. Evaluator reproduction and governance review share host, code and process
+are not used. Runs use the loopback engine by default; with `FORGE_RELAY_URL` set they
+use that engine, verified against hosted `https://cast.agentrelay.com` with anonymous,
+per-run workspaces ([hosted Relay](../../docs/verification/relay-hosted.md)); no Agent
+Relay Cloud account workspace has been exercised. Evaluator reproduction and governance review share host, code and process
 with the worker, but use separate keys and re-derive facts from bytes rather than
 messages. The final evaluator's authority, grant and sealed data belong to a separately
 owned account in deployment; locally the same user holds everything. The

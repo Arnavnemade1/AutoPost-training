@@ -7,14 +7,15 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from services.core import production, store
+from services.core import compute, production, store
 from services.core.contracts import CampaignConfig
-from services.core.engine import actor, governance, probe, spawn
+from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
+from services.chaos_routes import router as chaos_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -38,11 +39,15 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Forge research control plane", lifespan=lifespan)
+app.include_router(chaos_router)
 
 
 API_PORT = httpx.URL(os.environ.get("FORGE_API_URL", "http://127.0.0.1:8000")).port or 8000
 TRUSTED_HOSTS = {f"127.0.0.1:{API_PORT}", f"localhost:{API_PORT}"}
-TRUSTED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
+WEB_PORT = os.environ.get("FORGE_WEB_PORT", "3000")
+TRUSTED_ORIGINS = {f"http://localhost:{WEB_PORT}", f"http://127.0.0.1:{WEB_PORT}"}
+TERSE_URL = os.environ.get("DURABLE_ACTORS_CONTROL_PLANE_URL", "http://127.0.0.1:7100")
+RELAY_BRIDGE_URL = bridge_url()
 
 
 @app.middleware("http")
@@ -62,11 +67,18 @@ async def local_boundary(request: Request, call_next):
 @app.get("/health")
 def health():
     services = {}
-    for name, url in [("terse", "http://127.0.0.1:7100"), ("relay", "http://127.0.0.1:7529/health")]:
+    for name, url in [("terse", TERSE_URL), ("relay", RELAY_BRIDGE_URL + "/health")]:
         try:
             r = httpx.get(url, timeout=3)
             services[name] = {"connected": r.status_code < 500, "mode": "Local runtime"}
-        except httpx.HTTPError:
+            if name == "relay" and r.status_code == 200:
+                bridge = r.json()
+                services[name].update(
+                    mode="Local runtime" if bridge.get("local", True) else "Hosted Relaycast",
+                    transport=bridge.get("transport"),
+                    endpoint=bridge.get("endpoint"),
+                )
+        except (httpx.HTTPError, ValueError):
             services[name] = {"connected": False, "mode": "Unavailable"}
     services["director"] = {
         "connected": bool(os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")),
@@ -77,10 +89,16 @@ def health():
         "connected": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
         "mode": "Supabase private storage" if os.getenv("SUPABASE_SERVICE_ROLE_KEY") else "Local artifacts",
     }
+    try:
+        backend = compute.describe()
+    except ValueError as error:
+        backend = {"backend": "invalid", "label": None, "gpu": None, "error": str(error)}
+    local = "Apple M3 / Metal" if os.uname().machine == "arm64" else "PyTorch worker"
     return {
         "ok": True,
         "services": services,
-        "worker": "Apple M3 / Metal" if os.uname().machine == "arm64" else "PyTorch worker",
+        "worker": backend["label"] or local,
+        "compute": backend,
         "version": "0.1.0",
     }
 
@@ -103,6 +121,12 @@ def create_campaign(config: CampaignConfig):
 def initialize_campaign(config: CampaignConfig):
     if any(s["status"] not in TERMINAL for s in store.campaigns()):
         raise HTTPException(409, "A campaign already owns the local GPU. Stop it or wait for completion.")
+    try:
+        backend = compute.configured()
+    except ValueError as error:
+        raise HTTPException(503, str(error)) from error
+    if backend != "local" and "grpo" in config.strategies:
+        raise HTTPException(422, "GRPO runs only on the local backend. Choose SFT strategies for Modal.")
     if config.production_scan and not production.load_scan(config.production_scan):
         raise HTTPException(404, "Production scan not found")
     cid = "forge-" + uuid.uuid4().hex[:8]
@@ -162,6 +186,25 @@ def events(cid: str, after: str | None = None):
     if not store.get(cid):
         raise HTTPException(404, "Campaign not found")
     return store.events(cid, after)
+
+
+@app.get("/campaigns/{cid}/relay/search")
+def relay_search(cid: str, q: str = Query(min_length=1, max_length=200)):
+    """Agent Relay's own full-text search over the campaign's research room."""
+    if not store.get(cid):
+        raise HTTPException(404, "Campaign not found")
+    try:
+        r = httpx.get(
+            bridge_url() + "/search",
+            params={"campaign_id": cid, "q": q},
+            headers=bridge_headers(),
+            timeout=10,
+        )
+        r.raise_for_status()
+        rows = r.json()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Agent Relay search is unavailable") from None
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("message_id"), str)]
 
 
 @app.post("/campaigns/{cid}/cancel")

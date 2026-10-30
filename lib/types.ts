@@ -26,6 +26,21 @@ export type Prediction = {
   correct: boolean;
   environment_id?: string;
 };
+export type Hardware = {
+  backend: "local" | "modal";
+  type: string;
+  name: string | null;
+  requested?: string;
+  torch?: string;
+  cuda?: string | null;
+};
+/** The device that ran the model work, or the GPU requested before it reports in. */
+export const hardwareName = (h?: Hardware | null) =>
+  h?.name ?? (h?.requested ? `NVIDIA ${h.requested} (starting)` : null);
+export const hardwareLabel = (h?: Hardware | null) => {
+  const name = hardwareName(h);
+  return name && h?.backend === "modal" ? `${name} · Modal` : name;
+};
 export type Evaluation = {
   score: number;
   n: number;
@@ -36,7 +51,8 @@ export type Evaluation = {
   seconds: number;
   dataset_revision: string;
   scoring: string;
-  decoding: { max_new_tokens: number; do_sample: boolean };
+  decoding: { max_new_tokens: number; do_sample: boolean; batch_size?: number };
+  device?: Hardware | null;
 };
 export type Metric = {
   step: number;
@@ -75,6 +91,8 @@ export type Experiment = {
     before_hash: string;
     after_hash: string;
     seconds: number;
+    max_sequence_length?: number;
+    device?: Hardware;
   };
 };
 export type Artifact = {
@@ -142,6 +160,7 @@ export type Campaign = {
       relay_deliveries: number;
       settled_compute_seconds: number;
       time_limit_seconds: number;
+      hardware?: Hardware | null;
     };
   };
   id: string;
@@ -150,6 +169,7 @@ export type Campaign = {
   created_at: string;
   updated_at: string;
   config: Config;
+  hardware?: Hardware;
   director?: string;
   experiments: Experiment[];
   reviews: Review[];
@@ -185,6 +205,14 @@ export type Campaign = {
   cancel_requested?: boolean;
   recording?: { status: string };
 };
+export type RelayDelivery = {
+  role: Agent;
+  delivery_id: string | null;
+  state: string;
+  read_at: string | null;
+  source: "inbox" | "readback";
+};
+export type RelayReaction = { emoji: string; count: number; agents: Agent[] };
 export type Event = {
   id: string;
   timestamp: string;
@@ -193,16 +221,34 @@ export type Event = {
   agent: Agent;
   recipient?: Agent;
   category?: string;
+  /** Forge message ID; message_pending carries it inside `message`. */
+  message_id?: string;
+  message?: {
+    id: string;
+    recipient?: Agent;
+    route?: "dm" | "room";
+    category?: string;
+  };
   relay_id?: string;
+  route?: "dm" | "room" | "thread";
+  thread_parent_id?: string | null;
+  emoji?: string;
+  reactions?: RelayReaction[];
   receipt?: {
     delivered: boolean;
     recipient_readback_verified: boolean;
+    route?: "dm" | "room" | "thread";
+    conversation_id?: string | null;
+    woke_by?: "push" | "inbox-sweep";
+    deliveries?: RelayDelivery[];
+    read_by?: { name: Agent; read_at: string | null }[];
     room?: {
       name: string;
       id: string;
-      message_id: string;
-      readback_verified: boolean;
-      readers: Agent[];
+      /** Earlier receipts copied every DM into the room. */
+      message_id?: string;
+      readback_verified?: boolean;
+      readers?: Agent[];
     };
   };
   experiment_id?: string;
@@ -211,10 +257,17 @@ export type Event = {
 export type Health = {
   ok: boolean;
   worker: string;
+  compute?: { backend: string; label: string | null; gpu: string | null };
   version: string;
   services: Record<
     string,
-    { connected: boolean; mode: string; model?: string }
+    {
+      connected: boolean;
+      mode: string;
+      model?: string;
+      transport?: string;
+      endpoint?: string;
+    }
   >;
 };
 export const TERMINAL = ["completed", "failed", "cancelled", "interrupted"];

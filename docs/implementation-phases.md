@@ -68,6 +68,11 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   clean-copy reproduction, all verified on a fixture. The event-rules gate is not met
   ([eligibility review](event-eligibility.md)).
   See [Phase 8 verification](verification/phase8-local.md).
+- Azure CPU reproduction: on a clean 8-core Arm VM the Qwen SFT campaign reproduced the
+  0/16 to 6/16 selection and held-out result. A predeclared prompt/length ablation of that
+  checkpoint under the official harness found **no gain** (strict 0 to 0 zero-shot; flexible
+  9 to 6), so freeze refused the release and no final evaluation ran
+  ([record](verification/azure-cpu-campaign.md)).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phases 5 to 8 run in the same workflows.
 
@@ -105,12 +110,13 @@ Initial findings:
   and execute a real optimization/reload smoke test.
 - Agent Relay's unversioned introduction and versioned 7.1.1 messaging pages describe
   different interfaces. Phase 3 selected npm `@agent-relay/sdk@14.0.0` and tested it
-  against `@relaycast/engine@12.0.0` locally; a hosted Relay workspace is unverified.
+  against `@relaycast/engine@12.0.0` locally, then against the hosted engine at
+  `cast.agentrelay.com` ([hosted Relay verification](verification/relay-hosted.md)).
 - Terse has active lifecycle changes upstream. Persistence and serialized execution
   must be tested using the selected installed version.
 - The event page was not readable through the documentation fetch. Event rules,
   prebuilt-code eligibility, and submission requirements remain unverified.
-- No GPU provider, paid compute allocation, live Relay workspace, Terse deployment,
+- No GPU provider, paid compute allocation, Agent Relay Cloud account, Terse deployment,
   or recording setup has been verified by this workstream.
 
 ## Phase 1 — Measurable training core (first implementation)
@@ -167,7 +173,8 @@ Implemented under `services/orchestrator/` with `ResearchWorkflowActor` in
 `packages/terse-actors/`. The [actor contract](actor-contract.md) describes the
 outbox, and [local verification](verification/phase3-local.md) records each gate
 check, injected fault and limitation. Gates were met locally against a loopback
-Relaycast engine, not a hosted Relay workspace. Role handlers are scripted; Phase 4
+Relaycast engine; the same suite later passed against the hosted engine
+([hosted Relay verification](verification/relay-hosted.md)). Role handlers are scripted; Phase 4
 replaces the director's fixed choices with evidence-driven selection.
 
 ## Phase 4 — Evidence-driven autonomous experiment selection
@@ -263,7 +270,8 @@ readiness precedes its corresponding gate.
 
 Phase 8 commands and trust/resource boundaries are documented in the
 [harness runbook](../services/training-core/HARNESS.md). Final readiness still requires
-a separately owned evaluator, a complete final run, clean-machine reproduction,
+a separately owned evaluator, a complete final run, a clean-machine model run (test
+suites already reproduced: [record](verification/clean-machine.md)),
 matching demo recording, and event-rule acceptance. Existing research agents remain
 scripted; no real agent collaboration was added.
 

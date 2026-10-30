@@ -37,7 +37,10 @@ release bundles. A campaign drives it after it stops: the promoted checkpoint is
 in an actor, its release is bound and rehearsed, and an evidence bundle maps every stated
 number to a hashed artifact and reproduces from a clean copy (verified on a fixture).
 No sealed final evaluation or benchmark improvement is claimed for this profile, and it is
-not an eligible event submission ([event eligibility](docs/event-eligibility.md)).
+not an eligible event submission ([event eligibility](docs/event-eligibility.md)). A
+clean-machine Azure reproduction of the Qwen campaign, ablated under the official harness,
+showed the 6/16 gain is answer-format specific (zero-shot strict 0/16 for both policies),
+so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md)).
 
 - [Contribution rules](CONTRIBUTING.md)
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
@@ -50,6 +53,7 @@ not an eligible event submission ([event eligibility](docs/event-eligibility.md)
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Research command center and recorder](docs/command-center.md)
 - [Production failures into improvements](docs/production-failures.md)
+- [Training on a Modal H100](docs/remote-gpu.md)
 - [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
 - [Phase 8 verification](docs/verification/phase8-local.md)
 - [Phase 7 verification](docs/verification/phase7-local.md)

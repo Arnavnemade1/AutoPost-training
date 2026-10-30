@@ -4,7 +4,7 @@ The supplied PRD is the product source of truth. Forge is a local-first research
 
 Three approaches were considered: a cloud-only GPU control plane, a replay-only UI, and a working local-first system. Local-first is selected because this machine has an Apple M3 with 16 GB memory and both sponsor runtimes support local execution. It produces real evidence without requiring paid compute. Cloud-only adds account dependencies; a replay-only UI fails the central requirement.
 
-Terse 0.14.0 owns campaign reservations, immutable objectives, experiment transitions, governance approvals, artifact references and independent math environments. GPU work runs in a separate Python process. Agent Relay 14.0.0 and Relaycast Engine 8.10.1 carry typed assignments and findings through a local messaging bridge. A persistent event journal reconciles notifications. The read model never overrides actor-owned state.
+Terse 0.14.0 owns campaign reservations, immutable objectives, experiment transitions, governance approvals, artifact references and independent math environments. GPU work runs in a separate Python process. Agent Relay 14.0.0 and Relaycast Engine 12.0.0 carry typed assignments and findings through a messaging bridge, against a local engine or the hosted one at cast.agentrelay.com. A persistent event journal reconciles notifications. The read model never overrides actor-owned state.
 
 The director examines measured development failures and chooses broad or targeted SFT, then revises learning rate and sampling based on evidence. A configured OpenAI key may enable model-directed proposals through strict structured validation. The local director is explicitly identified as deterministic, not misrepresented as LLM research.
 

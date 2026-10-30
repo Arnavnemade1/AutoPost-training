@@ -26,6 +26,7 @@ test("a Relay-delivered assignment causes exactly one authorized optimization ru
     viaReconciliation: 0,
     duplicateCopies: 1,
     rejectedCopies: 1,
+    alreadyHandled: 0,
   });
   expect(report.optimizationRuns).toBe(1);
   expect(report.workerAttempts).toBe(1);
@@ -58,7 +59,10 @@ test("restarts, a post-completion crash and a missed page leave pending work dis
     viaReconciliation: 1,
     duplicateCopies: 0,
     rejectedCopies: 0,
+    alreadyHandled: 0,
   });
+  expect((report.staleReceipt as Document).alreadyHandled).toBe(1);
+  expect(Object.values(report.relayInboxesAfterRun as Document)).toEqual([0, 0, 0, 0, 0, 0]);
   const { afterRestart, earlyCompletion, final } = report.reconciliation as Record<
     string,
     Document

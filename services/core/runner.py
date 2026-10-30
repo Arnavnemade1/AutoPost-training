@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from forge_training.config import Example
 from forge_training.data import question_key, verify_separation
-from services.core import production, store, training
+from services.core import compute, production, store, training
 from services.core.director import propose, build_input
 from services.core.briefing import publish
 from services.core.verdict import SUMMARY as VERDICT_SUMMARY, final_verdict
@@ -19,6 +19,7 @@ from services.core.engine import (
     cancelled,
     checkpoint_zip,
     governance,
+    react,
     send,
     transition,
 )
@@ -92,7 +93,17 @@ def run(cid):
 
         return execute
 
+    def hardware(device):
+        save_field(hardware=device)
+        if device.get("name"):
+            where = "Modal" if device.get("backend") == "modal" else "this machine"
+            store.event(cid, "stage", f"Model work runs on {device['name']} ({where}).", "trainer")
+
+    backend = None
     try:
+        backend = compute.open_backend(
+            on_hardware=hardware, on_notice=lambda text: store.event(cid, "error", text, "trainer")
+        )
         train_rows, dev_rows, sealed = training.benchmark_data(config)
         prod_train, prod_held_out, scan = production_split(config, train_rows, dev_rows)
         train_rows = [{k: r[k] for k in ("id", "question", "answer")} for r in prod_train] + [
@@ -164,8 +175,8 @@ def run(cid):
         transition(cid, "baseline", "Measuring the original model on development data")
         base_started = time.monotonic()
         actor(cid).reserve(cid + "-baseline", max(1, int(deadline - base_started)))
-        model, tokenizer = training.load()
-        baseline = training.evaluate(
+        model, tokenizer = backend.load()
+        baseline = backend.evaluate(
             model, tokenizer, dev_rows, progress("Baseline"), stop, worlds=worlds("baseline")
         )
         # A small declared math regression set. This is not a broad safety evaluation.
@@ -175,11 +186,11 @@ def run(cid):
             {"id": "reg-3", "question": "What is 125 minus 37?", "answer": "#### 88"},
             {"id": "reg-4", "question": "What is 15 plus 26?", "answer": "#### 41"},
         ]
-        base_reg = training.evaluate(
+        base_reg = backend.evaluate(
             model, tokenizer, regressions, progress("Baseline regression"), stop, split="regression"
         )
         base_prod = (
-            training.evaluate(
+            backend.evaluate(
                 model,
                 tokenizer,
                 held_rows,
@@ -192,7 +203,7 @@ def run(cid):
         )
         if base_prod:
             save_field(production_baseline=base_prod)
-        training.unload(model)
+        backend.unload(model)
         actor(cid).settle(cid + "-baseline", time.monotonic() - base_started)
         (folder / "baseline.json").write_text(json.dumps(baseline, indent=2))
         artifact(cid, folder / "baseline.json", "evaluation", "Baseline evaluation")
@@ -248,7 +259,8 @@ def run(cid):
 
                 store.patch(cid, apply)
 
-            send(cid, "director", "data", "EXPERIMENT_PROPOSED", proposal["hypothesis"], expid)
+            # The director's decision is announced to the whole research room.
+            send(cid, "director", "data", "EXPERIMENT_PROPOSED", proposal["hypothesis"], expid, route="room")
             review = add_review(
                 cid,
                 {
@@ -278,6 +290,15 @@ def run(cid):
                 f"Provenance checked. {len(train_rows)} permitted training rows. LoRA rank {proposal['lora_rank']}, learning rate {proposal['learning_rate']}, {config['train_steps']} steps.",
                 expid,
             )
+            send(
+                cid,
+                "director",
+                "trainer",
+                "TRAINING_ASSIGNED",
+                f"Run {expid} ({proposal['strategy'].replace('_', ' ')}) within {reservation} reserved seconds. "
+                "Report the checkpoint to the evaluator, not to me.",
+                expid,
+            )
             transition(
                 cid,
                 "training",
@@ -305,6 +326,8 @@ def run(cid):
             adapter = folder / expid
             try:
                 if proposal["strategy"] == "grpo":
+                    if backend.name != "local":
+                        raise RuntimeError("GRPO runs only on the local backend; choose SFT strategies")
                     from services.core.rl import train_grpo
 
                     result = train_grpo(
@@ -322,7 +345,7 @@ def run(cid):
                         cid, adapter / "trajectories.json", "trajectory", f"{expid} Terse reward trajectories"
                     )
                 else:
-                    result = training.train(proposal, config, train_rows, adapter, metric, stop)
+                    result = backend.train(proposal, config, train_rows, adapter, metric, stop)
             except InterruptedError:
                 raise
             except Exception as error:
@@ -352,18 +375,28 @@ def run(cid):
                 f"{expid} saved. Weights changed: {result['weights_changed']}. SHA-256 {result['sha256'][:16]}. Reload independently for evaluation.",
                 expid,
             )
+            # Governance answers in this checkpoint's thread once the evidence is in.
+            checkpoint_post = send(
+                cid,
+                "trainer",
+                "governance",
+                "CHECKPOINT_SAVED",
+                f"{expid} checkpoint is ready for independent review. SHA-256 {result['sha256'][:16]}.",
+                expid,
+                route="room",
+            )
             transition(cid, "evaluating", "Loading the saved adapter into a fresh model for evaluation")
             experiment.update("evaluating", "{}")
             update_exp(status="evaluating", training=result)
-            model, tokenizer = training.load(adapter)
-            evaluation = training.evaluate(
+            model, tokenizer = backend.load(adapter)
+            evaluation = backend.evaluate(
                 model, tokenizer, dev_rows, progress(expid + " evaluation"), stop, worlds=worlds(expid)
             )
-            reg = training.evaluate(
+            reg = backend.evaluate(
                 model, tokenizer, regressions, progress(expid + " regression"), stop, split="regression"
             )
             prod_eval = (
-                training.evaluate(
+                backend.evaluate(
                     model,
                     tokenizer,
                     held_rows,
@@ -374,7 +407,7 @@ def run(cid):
                 if held_rows
                 else None
             )
-            training.unload(model)
+            backend.unload(model)
             (folder / f"{expid}-evaluation.json").write_text(json.dumps(evaluation, indent=2))
             evaluation_artifact = artifact(
                 cid, folder / f"{expid}-evaluation.json", "evaluation", f"{expid} development evaluation"
@@ -455,6 +488,9 @@ def run(cid):
                     f"{expid} passed independent checks. Development change: {(evaluation['score'] - baseline['score']) * 100:+.1f} percentage points.",
                     expid,
                 )
+                verdict = (
+                    f"Approved for promotion. Integrity, regression and provenance checks passed for {expid}."
+                )
             else:
                 send(
                     cid,
@@ -464,6 +500,20 @@ def run(cid):
                     f"{expid} will not be promoted. Choose the next experiment using these findings.",
                     expid,
                 )
+                reasons = "; ".join(code.replace("_", " ").capitalize() for code in review["reason_codes"])
+                verdict = f"Not promoted. {reasons or 'No improvement over the current best'}."
+            promoted = best is not None and best["id"] == expid
+            send(
+                cid,
+                "governance",
+                "trainer",
+                "CHECKPOINT_VERDICT",
+                verdict,
+                expid,
+                route="room",
+                reply_to=checkpoint_post["message_id"],
+            )
+            react(cid, "governance", checkpoint_post["message_id"], "white_check_mark" if promoted else "x")
         # Selection freezes before protected data is read. No improvement is a valid outcome.
         selection = best["key"] if best else "baseline"
         actor(cid).freeze_selection(selection)
@@ -502,17 +552,17 @@ def run(cid):
                     "Official harness checkpoint evidence",
                 )
         else:
-            model, tokenizer = training.load()
-            final_base = training.evaluate(
+            model, tokenizer = backend.load()
+            final_base = backend.evaluate(
                 model, tokenizer, final_rows, progress("Final baseline"), stop, split="sealed final"
             )
-            training.unload(model)
+            backend.unload(model)
             if best:
-                model, tokenizer = training.load(best["path"])
-                final_best = training.evaluate(
+                model, tokenizer = backend.load(best["path"])
+                final_best = backend.evaluate(
                     model, tokenizer, final_rows, progress("Final checkpoint"), stop, split="sealed final"
                 )
-                training.unload(model)
+                backend.unload(model)
             else:
                 final_best = final_base
         if not best:
@@ -551,13 +601,15 @@ def run(cid):
             "campaign_id": cid,
             "model_id": training.MODEL_ID,
             "model_revision": training.MODEL_REVISION,
+            "hardware": backend.hardware,
             "config": config,
             "final": final,
             "limitations": [
                 "GSM8K subset only, not the full leaderboard evaluation; exact harness and scorer versions are in each report",
                 "Possible base model pretraining contamination",
                 "Four math regression questions, not a broad safety claim",
-                "Local sponsor runtimes; no claim of cloud durability",
+                "Local sponsor runtimes; no claim of cloud durability"
+                + ("; model work ran on a remote Modal GPU" if backend.name == "modal" else ""),
                 "Only executed strategies are claimed. GRPO uses actor-returned deterministic rewards when selected.",
             ],
             "snapshot": store.get(cid),
@@ -570,6 +622,7 @@ def run(cid):
             "governance",
             "CAMPAIGN_COMPLETED",
             f"Final evaluation complete. {VERDICT_SUMMARY[final['improvement_claim']]} All sample-level evidence preserved.",
+            route="room",
         )
         transition(cid, "completed", "Research complete. Evidence package ready.")
         from services.core.cloud import mirror
@@ -607,7 +660,16 @@ def run(cid):
             pass
         traceback.print_exc()
         raise
+    finally:
+        if backend is not None:
+            backend.close()
 
 
 if __name__ == "__main__":
+    from services.core.actor_client import transport
+
+    # Outlast a Terse runtime restart, including its owner-lease fence (about 30 s after SIGKILL).
+    # Retries reuse one request ID per call, so a call that already committed is not run again.
+    transport.retry_seconds = 180
+    transport.role = "worker"
     run(sys.argv[1])

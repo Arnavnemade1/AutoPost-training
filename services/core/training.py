@@ -5,39 +5,25 @@ import hashlib
 import json
 import random
 import time
-from decimal import Decimal, InvalidOperation
-from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, PeftModel, get_peft_model
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from forge_training.config import Example
-from forge_training.artifacts import file_sha256
 from forge_training.data import verify_separation
 from forge_training.modeling import prompt_for
-from forge_training.scoring import extract_answer, wilson_interval
 from forge_training.training import encode_completion, collate_completion
 from services.core.contracts import MODEL_ID, MODEL_REVISION
-
-DATASET_REVISION = "740312add88f781978c0658806c59bc2815b9866"
-PROMPT_VERSION = "math_completion_v1"
-
-
-def sha(path):
-    return file_sha256(Path(path))
-
-
-def extract(text):
-    value = extract_answer(text)
-    return str(value) if value is not None else ""
-
-
-def equal(a, b):
-    try:
-        return Decimal(a) == Decimal(b)
-    except InvalidOperation:
-        return False
+from services.core.protocol import (  # noqa: F401  (re-exported for the runner)
+    DATASET_REVISION,
+    MAX_NEW_TOKENS,
+    PROMPT_VERSION,
+    collect,
+    equal,
+    extract,
+    sha,
+)
 
 
 def benchmark_data(config):
@@ -88,6 +74,34 @@ def device_name():
     return "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 
+def device_info():
+    """Provenance for the hardware that actually ran a job, recorded with every result."""
+    import os
+    import platform
+    import subprocess
+
+    kind = device_name()
+    if kind == "cuda":
+        name = torch.cuda.get_device_name(0)
+    elif kind == "mps":
+        try:
+            name = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            name = ""
+        name = (name or "Apple silicon") + " / Metal"
+    else:
+        name = platform.processor() or platform.machine() or "CPU"
+    return {
+        "backend": os.environ.get("FORGE_EXECUTION_BACKEND", "local"),
+        "type": kind,
+        "name": name,
+        "torch": torch.__version__,
+        "cuda": torch.version.cuda if kind == "cuda" else None,
+    }
+
+
 def load(adapter=None):
     device = device_name()
     dtype = torch.float32 if device == "cpu" else torch.float16
@@ -108,65 +122,63 @@ def unload(model):
     gc.collect()
     if torch.backends.mps.is_available():
         torch.mps.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
-def evaluate(model, tokenizer, rows, progress, cancelled, split="development", worlds=None):
-    model.eval()
+def predict(model, tokenizer, rows):
+    """Greedy answers for a batch of rows. With one row this is exactly the original protocol."""
+    texts = [prompt_for(tokenizer, row["question"]) for row in rows]
+    inputs = tokenizer(texts, return_tensors="pt", padding=True).to(model.device)
+    tokens = model.generate(
+        **inputs, do_sample=False, max_new_tokens=MAX_NEW_TOKENS, pad_token_id=tokenizer.eos_token_id
+    )
+    stops = {tokenizer.eos_token_id}
+    configured = getattr(model.generation_config, "eos_token_id", None)
+    stops.update(
+        configured if isinstance(configured, list) else [configured] if configured is not None else []
+    )
+    width = inputs["input_ids"].shape[1]
     predictions = []
-    started = time.monotonic()
-    with torch.inference_mode():
-        for i, row in enumerate(rows):
-            if cancelled():
-                raise InterruptedError("Campaign stopped")
-            text = prompt_for(tokenizer, row["question"])
-            inputs = tokenizer(text, return_tensors="pt").to(model.device)
-            tokens = model.generate(
-                **inputs, do_sample=False, max_new_tokens=256, pad_token_id=tokenizer.eos_token_id
-            )
-            generated = tokens[0, inputs["input_ids"].shape[1] :]
-            output = tokenizer.decode(generated, skip_special_tokens=True)
-            truncated = len(generated) >= 256 and generated[-1].item() != tokenizer.eos_token_id
-            answer, expected = extract(output), extract(row["answer"])
-            correct = equal(answer, expected)
-            env = worlds(row, answer, i) if worlds else None
-            if env is not None:
-                correct = env["reward"] == 1
-            p = {
+    for row, generated in zip(rows, tokens[:, width:].tolist(), strict=True):
+        end = next((i for i, token in enumerate(generated) if token in stops), None)
+        if end is not None:
+            generated = generated[: end + 1]
+        output = tokenizer.decode(generated, skip_special_tokens=True)
+        answer, expected = extract(output), extract(row["answer"])
+        predictions.append(
+            {
                 "id": row["id"],
                 "question": row["question"],
                 "output": output,
                 "answer": answer,
                 "expected": expected,
-                "correct": correct,
-                "finish_reason": "length" if truncated else "stop",
-                "environment_id": env["id"] if env else None,
+                "correct": equal(answer, expected),
+                "finish_reason": "stop" if end is not None else "length",
             }
-            predictions.append(p)
-            progress(i + 1, len(rows), p)
-    n = len(predictions)
-    score = sum(p["correct"] for p in predictions) / n if n else 0
-    # Wilson interval for the subset. No claim of statistical significance.
-    interval = wilson_interval(sum(p["correct"] for p in predictions), n)
-    return {
-        "score": score,
-        "n": n,
-        "correct": sum(p["correct"] for p in predictions),
-        "ci95": interval,
-        "predictions": predictions,
-        "split": split,
-        "benchmark": "GSM8K subset",
-        "dataset_revision": DATASET_REVISION,
-        "scoring": "forge_numeric_v1, strict final #### numeric line (shared training-core scorer)",
-        "prompt_version": PROMPT_VERSION,
-        "decoding": {"do_sample": False, "max_new_tokens": 256},
-        "seconds": time.monotonic() - started,
-        "model_revision": MODEL_REVISION,
-    }
+        )
+    return predictions
+
+
+def generate(model, tokenizer, rows, cancelled, batch_size=1):
+    model.eval()
+    with torch.inference_mode():
+        for start in range(0, len(rows), batch_size):
+            if cancelled():
+                raise InterruptedError("Campaign stopped")
+            yield from predict(model, tokenizer, rows[start : start + batch_size])
+
+
+def evaluate(model, tokenizer, rows, progress, cancelled, split="development", worlds=None, batch_size=1):
+    started = time.monotonic()
+    stream = generate(model, tokenizer, rows, cancelled, batch_size)
+    return collect(rows, stream, progress, split, worlds, started, device_info(), batch_size)
 
 
 def train(proposal, config, rows, folder, progress, cancelled):
     torch.manual_seed(config["seed"])
     random.seed(config["seed"])
+    device = device_info()
     model, tokenizer = load()
     model = get_peft_model(
         model,
@@ -249,6 +261,7 @@ def train(proposal, config, rows, folder, progress, cancelled):
                 "max_sequence_length": 768,
                 "prompt_version": PROMPT_VERSION,
                 "model_revision": MODEL_REVISION,
+                "device": device,
             },
             indent=2,
         )
@@ -263,4 +276,5 @@ def train(proposal, config, rows, folder, progress, cancelled):
         "sha256": sha(folder / "adapter_model.safetensors"),
         "seconds": time.monotonic() - started,
         "max_sequence_length": 768,
+        "device": device,
     }

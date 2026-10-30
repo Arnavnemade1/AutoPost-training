@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import uuid
+from contextlib import suppress
 from pathlib import Path
 import httpx
 from services.core import store
@@ -17,7 +18,23 @@ def governance(campaign_id):
     return get_actor("GovernanceActor", campaign_id)
 
 
-def send(campaign_id, sender, recipient, category, text, experiment_id=None):
+def bridge_url():
+    return os.getenv("FORGE_RELAY_BRIDGE", "http://127.0.0.1:7529")
+
+
+def bridge_headers():
+    """The bridge refuses callers without the per-launch secret that scripts/lab.py issues.
+    The secret file wins over the environment, so an API reused across launches stays
+    in step with a restarted bridge."""
+    token = os.getenv("FORGE_RELAY_BRIDGE_TOKEN", "")
+    with suppress(OSError):
+        token = (store.DATA / "relay-bridge.token").read_text().strip() or token
+    return {"Authorization": "Bearer " + token}
+
+
+def send(campaign_id, sender, recipient, category, text, experiment_id=None, route="dm", reply_to=None):
+    """Hand a message to Agent Relay. DMs carry 1:1 handoffs; the research room carries
+    decisions; reply_to threads a reply under a room message. Returns the verified receipt."""
     message = Message(
         id=uuid.uuid4().hex,
         campaign_id=campaign_id,
@@ -26,6 +43,8 @@ def send(campaign_id, sender, recipient, category, text, experiment_id=None):
         category=category,
         text=text,
         experiment_id=experiment_id,
+        route=route,
+        reply_to=reply_to,
     )
     # Persist assignment before notification. Retries retain the same idempotency key.
     store.event(campaign_id, "message_pending", text, sender, message=message.model_dump())
@@ -33,9 +52,7 @@ def send(campaign_id, sender, recipient, category, text, experiment_id=None):
     for _ in range(3):
         try:
             r = httpx.post(
-                os.getenv("FORGE_RELAY_BRIDGE", "http://127.0.0.1:7529") + "/message",
-                json=message.model_dump(),
-                timeout=20,
+                bridge_url() + "/message", json=message.model_dump(), headers=bridge_headers(), timeout=30
             )
             r.raise_for_status()
             receipt = r.json()
@@ -49,13 +66,48 @@ def send(campaign_id, sender, recipient, category, text, experiment_id=None):
                 recipient=recipient,
                 category=category,
                 experiment_id=experiment_id,
+                message_id=message.id,
                 relay_id=receipt["message_id"],
+                route=receipt.get("route", route),
+                thread_parent_id=reply_to,
                 receipt=receipt,
             )
             return receipt
         except (httpx.HTTPError, ValueError) as e:
             last_error = type(e).__name__
     raise RuntimeError(f"Agent Relay delivery failed ({last_error}); execution paused before downstream work")
+
+
+def react(campaign_id, sender, relay_message_id, emoji):
+    """A role reacts to a research-room message. Reactions are visible state, never work
+    authorization, so a failure is recorded and does not stop the campaign."""
+    try:
+        r = httpx.post(
+            bridge_url() + "/react",
+            headers=bridge_headers(),
+            json={
+                "campaign_id": campaign_id,
+                "sender": sender,
+                "message_id": relay_message_id,
+                "emoji": emoji,
+            },
+            timeout=20,
+        )
+        r.raise_for_status()
+        result = r.json()
+    except (httpx.HTTPError, ValueError) as e:
+        store.event(campaign_id, "relay_warning", f"Reaction not recorded ({type(e).__name__})", sender)
+        return None
+    store.event(
+        campaign_id,
+        "reaction",
+        f"{sender} reacted {emoji}",
+        sender,
+        relay_id=relay_message_id,
+        emoji=emoji,
+        reactions=result.get("reactions", []),
+    )
+    return result
 
 
 def transition(campaign_id, status, reason):

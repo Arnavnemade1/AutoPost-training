@@ -136,13 +136,14 @@ suite. CI installs the harness extra for the orchestrator workflow.
 
 The private registry enforces the one-attempt workflow, but same-user local execution
 is not an adversarial security boundary. Deploy the evaluator under a separate OS
-owner/container before calling it independent. Clean-copy reproduction of the rehearsal
-is executed on the fixture; reproduction on a different machine is not. The complete
-sealed run (a real model, the full 1,319-example test split, once) and a recording
-of it remain pending. The event gate is not met: the published rules require code
-created during the event, so this build is not an eligible submission without an
-organizer exception ([eligibility review](../event-eligibility.md)). See the
-[demo notes](../demo.md).
+owner/container before calling it independent. Source/runtime hashes and task identity
+are pinned. Clean-copy reproduction of the rehearsal is executed on the fixture, and
+clean-machine reproduction of the test suites passed ([record](clean-machine.md)); a
+clean-machine model run has not been executed. The complete sealed run (a real model, the
+full 1,319-example test split, once) and a recording of it remain pending. The event gate
+is not met: the published rules require code created during the event, so this build is
+not an eligible submission without an organizer exception
+([eligibility review](../event-eligibility.md)). See the [demo notes](../demo.md).
 
 See the [harness runbook](../../services/training-core/HARNESS.md) and the upstream
 [pinned GSM8K task](https://github.com/EleutherAI/lm-evaluation-harness/blob/v0.4.9.2/lm_eval/tasks/gsm8k/gsm8k.yaml).

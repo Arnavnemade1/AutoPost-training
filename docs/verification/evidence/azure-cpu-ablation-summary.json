@@ -1,0 +1,133 @@
+{
+  "gain_without_truncation": false,
+  "limitations": [
+    "Variants are predeclared, but all run on development data: exploratory only.",
+    "A robust verdict on a small set still needs a larger disjoint development set.",
+    "Flexible extraction can select an incidental number; it is a secondary diagnostic."
+  ],
+  "num_examples": 16,
+  "role": "development",
+  "rule": "robust: every variant improves strict accuracy without a flexible drop; fragile: only some do; no_gain: none do.",
+  "stable_strict_gain_ids": [],
+  "strict_regression_ids_any_variant": [
+    "gsm8k-train-7300"
+  ],
+  "uncapped_variants": [
+    "reference",
+    "long-cap"
+  ],
+  "variants": [
+    {
+      "flexible": {
+        "baseline_correct": 9,
+        "candidate_correct": 6
+      },
+      "flexible_delta_percentage_points": -18.75,
+      "improved_ids": [],
+      "name": "reference",
+      "protocol": {
+        "apply_chat_template": true,
+        "max_new_tokens": 512,
+        "max_prompt_tokens": 1024,
+        "num_fewshot": 0
+      },
+      "regressed_ids": [],
+      "release_gate_passed": false,
+      "strict": {
+        "baseline_correct": 0,
+        "candidate_correct": 0
+      },
+      "strict_delta_percentage_points": 0.0,
+      "truncation": {
+        "baseline": 0,
+        "candidate": 0
+      }
+    },
+    {
+      "flexible": {
+        "baseline_correct": 9,
+        "candidate_correct": 6
+      },
+      "flexible_delta_percentage_points": -18.75,
+      "improved_ids": [],
+      "name": "long-cap",
+      "protocol": {
+        "apply_chat_template": true,
+        "max_new_tokens": 1024,
+        "max_prompt_tokens": 1024,
+        "num_fewshot": 0
+      },
+      "regressed_ids": [],
+      "release_gate_passed": false,
+      "strict": {
+        "baseline_correct": 0,
+        "candidate_correct": 0
+      },
+      "strict_delta_percentage_points": 0.0,
+      "truncation": {
+        "baseline": 0,
+        "candidate": 0
+      }
+    },
+    {
+      "flexible": {
+        "baseline_correct": 3,
+        "candidate_correct": 6
+      },
+      "flexible_delta_percentage_points": 18.75,
+      "improved_ids": [],
+      "name": "plain-prompt",
+      "protocol": {
+        "apply_chat_template": false,
+        "max_new_tokens": 512,
+        "max_prompt_tokens": 1024,
+        "num_fewshot": 0
+      },
+      "regressed_ids": [],
+      "release_gate_passed": false,
+      "strict": {
+        "baseline_correct": 0,
+        "candidate_correct": 0
+      },
+      "strict_delta_percentage_points": 0.0,
+      "truncation": {
+        "baseline": 1,
+        "candidate": 3
+      }
+    },
+    {
+      "flexible": {
+        "baseline_correct": 8,
+        "candidate_correct": 7
+      },
+      "flexible_delta_percentage_points": -6.25,
+      "improved_ids": [
+        "gsm8k-train-1090",
+        "gsm8k-train-2214",
+        "gsm8k-train-1055",
+        "gsm8k-train-278"
+      ],
+      "name": "five-shot",
+      "protocol": {
+        "apply_chat_template": false,
+        "max_new_tokens": 512,
+        "max_prompt_tokens": 2048,
+        "num_fewshot": 5
+      },
+      "regressed_ids": [
+        "gsm8k-train-7300"
+      ],
+      "release_gate_passed": false,
+      "strict": {
+        "baseline_correct": 4,
+        "candidate_correct": 7
+      },
+      "strict_delta_percentage_points": 18.75,
+      "truncation": {
+        "baseline": 1,
+        "candidate": 0
+      }
+    }
+  ],
+  "verdict": "no_gain"
+}

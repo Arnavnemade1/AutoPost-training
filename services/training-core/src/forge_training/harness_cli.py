@@ -9,7 +9,7 @@ import signal
 import sys
 from pathlib import Path
 
-from .harness_config import HarnessProtocol, ResourceLimits
+from .harness_config import AblationSpec, HarnessProtocol, ResourceLimits
 
 
 def read_settings(path: Path | None, cls):
@@ -20,14 +20,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="forge-harness")
     commands = parser.add_subparsers(dest="command", required=True)
     dev = commands.add_parser("development")
-    dev.add_argument("--config", type=Path, required=True)
-    dev.add_argument("--checkpoint", type=Path, required=True)
-    dev.add_argument("--expected-hash", required=True)
-    for command in (dev, commands.add_parser("freeze")):
+    ablation = commands.add_parser("ablation")
+    for command in (dev, ablation):
+        command.add_argument("--config", type=Path, required=True)
+        command.add_argument("--checkpoint", type=Path, required=True)
+        command.add_argument("--expected-hash", required=True)
+    ablation.add_argument("--variants", type=Path, required=True)
+    for command in (dev, ablation, commands.add_parser("freeze")):
         command.add_argument("--output", type=Path, required=True)
         command.add_argument("--protocol", type=Path)
         command.add_argument("--limits", type=Path)
-        if command is not dev:
+        if command not in (dev, ablation):
             command.add_argument("--campaign", type=Path, required=True)
             command.add_argument("--harness-evidence", type=Path, required=True)
     audit = commands.add_parser("audit")
@@ -41,7 +44,7 @@ def main() -> int:
     child.add_argument("--side", choices=("baseline", "candidate"), required=True)
     args = parser.parse_args()
     try:
-        from .harness_runner import audit_legacy, development_run, verify_bundle
+        from .harness_runner import ablation_run, audit_legacy, development_run, verify_bundle
 
         def terminate(_signal, _frame):
             raise KeyboardInterrupt("Harness terminated")
@@ -78,16 +81,27 @@ def main() -> int:
                 os.environ.pop(HELD, None)
                 if os.environ.get("FORGE_MODEL_LOCK") == "off":
                     raise ValueError("Harness requires the host model-job lock")
-                lock = acquire_model_lock("harness-development")
+                lock = acquire_model_lock(f"harness-{args.command}")
                 try:
-                    result = development_run(
-                        args.config,
-                        args.checkpoint,
-                        args.expected_hash,
-                        args.output.resolve(),
-                        protocol,
-                        limits,
-                    )
+                    if args.command == "ablation":
+                        result = ablation_run(
+                            args.config,
+                            args.checkpoint,
+                            args.expected_hash,
+                            args.output.resolve(),
+                            protocol,
+                            read_settings(args.variants, AblationSpec),
+                            limits,
+                        )
+                    else:
+                        result = development_run(
+                            args.config,
+                            args.checkpoint,
+                            args.expected_hash,
+                            args.output.resolve(),
+                            protocol,
+                            limits,
+                        )
                 finally:
                     if lock:
                         lock.close()

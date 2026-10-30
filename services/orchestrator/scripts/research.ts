@@ -1,4 +1,3 @@
-import { AgentRelay } from "@agent-relay/sdk";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -19,7 +18,7 @@ import { RelayDispatcher, registerParticipants } from "../src/relay.js";
 import { ResearchCampaign, type ResearchProfile } from "../src/research.js";
 import { TrainingBridge, exists, pythonJson, readJson } from "../src/worker.js";
 import { verifyWorldRollouts, type WorldGateway } from "../src/worlds.js";
-import { launchRelay } from "./local-relay.js";
+import { openRelay, type RelayTarget } from "./relay-target.js";
 
 const limits = { maxRevisions: 2, maxFailures: 2 };
 const GSM8K_REVISION = "740312add88f781978c0658806c59bc2815b9866";
@@ -49,6 +48,14 @@ async function writeDataset(directory: string, name: string, lines: string[], ma
   };
 }
 const regressionPolicy = { maxDropBps: 0, maxDevRegressions: 0 };
+
+/** Real-model device: Apple GPU by default; FORGE_DEVICE=cuda or cpu elsewhere. */
+function modelDevice(): "mps" | "cuda" | "cpu" {
+  const device = process.env.FORGE_DEVICE ?? "mps";
+  if (device !== "mps" && device !== "cuda" && device !== "cpu")
+    throw new Error(`FORGE_DEVICE must be mps, cuda or cpu, not ${device}`);
+  return device;
+}
 /**
  * The dashboard's only view of actor state: snapshots read with public actor reads and
  * written as files, so the dashboard never holds actor credentials. Atomic replace.
@@ -403,7 +410,7 @@ async function provision(
           batch_size: 8,
         },
         seed: 42,
-        device: "mps",
+        device: modelDevice(),
         precision: "float32",
         // The meta-device preflight counts tied embeddings twice (~630M for 494M loaded).
         max_model_parameters: 700000000,
@@ -551,13 +558,10 @@ export async function runResearch(
   };
   const authority = localAuthority([profile.campaignId]);
   const runtime = await launch(authority, join(output, "terse"));
-  let relayServer: Awaited<ReturnType<typeof launchRelay>> | undefined;
+  let relayTarget: RelayTarget | undefined;
   try {
-    relayServer = await launchRelay(output);
-    const relay = await AgentRelay.createWorkspace({
-      name: `forge-${name}-research`,
-      baseUrl: relayServer.url,
-    });
+    relayTarget = await openRelay(output);
+    const relay = await relayTarget.createWorkspace(`forge-${name}-research`);
     const actors = clients(authority, runtime);
     const dispatcher = new RelayDispatcher(
       profile.campaignId,
@@ -729,6 +733,7 @@ export async function runResearch(
       profile: name,
       policyVersion: POLICY_VERSION,
       campaignId: profile.campaignId,
+      relay: { kind: relayTarget.kind, url: relayTarget.url, workspaces: relayTarget.workspaces },
       elapsedSeconds: Math.round((Date.now() - started) / 1000),
       baseline: {
         reportSha256: baselineSha256,
@@ -799,7 +804,7 @@ export async function runResearch(
     await exportLive(output, actors, profile.campaignId, "finished", about);
     return report;
   } finally {
-    await relayServer?.stop();
+    await relayTarget?.stop();
     await runtime.stop();
   }
 }

@@ -501,3 +501,154 @@ def test_legacy_manifest_default_is_normalized_without_rewriting(harness_run, tm
     before = directory_sha256(run)
     assert verify_run(run)["status"] == "verified"
     assert directory_sha256(run) == before
+
+
+def ablation_entry(name, max_new_tokens, baseline, candidate):
+    return {
+        "name": name,
+        "protocol": HarnessProtocol(max_new_tokens=max_new_tokens).model_dump(),
+        "comparison": compare_harness(baseline, candidate),
+    }
+
+
+def test_ablation_variants_are_bounded_distinct_and_cannot_change_seed_or_model():
+    from pydantic import ValidationError
+
+    from forge_training.harness_config import AblationSpec, ablation_protocols
+
+    base = HarnessProtocol(num_fewshot=0)
+    spec = AblationSpec.model_validate(
+        {"variants": [{"name": "reference"}, {"name": "long", "max_new_tokens": 1024}]}
+    )
+    protocols = ablation_protocols(base, spec)
+    assert [p.max_new_tokens for _, p in protocols] == [512, 1024]
+    assert all(p.seed == base.seed and p.device == base.device for _, p in protocols)
+    for bad in (
+        {"variants": [{"name": "only"}]},
+        {"variants": [{"name": "a"}, {"name": "b", "seed": 7}]},
+        {"variants": [{"name": "a"}, {"name": "B"}]},
+        {"variants": [{"name": "a"}, {"name": "b", "max_new_tokens": 4096}]},
+    ):
+        with pytest.raises(ValidationError):
+            AblationSpec.model_validate(bad)
+    for duplicate in (
+        {"variants": [{"name": "a"}, {"name": "a", "max_new_tokens": 64}]},
+        {"variants": [{"name": "a"}, {"name": "b", "max_new_tokens": 512}]},
+    ):
+        with pytest.raises(ValueError, match="unique|distinct"):
+            ablation_protocols(base, AblationSpec.model_validate(duplicate))
+
+
+def test_ablation_verdict_separates_robust_fragile_and_length_artifacts():
+    from forge_training.harness_analysis import summarize_ablation
+
+    baseline, candidate = paired_reports()
+    # Strict gains with flexible already correct: release gate passes in both variants.
+    robust = summarize_ablation(
+        [
+            ablation_entry("a", 512, baseline, candidate),
+            ablation_entry("b", 1024, baseline, candidate),
+        ]
+    )
+    assert robust["verdict"] == "robust"
+    assert robust["stable_strict_gain_ids"] == [str(i) for i in sorted(range(16), key=str)]
+    assert robust["gain_without_truncation"]
+
+    # Under a short cap the baseline is truncated and the candidate "gains"; at a long
+    # cap both policies finish and the gain disappears, with a flexible regression.
+    capped_base = copy.deepcopy(baseline)
+    for row in capped_base["samples"]:
+        row["hit_limit"] = True
+    long_candidate = copy.deepcopy(candidate)
+    for row in long_candidate["samples"]:
+        row["strict"] = False
+    long_candidate["samples"][0]["flexible"] = False
+    fragile = summarize_ablation(
+        [
+            ablation_entry("short", 64, capped_base, candidate),
+            ablation_entry("long", 1024, baseline, long_candidate),
+        ]
+    )
+    assert fragile["verdict"] == "fragile"
+    assert fragile["uncapped_variants"] == ["long"]
+    assert not fragile["gain_without_truncation"]
+    assert fragile["stable_strict_gain_ids"] == []
+
+    none = summarize_ablation(
+        [
+            ablation_entry("x", 64, baseline, long_candidate),
+            ablation_entry("y", 128, baseline, long_candidate),
+        ]
+    )
+    assert none["verdict"] == "no_gain"
+    with pytest.raises(ValueError, match="at least two"):
+        summarize_ablation([ablation_entry("x", 64, baseline, candidate)])
+    final = copy.deepcopy(baseline), copy.deepcopy(candidate)
+    for report in final:
+        report["role"] = "final"
+    with pytest.raises(ValueError, match="development data only"):
+        summarize_ablation([ablation_entry("x", 64, *final), ablation_entry("y", 128, *final)])
+
+
+@pytest.mark.integration
+def test_real_ablation_runs_predeclared_variants_and_detects_tampering(harness_run, tmp_path):
+    import shutil
+
+    from forge_training.harness_config import AblationSpec
+    from forge_training.harness_runner import ablation_run
+    from forge_training.locking import HELD, acquire_model_lock
+
+    root, config_path, _, _ = harness_run
+    checkpoint = root / "fixture/run/checkpoint"
+    spec = AblationSpec.model_validate(
+        {"variants": [{"name": "short", "max_new_tokens": 4}, {"name": "long"}]}
+    )
+    limits = ResourceLimits(max_seconds_per_model=90, min_available_gib=0.25, min_disk_free_gib=1.0)
+    output = tmp_path / "ablation"
+    lock = acquire_model_lock("harness-ablation-test")
+    try:
+        result = ablation_run(
+            config_path,
+            checkpoint,
+            directory_sha256(checkpoint),
+            output,
+            HarnessProtocol(num_fewshot=0, max_new_tokens=8, max_prompt_tokens=128),
+            spec,
+            limits,
+        )
+    finally:
+        if lock:
+            lock.close()
+        os.environ.pop(HELD, None)
+    summary = result["summary"]
+    assert [v["name"] for v in summary["variants"]] == ["short", "long"]
+    assert [v["protocol"]["max_new_tokens"] for v in summary["variants"]] == [4, 8]
+    assert summary["num_examples"] == 2
+    assert summary["verdict"] in {"robust", "fragile", "no_gain"}
+    assert verify_bundle(output)["status"] == "verified"
+    for name in ("short", "long"):
+        assert verify_bundle(output / f"variant-{name}")["status"] == "verified"
+        assert not json.loads((output / f"variant-{name}/result.json").read_text())[
+            "official_test_loaded"
+        ]
+
+    # A summary edited to look better, even with a resealed manifest, is caught.
+    shutil.copytree(output, tmp_path / "copy")
+    forged = json.loads((tmp_path / "copy/summary.json").read_text())
+    forged["verdict"] = "robust" if forged["verdict"] != "robust" else "no_gain"
+    for name in ("summary.json", "bundle.json"):
+        (tmp_path / "copy" / name).unlink()
+    write_json(tmp_path / "copy/summary.json", forged)
+    seal_bundle(tmp_path / "copy")
+    with pytest.raises(ValueError, match="Ablation summary differs"):
+        verify_bundle(tmp_path / "copy")
+    with pytest.raises(FileExistsError):
+        ablation_run(
+            config_path,
+            checkpoint,
+            directory_sha256(checkpoint),
+            output,
+            HarnessProtocol(num_fewshot=0),
+            spec,
+            limits,
+        )
