@@ -25,6 +25,15 @@ start its own helpers until the depth limit.
 | `FORGE_AGENT_DEPTH` | 2 | Levels below the role agent; at the limit the spawn tool is not offered |
 | `FORGE_AGENT_MAX_CALLS` | 12 | Model calls per decision, across the whole tree |
 
+- The budget is held, not hoped for. Before an agent delegates, its own answer call and
+  each subagent's first call are set aside, and requests that don't fit are trimmed. The
+  spawn tool is offered only when there is room. Delegation can never leave an agent
+  unable to answer.
+- Agents are told to delegate when the evidence has many items (8 or more failures or
+  examples) or several independent questions, and to answer directly otherwise. Measured on
+  campaign forge-1d447446's 24 baseline failures, the data researcher split the work across
+  3 or 4 subagents in 3 of 3 runs, those subagents split their slices again, and every
+  decision finished within 12 calls.
 - A failed subagent is reported to its parent as an error and does not stop the decision.
 - A role whose model call fails records an error event, and the campaign continues
   without that role's opinion. The director still fails closed, as before.

@@ -130,6 +130,9 @@ class Session:
         self.calls = 0
         self.usage = {"input_tokens": 0, "output_tokens": 0}
         self.nodes = []
+        # Calls promised but not yet made: each spawning agent's answer and each started
+        # subagent's first call. Delegation can never spend the budget an answer needs.
+        self.held = 0
         self._lock = threading.Lock()
 
     def _charge(self, raw):
@@ -138,14 +141,20 @@ class Session:
             for k in self.usage:
                 self.usage[k] += int(usage.get(k) or 0)
 
-    def _reserve(self):
+    def _reserve(self, held=False):
         with self._lock:
-            if self.calls >= self.limits["max_calls"]:
+            if held:
+                self.held -= 1
+            elif self.calls + self.held >= self.limits["max_calls"]:
                 return False
             self.calls += 1
             return True
 
-    def run(self, instructions, evidence, schema, name, depth=0, parent=None, brief=None):
+    def _free(self):
+        with self._lock:
+            return self.limits["max_calls"] - self.calls - self.held
+
+    def run(self, instructions, evidence, schema, name, depth=0, parent=None, brief=None, prepaid=False):
         node = {
             "agent": name,
             "parent": parent,
@@ -157,14 +166,17 @@ class Session:
         }
         with self._lock:
             self.nodes.append(node)
-        spawn = depth < self.limits["depth"]
+        # Delegating costs at least one subagent call plus this agent's answer after it.
+        spawn = depth < self.limits["depth"] and self._free() >= 3 + (0 if prepaid else 1)
         payload = {
             "model": node["model"],
             "max_output_tokens": 4000,
             "instructions": instructions
             + (
-                f" You may call spawn_subagents (at most {self.limits['max_subagents']} at a time) "
-                "when parallel, focused analysis would improve your answer; then answer."
+                f" You can call spawn_subagents (at most {self.limits['max_subagents']} at a time). "
+                "Delegate when the evidence has many items (8 or more failures or examples) or "
+                "several independent questions: give each subagent one slice or one question, "
+                "then combine their findings in your answer. Answer directly when it is small."
                 if spawn
                 else ""
             ),
@@ -173,8 +185,9 @@ class Session:
         }
         if spawn:
             payload["tools"] = [SPAWN_TOOL]
+        held = prepaid
         for _round in range(4):
-            if not self._reserve():
+            if not self._reserve(held):
                 raise RuntimeError(f"{ROLES[self.role]} exceeded {self.limits['max_calls']} model calls")
             raw = _post(payload)
             self._charge(raw)
@@ -200,6 +213,7 @@ class Session:
                         "output": json.dumps(self._spawn(call, evidence, name, depth, node)),
                     }
                 )
+            held = node.pop("answer_held", False)
             payload = {
                 "model": node["model"],
                 "max_output_tokens": 4000,
@@ -217,9 +231,18 @@ class Session:
             wanted = json.loads(call.get("arguments") or "{}").get("agents") or []
         except json.JSONDecodeError:
             return {"error": "Arguments were not valid JSON; answer with what you have."}
-        wanted = wanted[: self.limits["max_subagents"]]
+        if node.get("answer_held"):
+            return {"error": "Only one spawn_subagents call per answer."}
+        with self._lock:
+            room = self.limits["max_calls"] - self.calls - self.held - 1
+            wanted = wanted[: max(0, min(self.limits["max_subagents"], room))]
+            if wanted:
+                self.held += 1 + len(wanted)
+                node["answer_held"] = True
         if not wanted:
-            return {"error": "No subagents requested."}
+            return {
+                "error": "No subagents started (none requested, or the call budget is spent). Answer now."
+            }
         instructions = SUBAGENT_INSTRUCTIONS.format(parent=ROLES[self.role].lower())
 
         def work(spec):
@@ -232,6 +255,7 @@ class Session:
                     depth + 1,
                     parent=parent,
                     brief=spec["brief"][:1000],
+                    prepaid=True,
                 )
                 return {"name": spec["name"][:60], "finding": found["finding"]}
             except Exception as error:  # A failed helper is reported to its parent, not fatal.

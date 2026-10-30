@@ -117,16 +117,38 @@ def test_requests_beyond_the_subagent_cap_are_dropped(api, monkeypatch):
     assert len(session.subagents()) == 2
 
 
-def test_the_call_budget_stops_runaway_delegation(api, monkeypatch):
-    monkeypatch.setenv("FORGE_AGENT_MAX_CALLS", "2")
+def test_the_call_budget_always_leaves_room_for_the_answer(api, monkeypatch):
+    monkeypatch.setenv("FORGE_AGENT_MAX_CALLS", "4")
     requests, script = api
     script[lambda b, t: is_parent(b, t)] = lambda b, t: spawn("r-parent", ["a", "b", "c"])
+    # Subagents would delegate again if they could; with this budget they are not offered the tool.
+    script[lambda b, t: "Look at" in t and "tools" in b] = lambda b, t: spawn("r-sub", ["x"])
     script[lambda b, t: "Look at" in t] = lambda b, t: answer("r-sub", {"finding": "x"})
     script[lambda b, t: "previous_response_id" in b] = lambda b, t: answer("r-final", {"summary": "ok"})
-    # One parent call plus one subagent fit; the other subagents and the parent's answer do not.
-    with pytest.raises(RuntimeError, match="exceeded 2 model calls"):
-        agents.consult("data", agents.DATA, {}, agents._text({"summary": {"type": "string"}}))
-    assert len(requests) == 2
+    result, session = agents.consult("data", agents.DATA, {}, agents._text({"summary": {"type": "string"}}))
+    # One call for the parent, two subagents (the third does not fit), and the parent's answer.
+    assert result == {"summary": "ok"}
+    assert session.calls == 4 and session.held == 0
+    assert len(session.subagents()) == 2
+    assert all("tools" not in r for r in requests if "Look at" in str(r.get("input")))
+
+
+def test_nested_subagents_share_one_budget_and_every_level_answers(api, monkeypatch):
+    monkeypatch.setenv("FORGE_AGENT_MAX_CALLS", "8")
+    requests, script = api
+    script[lambda b, t: is_parent(b, t)] = lambda b, t: spawn("r-parent", ["a", "b"])
+    script[lambda b, t: "Look at a" in t and "tools" in b] = lambda b, t: spawn("r-a", ["a1", "a2", "a3"])
+    script[lambda b, t: "previous_response_id" in b and b["previous_response_id"] == "r-a"] = lambda b, t: (
+        answer("r-a-final", {"finding": "a combined"})
+    )
+    script[lambda b, t: "previous_response_id" in b] = lambda b, t: answer("r-final", {"summary": "ok"})
+    script[lambda b, t: "Look at" in t] = lambda b, t: answer("r-leaf", {"finding": "leaf"})
+    result, session = agents.consult("data", agents.DATA, {}, agents._text({"summary": {"type": "string"}}))
+    assert result == {"summary": "ok"}
+    assert session.calls <= 8 and session.held == 0
+    names = [h["name"] for h in session.subagents()]
+    assert {"a", "b"} <= set(names)
+    assert any(h["depth"] == 2 for h in session.subagents())
 
 
 def test_a_failed_subagent_is_reported_to_its_parent(api):

@@ -135,8 +135,14 @@ def run(cid):
             role,
             recipient,
             "SUBAGENTS_REPORTED",
-            f"{agents.ROLES[role]} ran {len(helpers)} subagents in parallel: "
-            + ", ".join(h["name"] for h in helpers)
+            f"{agents.ROLES[role]} ran {len(helpers)} subagents in parallel"
+            + (
+                f", {sum(h['depth'] > 1 for h in helpers)} of them started by other subagents"
+                if any(h["depth"] > 1 for h in helpers)
+                else ""
+            )
+            + ": "
+            + ", ".join(h["name"] for h in helpers if h["depth"] == 1)
             + ".",
             expid,
             route="room",
@@ -147,7 +153,8 @@ def run(cid):
                 role,
                 recipient,
                 "SUBAGENT_FINDING",
-                f"{h['name']}: {h.get('finding') or 'failed: ' + h.get('error', 'no finding')}",
+                (f"{h['name']} (helping {h['parent']})" if h["depth"] > 1 else h["name"])
+                + f": {h.get('finding') or 'failed: ' + h.get('error', 'no finding')}",
                 expid,
                 route="room",
                 reply_to=parent["message_id"],
