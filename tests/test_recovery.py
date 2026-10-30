@@ -64,6 +64,20 @@ def test_dead_worker_is_interrupted_once_with_evidence_preserved(tmp_path, monke
     assert len(store.events("lost")) == 1
 
 
+def test_a_long_command_line_is_still_recognized():
+    # Linux ps truncates piped output at 80 columns unless asked not to; the marker sits past it.
+    padding = "x" * 200
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)", padding, "services.core.runner", "forge-long"]
+    )
+    try:
+        assert lifecycle.worker_alive(child.pid, "forge-long")
+    finally:
+        child.kill()
+        child.wait()
+    assert not lifecycle.worker_alive(child.pid, "forge-long")
+
+
 def test_unrelated_live_pid_cannot_keep_a_dead_campaign_running():
     import os
 

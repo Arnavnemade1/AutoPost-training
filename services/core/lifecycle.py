@@ -12,8 +12,9 @@ def process_alive(pid, command):
         return False
     try:
         os.kill(pid, 0)
+        # -ww: Linux ps cuts piped output at 80 columns, which would hide the command we match.
         process = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "stat=,command="], capture_output=True, text=True, timeout=2
+            ["ps", "-ww", "-p", str(pid), "-o", "stat=,command="], capture_output=True, text=True, timeout=2
         )
         value = process.stdout.strip()
         return bool(value and not value.startswith("Z") and command in value)
