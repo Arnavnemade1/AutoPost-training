@@ -69,7 +69,7 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   ([eligibility review](event-eligibility.md)).
   See [Phase 8 verification](verification/phase8-local.md).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
-  CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
+  CI passed on `3f03a63`, Phase 4 on `80eb305`; Phases 5 to 8 run in the same workflows.
 
 ## Collaboration boundaries
 

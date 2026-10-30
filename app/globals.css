@@ -3319,14 +3319,14 @@ td:last-child {
   .heading-actions > .button {
     min-height: 38px;
   }
-  .heading-actions > .button:first-child {
+  .heading-actions > .button:not(.primary):first-child {
     font-size: 9px;
     min-height: 30px;
     border: 0;
     padding: 5px;
     background: none;
   }
-  .heading-actions > .button:first-child > svg {
+  .heading-actions > .button:not(.primary):first-child > svg {
     width: 12px;
     height: 12px;
   }
@@ -3554,7 +3554,7 @@ td:last-child {
     width: 15px;
     height: 15px;
   }
-  .heading-actions > .button:first-child {
+  .heading-actions > .button:not(.primary):first-child {
     font-size: 9px;
   }
   .campaign-bar {
