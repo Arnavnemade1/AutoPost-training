@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from forge_training.config import Example
 from forge_training.data import question_key, verify_separation
-from services.core import compute, distill, packs, production, store, training
+from services.core import agents, compute, distill, packs, production, store, training
 from services.core.director import propose, build_input
 from services.core.briefing import publish
 from services.core.verdict import SUMMARY as VERDICT_SUMMARY, final_verdict
@@ -96,6 +96,62 @@ def run(cid):
             return result
 
         return execute
+
+    def team(role, instructions, evidence, schema, expid=None, recipient="director"):
+        """One model-backed decision by `role`, which may spin up subagents. Their findings are
+        posted to the research room as a thread under the parent's report. Returns the answer, or
+        None when no model is configured or the call fails (deterministic work continues)."""
+        if not agents.configured():
+            return None
+        try:
+            answer, session = agents.consult(role, instructions, evidence, schema)
+        except Exception as error:
+            store.event(cid, "error", f"{agents.ROLES[role]} model unavailable: {error}", role)
+            return None
+        record_agents(role, session.transcript(), session.subagents(), expid, recipient)
+        return answer
+
+    def record_agents(role, transcript, helpers, expid, recipient):
+        name = f"{expid or 'campaign'}-{role}-agents.json"
+        (folder / name).write_text(json.dumps(transcript, indent=2))
+        artifact(cid, folder / name, "agent_transcript", f"{agents.ROLES[role]} model calls and subagents")
+        store.patch(
+            cid,
+            lambda s: s.setdefault("agent_calls", []).append(
+                {
+                    "role": role,
+                    "experiment_id": expid,
+                    "model": agents.model(role),
+                    "calls": transcript["calls"],
+                    "usage": transcript["usage"],
+                    "subagents": [h["name"] for h in helpers],
+                }
+            ),
+        )
+        if not helpers:
+            return
+        parent = send(
+            cid,
+            role,
+            recipient,
+            "SUBAGENTS_REPORTED",
+            f"{agents.ROLES[role]} ran {len(helpers)} subagents in parallel: "
+            + ", ".join(h["name"] for h in helpers)
+            + ".",
+            expid,
+            route="room",
+        )
+        for h in helpers:
+            send(
+                cid,
+                role,
+                recipient,
+                "SUBAGENT_FINDING",
+                f"{h['name']}: {h.get('finding') or 'failed: ' + h.get('error', 'no finding')}",
+                expid,
+                route="room",
+                reply_to=parent["message_id"],
+            )
 
     def hardware(device):
         save_field(hardware=device)
@@ -244,6 +300,25 @@ def run(cid):
             "BASELINE_COMPLETED",
             f"Baseline: {baseline['correct']}/{baseline['n']} correct ({baseline['score'] * 100:.1f}%). {baseline['n'] - baseline['correct']} failures available for diagnosis.",
         )
+        diagnosis = team(
+            "data",
+            agents.DATA,
+            {
+                "task": pack.display.name,
+                "objective": config["objective"],
+                "baseline": {"correct": baseline["correct"], "n": baseline["n"]},
+                "development_failures": agents.failures(baseline),
+                "production_failure_kinds": {
+                    c["kind"]: c["count"] for c in scan["report"]["categories"] if c["count"]
+                }
+                if scan["report"]
+                else None,
+            },
+            agents.DATA_SCHEMA,
+        )
+        if diagnosis:
+            save_field(diagnosis=diagnosis)
+            send(cid, "data", "director", "FAILURES_DIAGNOSED", diagnosis["summary"])
         previous = []
         best = None
         for index in range(config["max_experiments"]):
@@ -254,6 +329,8 @@ def run(cid):
             )
             measured = baseline if not best else best["evaluation"]
             context = build_input(config, measured, previous, scan["report"], prod_train)
+            if diagnosis:
+                context["data_researcher"] = diagnosis
             save_field(director_context=context)
             expid = f"exp-{index + 1:03d}"
             input_file = folder / f"{expid}-director-input.json"
@@ -263,6 +340,9 @@ def run(cid):
             proposal = propose(config, measured, previous, context=context)
             save_field(director=proposal["director"])
             expid = f"exp-{index + 1:03d}"
+            if "agent_session" in proposal:
+                session = proposal.pop("agent_session")
+                record_agents("director", session, proposal.get("subagents", []), expid, "data")
             key = f"{cid}-{expid}"
             spec = {
                 "id": expid,
@@ -427,6 +507,27 @@ def run(cid):
                 f"{expid} saved. Weights changed: {result['weights_changed']}. SHA-256 {result['sha256'][:16]}. Reload independently for evaluation.",
                 expid,
             )
+            training_review = team(
+                "trainer",
+                agents.TRAINER,
+                {
+                    "strategy": proposal["strategy"],
+                    "learning_rate": proposal["learning_rate"],
+                    "lora_rank": proposal["lora_rank"],
+                    "steps": spec["max_steps"],
+                    "weights_changed": result["weights_changed"],
+                    "loss_by_step": [
+                        {"step": m["step"], "loss": round(m["loss"], 4)}
+                        for m in json.loads(experiment.snapshot())["metrics"]
+                    ],
+                },
+                agents.TRAINER_SCHEMA,
+                expid,
+                recipient="evaluator",
+            )
+            if training_review:
+                update_exp(training_review=training_review)
+                send(cid, "trainer", "director", "TRAINING_REVIEWED", training_review["assessment"], expid)
             # Governance answers in this checkpoint's thread once the evidence is in.
             checkpoint_post = send(
                 cid,
@@ -500,6 +601,41 @@ def run(cid):
                     "dev_score": evaluation["score"],
                 },
             )
+            reading = team(
+                "evaluator",
+                agents.EVALUATOR,
+                {
+                    "baseline": {"correct": measured["correct"], "n": measured["n"]},
+                    "checkpoint": {"correct": evaluation["correct"], "n": evaluation["n"]},
+                    "compared_against": "baseline" if not best else best["id"],
+                    **agents.changes(measured, evaluation),
+                },
+                agents.EVALUATOR_SCHEMA,
+                expid,
+            )
+            opinion = team(
+                "governance",
+                agents.GOVERNANCE,
+                {
+                    "deterministic_decision": review["decision"],
+                    "reason_codes": review.get("reason_codes", []),
+                    "development": {"before": measured["score"], "after": evaluation["score"]},
+                    "regression": {"before": base_reg["score"], "after": reg["score"]},
+                    "production_held_out": {
+                        "before": base_prod["correct"],
+                        "after": prod_eval["correct"],
+                        "n": prod_eval["n"],
+                    }
+                    if prod_eval
+                    else None,
+                    "training_review": training_review,
+                    "evaluator_reading": reading,
+                },
+                agents.GOVERNANCE_SCHEMA,
+                expid,
+            )
+            if reading or opinion:
+                update_exp(evaluator_reading=reading, council_opinion=opinion)
             experiment.update("completed", json.dumps({"evaluation": evaluation, "review": review}))
             spent = min(reservation, time.monotonic() - exp_started)
             actor(cid).settle(key, spent)
@@ -520,7 +656,8 @@ def run(cid):
                     f" Held-out production failures now correct: {prod_eval['correct']}/{prod_eval['n']} (baseline {base_prod['correct']}/{base_prod['n']})."
                     if prod_eval
                     else ""
-                ),
+                )
+                + (f" {reading['summary']}" if reading else ""),
                 expid,
             )
             previous.append(
@@ -580,6 +717,17 @@ def run(cid):
                 route="room",
                 reply_to=checkpoint_post["message_id"],
             )
+            if opinion:
+                send(
+                    cid,
+                    "governance",
+                    "director",
+                    "COUNCIL_OPINION",
+                    f"Model review ({opinion['recommendation']}, advisory): {opinion['rationale']} Risk to watch: {opinion['risk']}",
+                    expid,
+                    route="room",
+                    reply_to=checkpoint_post["message_id"],
+                )
             react(cid, "governance", checkpoint_post["message_id"], "white_check_mark" if promoted else "x")
         # Selection freezes before protected data is read. No improvement is a valid outcome.
         selection = best["key"] if best else "baseline"

@@ -1,9 +1,7 @@
 """A bounded, evidence-driven research decision. Final test data is never passed here."""
 
-import json
-import os
 from typing import Literal
-import httpx
+import httpx  # noqa: F401 (tests patch httpx.post through this module)
 from pydantic import BaseModel, ConfigDict, Field
 
 FOCUS = ("arithmetic", "multi_step", "formatting", "general", "production_failures")
@@ -46,6 +44,14 @@ def build_input(config, development, previous, production=None, production_train
 GSM8K_INSTRUCTIONS = "You are Forge's research director. Choose ONE bounded LoRA experiment based on measured development evidence. You cannot change the objective, reward or benchmark. Never ask for final test data. Use only allowed strategies. broad_sft trains the permitted corpus; targeted_sft reweights its longer multi-step examples. If grpo is allowed, it uses 8 TRL steps with deterministic Terse rewards. Begin with SFT to learn answer format, then compare GRPO after a valid SFT candidate. GRPO warm-starts the best approved SFT adapter, so its lora_rank MUST match that candidate's recorded rank. Return a concrete hypothesis. If production_failures is present, those are failures found in deployment traffic: targeted_sft trains their labeled examples first, and their held-out half measures the fix, so name the failure kinds your experiment addresses. Prefer a different strategy when prior experiments fail. Learning rate 1e-5 to 1e-3, rank 8 or 16."
 
 
+# Appended to either set of instructions when the director reasons with a model.
+DELEGATION = (
+    " Before choosing, you may spawn subagents to analyze separable parts of the evidence in "
+    "parallel, for example one per failure pattern, one to weigh previous experiments, or one to "
+    "check the production failures. Use their findings in your hypothesis."
+)
+
+
 def instructions(config):
     """The original math instructions, unchanged, unless the campaign uses a new method or task."""
     from services.core import packs, strategies
@@ -85,9 +91,9 @@ def propose(config, development, previous, context=None):
         }
     if fallback["strategy"] not in config["strategies"]:
         fallback["strategy"] = config["strategies"][0]
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or "https://api.openai.com/v1"
-    key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not key:
+    from services.core import agents
+
+    if not agents.configured():
         return Proposal.model_validate(fallback).model_dump() | {"director": "Evidence-driven local director"}
     schema = {
         "type": "object",
@@ -101,32 +107,19 @@ def propose(config, development, previous, context=None):
         "required": ["strategy", "learning_rate", "lora_rank", "hypothesis", "focus"],
         "additionalProperties": False,
     }
-    payload = {
-        "model": os.getenv("FORGE_DIRECTOR_MODEL", "gpt-5-mini"),
-        "max_output_tokens": 2000,
-        "instructions": instructions(config),
-        "input": json.dumps(context if context is not None else build_input(config, development, previous)),
-        "text": {
-            "format": {"type": "json_schema", "name": "experiment_proposal", "strict": True, "schema": schema}
-        },
-    }
-    headers = {"api-key": key} if os.getenv("AZURE_OPENAI_API_KEY") else {"Authorization": f"Bearer {key}"}
-    r = httpx.post(endpoint.rstrip("/") + "/responses", headers=headers, json=payload, timeout=90)
-    r.raise_for_status()
-    raw = r.json()
-    chunks = [
-        c["text"]
-        for o in raw.get("output", [])
-        for c in o.get("content", [])
-        if c.get("type") == "output_text"
-    ]
-    if not chunks:
-        raise RuntimeError("Research director returned no structured proposal")
-    proposal = Proposal.model_validate_json("".join(chunks)).model_dump()
+    answer, session = agents.consult(
+        "director",
+        instructions(config) + DELEGATION,
+        context if context is not None else build_input(config, development, previous),
+        schema,
+    )
+    proposal = Proposal.model_validate(answer).model_dump()
     if proposal["strategy"] not in config["strategies"]:
         raise ValueError("Director selected an unauthorized strategy")
     return proposal | {
-        "director": f"Azure OpenAI · {payload['model']}",
-        "response_id": raw["id"],
-        "usage": raw.get("usage"),
+        "director": f"{agents.provider()} · {agents.model('director')}",
+        "response_id": session.nodes[0]["response_ids"][-1],
+        "usage": session.usage,
+        "subagents": session.subagents(),
+        "agent_session": session.transcript(),
     }

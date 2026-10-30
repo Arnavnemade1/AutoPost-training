@@ -10,7 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from services.core import compute, distill, packs, production, store, strategies, uploads
+from services.core import agents, compute, distill, packs, production, store, strategies, uploads
 from services.core.packs import register as pack_register
 from services.core.overseer import (
     review as overseer_review,
@@ -99,10 +99,14 @@ def health():
                 )
         except (httpx.HTTPError, ValueError):
             services[name] = {"connected": False, "mode": "Unavailable"}
+    team = agents.status()
     services["director"] = {
-        "connected": bool(os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")),
-        "mode": "Azure OpenAI" if os.getenv("AZURE_OPENAI_API_KEY") else "Local evidence director",
-        "model": os.getenv("FORGE_DIRECTOR_MODEL", "local"),
+        "connected": team["connected"],
+        "mode": team["provider"] or "Local evidence director",
+        "model": team["models"].get("director", "local"),
+        # Every role reasons with a model when keys are set, and may spin up subagents.
+        "agents": team["models"],
+        "subagents": team["subagents"],
     }
     services["storage"] = {
         "connected": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),

@@ -895,12 +895,12 @@ export function ConnectionsView({ health }: { health: Health | null }) {
     },
     {
       id: "director",
-      name: "Azure OpenAI",
+      name: "Research agents",
       icon: "target",
       description:
-        "Structured research proposals based on measured development failures. Credentials stay on the server.",
+        "All five roles reason with this model and can start subagents for focused analysis. Credentials stay on the server.",
       version: health?.services.director?.model || "Not configured",
-      endpoint: "Azure-hosted deployment",
+      endpoint: health?.services.director?.mode || "Azure-hosted deployment",
     },
     {
       id: "storage",
