@@ -36,6 +36,9 @@ image = (
         "huggingface-hub==2.3.0",
         "accelerate==1.15.0",
     )
+    # Triton kernels for Qwen3.5's gated delta (linear attention) layers. Without them transformers
+    # runs a pure-torch fallback at about 20 s per 4B answer. Dense models never call them.
+    .uv_pip_install("flash-linear-attention==0.5.2", "fla-core==0.5.2", "einops==0.8.1")
     .env(
         {
             "HF_HOME": f"{CACHE}/hf",
@@ -51,13 +54,13 @@ app = modal.App("forge-training", image=image)
 _loaded = {"key": None, "model": None, "tokenizer": None}
 
 
-def _model(adapter):
+def _model(adapter, model_id=None):
     """Keep one model resident per container; reload only when the adapter changes."""
     import tempfile
 
     from services.core import training
 
-    key = adapter["sha256"] if adapter else "base"
+    key = (model_id, adapter["sha256"] if adapter else "base")
     if _loaded["key"] != key:
         if _loaded["model"] is not None:
             training.unload(_loaded["model"])
@@ -69,7 +72,7 @@ def _model(adapter):
                 (folder / name).write_bytes(data)
             if training.sha(folder / "adapter_model.safetensors") != adapter["sha256"]:
                 raise RuntimeError("Adapter checksum changed in transfer; refusing to evaluate")
-        model, tokenizer = training.load(folder)
+        model, tokenizer = training.load(folder, model_id)
         weights.commit()
         _loaded.update(key=key, model=model, tokenizer=tokenizer)
     return _loaded["model"], _loaded["tokenizer"]
@@ -93,17 +96,25 @@ def execute(job, events):
 
     from services.core import training
 
+    import torch
+
     started = time.monotonic()
+    torch.cuda.reset_peak_memory_stats()
     device = training.device_info()
     events.put(("device", device))  # The command center names the GPU before the first result.
     if job["kind"] == "evaluate":
-        model, tokenizer = _model(job.get("adapter"))
+        model, tokenizer = _model(job.get("adapter"), job.get("model_id"))
         count = 0
         # Batch size 1, exactly the local protocol: batched greedy decoding changes predictions.
         for prediction in training.generate(model, tokenizer, job["rows"], lambda: False):
             events.put(("prediction", prediction))
             count += 1
-        return {"device": device, "seconds": time.monotonic() - started, "count": count}
+        return {
+            "device": device,
+            "seconds": time.monotonic() - started,
+            "count": count,
+            "peak_gpu_memory_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2),
+        }
     if job["kind"] == "train":
         if _loaded["model"] is not None:
             training.unload(_loaded["model"])
@@ -118,6 +129,7 @@ def execute(job, events):
             lambda: False,  # A local stop cancels this function call outright.
         )
         files = {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()}
+        result["peak_gpu_memory_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
         return {"result": result, "files": files, "device": device}
     raise ValueError(f"Unknown job kind {job['kind']!r}")
 

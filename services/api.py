@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from services.core import compute, production, store
-from services.core.contracts import CampaignConfig
+from services.core.contracts import DEFAULT_MODEL_ID, MODEL_ID, CampaignConfig, model_spec
 from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
@@ -99,6 +99,7 @@ def health():
         "services": services,
         "worker": backend["label"] or local,
         "compute": backend,
+        "model": {k: model_spec(DEFAULT_MODEL_ID)[k] for k in ("id", "label", "parameters")},
         "version": "0.1.0",
     }
 
@@ -127,6 +128,17 @@ def initialize_campaign(config: CampaignConfig):
         raise HTTPException(503, str(error)) from error
     if backend != "local" and "grpo" in config.strategies:
         raise HTTPException(422, "GRPO runs only on the local backend. Choose SFT strategies for Modal.")
+    spec = model_spec(config.model_id)
+    if spec["remote_only"] and backend == "local":
+        raise HTTPException(
+            422, f"{config.model_id} needs a cloud GPU. Start the lab with FORGE_BACKEND=modal."
+        )
+    if config.model_id != MODEL_ID and (
+        "grpo" in config.strategies or config.final_backend != "shared_scorer"
+    ):
+        raise HTTPException(
+            422, f"{config.model_id} supports SFT strategies and the shared final scorer only."
+        )
     if config.production_scan and not production.load_scan(config.production_scan):
         raise HTTPException(404, "Production scan not found")
     cid = "forge-" + uuid.uuid4().hex[:8]

@@ -310,15 +310,18 @@ export function ExperimentDetail({
           <div className="config-list">
             {Object.entries({
               Algorithm: "Supervised fine-tuning with LoRA",
-              "Base model": "Qwen/Qwen2.5-0.5B-Instruct",
+              "Base model":
+                campaign?.config.model_id ?? "Qwen/Qwen2.5-0.5B-Instruct",
               "Learning rate": e.proposal.learning_rate,
               "LoRA rank": e.proposal.lora_rank,
-              "LoRA targets": "q_proj, v_proj",
+              "LoRA targets": (
+                e.training?.lora_targets ?? ["q_proj", "v_proj"]
+              ).join(", "),
               "Maximum sequence length": e.training?.max_sequence_length ?? 768,
               Seed: campaign?.config.seed,
               Dataset: "openai/gsm8k, disjoint train slice",
               "Reward version": "exact-answer-v1",
-              Precision: `float16 on ${e.training?.device?.name ?? "Metal or CUDA"}`,
+              Precision: `${e.training?.dtype ?? "float16"} on ${e.training?.device?.name ?? "Metal or CUDA"}`,
             }).map(([k, v]) => (
               <div key={k}>
                 <span>{k}</span>

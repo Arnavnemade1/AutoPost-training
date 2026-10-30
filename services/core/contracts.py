@@ -1,14 +1,53 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
+import os
+
 MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
 MODEL_REVISION = "7ae557604adf67be50417f59c2c2f167def9a775"
+
+# Every model a campaign may train, with everything that differs between them. The 0.5B entry
+# is exactly the behaviour Forge has always had.
+MODELS = {
+    MODEL_ID: {
+        "revision": MODEL_REVISION,
+        "label": "Qwen2.5 · 0.5B",
+        "parameters": "494M",
+        "dtype": "float16",
+        "lora_targets": ["q_proj", "v_proj"],
+        "chat_template_kwargs": {},
+        "max_new_tokens": 256,
+        "remote_only": False,
+    },
+    # Hybrid text tower: 24 gated delta (linear attention) layers and 8 full-attention layers.
+    # q_proj/v_proj exist only in the 8 full-attention layers, so LoRA also targets the
+    # linear-attention input projection to adapt every layer. Weights ship in bfloat16; float16
+    # is not used. Thinking is off: the chat template's documented non-thinking mode emits an
+    # empty <think></think>, and the same "#### <number>" scorer reads the direct answer.
+    "Qwen/Qwen3.5-4B": {
+        "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "label": "Qwen3.5 · 4B",
+        "parameters": "4.66B",
+        "dtype": "bfloat16",
+        "lora_targets": ["q_proj", "v_proj", "in_proj_qkv"],
+        "chat_template_kwargs": {"enable_thinking": False},
+        "max_new_tokens": 512,
+        "remote_only": True,
+    },
+}
+DEFAULT_MODEL_ID = os.environ.get("FORGE_MODEL_ID", MODEL_ID)
+if DEFAULT_MODEL_ID not in MODELS:
+    raise ValueError(f"FORGE_MODEL_ID must be one of {', '.join(MODELS)}, not {DEFAULT_MODEL_ID!r}")
+
+
+def model_spec(model_id=None):
+    return MODELS[model_id or MODEL_ID] | {"id": model_id or MODEL_ID}
 
 
 class CampaignConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(default="Mathematical reasoning", min_length=3, max_length=80)
-    model_id: Literal["Qwen/Qwen2.5-0.5B-Instruct"] = MODEL_ID
+    model_id: Literal["Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen3.5-4B"] = DEFAULT_MODEL_ID
     benchmark: Literal["gsm8k-subset"] = "gsm8k-subset"
     final_backend: Literal["shared_scorer", "lm_eval_azure"] = "shared_scorer"
     objective: str = Field(

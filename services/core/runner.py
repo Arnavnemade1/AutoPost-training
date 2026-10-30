@@ -175,7 +175,7 @@ def run(cid):
         transition(cid, "baseline", "Measuring the original model on development data")
         base_started = time.monotonic()
         actor(cid).reserve(cid + "-baseline", max(1, int(deadline - base_started)))
-        model, tokenizer = backend.load()
+        model, tokenizer = backend.load(model_id=config["model_id"])
         baseline = backend.evaluate(
             model, tokenizer, dev_rows, progress("Baseline"), stop, worlds=worlds("baseline")
         )
@@ -388,7 +388,7 @@ def run(cid):
             transition(cid, "evaluating", "Loading the saved adapter into a fresh model for evaluation")
             experiment.update("evaluating", "{}")
             update_exp(status="evaluating", training=result)
-            model, tokenizer = backend.load(adapter)
+            model, tokenizer = backend.load(adapter, config["model_id"])
             evaluation = backend.evaluate(
                 model, tokenizer, dev_rows, progress(expid + " evaluation"), stop, worlds=worlds(expid)
             )
@@ -552,13 +552,13 @@ def run(cid):
                     "Official harness checkpoint evidence",
                 )
         else:
-            model, tokenizer = backend.load()
+            model, tokenizer = backend.load(model_id=config["model_id"])
             final_base = backend.evaluate(
                 model, tokenizer, final_rows, progress("Final baseline"), stop, split="sealed final"
             )
             backend.unload(model)
             if best:
-                model, tokenizer = backend.load(best["path"])
+                model, tokenizer = backend.load(best["path"], config["model_id"])
                 final_best = backend.evaluate(
                     model, tokenizer, final_rows, progress("Final checkpoint"), stop, split="sealed final"
                 )
@@ -599,8 +599,8 @@ def run(cid):
         artifact(cid, folder / "final-evaluation.json", "evaluation", "Sealed final evaluation")
         report = {
             "campaign_id": cid,
-            "model_id": training.MODEL_ID,
-            "model_revision": training.MODEL_REVISION,
+            "model_id": config["model_id"],
+            "model_revision": training.model_spec(config["model_id"])["revision"],
             "hardware": backend.hardware,
             "config": config,
             "final": final,

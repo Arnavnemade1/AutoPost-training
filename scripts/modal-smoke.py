@@ -1,6 +1,6 @@
 """Smoke-test the Modal GPU backend end to end: evaluate, train a few steps, reload, evaluate.
 
-    FORGE_BACKEND=modal .venv/bin/python scripts/modal-smoke.py [rows] [steps]
+    FORGE_BACKEND=modal .venv/bin/python scripts/modal-smoke.py [rows] [steps] [model id]
 
 Spends a few minutes of GPU time. Prints one JSON summary; exits nonzero if any check fails.
 """
@@ -21,7 +21,8 @@ from services.core import compute, training  # noqa: E402
 
 rows_n = int(sys.argv[1]) if len(sys.argv) > 1 else 8
 steps = int(sys.argv[2]) if len(sys.argv) > 2 else 8
-config = {"seed": 42, "dev_samples": 24, "train_steps": steps, "final_samples": 24}
+model_id = sys.argv[3] if len(sys.argv) > 3 else training.MODEL_ID
+config = {"seed": 42, "dev_samples": 24, "train_steps": steps, "final_samples": 24, "model_id": model_id}
 train_rows, dev_rows, _sealed = training.benchmark_data(config)
 rows = dev_rows[:rows_n]
 timings = {}
@@ -40,7 +41,7 @@ with modal.enable_output():
     backend = compute.open_backend()
     timings["open_session"] = time.monotonic() - started
     try:
-        base, _ = backend.load()
+        base, _ = backend.load(model_id=model_id)
         started = time.monotonic()
         one = backend.evaluate(base, None, rows, quiet, never, split="smoke")
         timings[f"evaluate_{len(rows)}_rows"] = time.monotonic() - started
@@ -49,7 +50,7 @@ with modal.enable_output():
         started = time.monotonic()
         trained = backend.train(proposal, config, train_rows, folder, quiet, never)
         timings[f"train_{steps}_steps"] = time.monotonic() - started
-        adapter, _ = backend.load(folder)
+        adapter, _ = backend.load(folder, model_id)
         started = time.monotonic()
         tuned = backend.evaluate(adapter, None, rows[:4], quiet, never, split="smoke adapter")
         timings["evaluate_adapter_4_rows"] = time.monotonic() - started
@@ -65,7 +66,16 @@ report = {
         "n": one["n"],
         "gpu_seconds": round(one["gpu_seconds"], 1),
         "gpu_seconds_per_row": round(one["gpu_seconds"] / one["n"], 2),
+        "peak_gpu_memory_gb": one.get("peak_gpu_memory_gb"),
+        "length_truncated": sum(p["finish_reason"] == "length" for p in one["predictions"]),
+        "decoding": one["decoding"],
+        "model": one["model_id"],
+        "answers": [p["answer"] for p in one["predictions"]],
     },
+    "samples": [
+        {k: p[k] for k in ("id", "answer", "expected", "correct", "finish_reason", "output")}
+        for p in one["predictions"][:3]
+    ],
     "training": {
         "steps": len(trained["metrics"]),
         "first_loss": trained["metrics"][0]["loss"],
@@ -77,6 +87,8 @@ report = {
         "local_adapter_sha256": training.sha(folder / "adapter_model.safetensors")[:16],
         "record_device": record["device"]["name"],
         "gpu_seconds": round(trained["seconds"], 2),
+        "peak_gpu_memory_gb": trained.get("peak_gpu_memory_gb"),
+        "lora_targets": record["lora_targets"],
     },
     "adapter_evaluation": {"correct": tuned["correct"], "n": tuned["n"], "device": tuned["device"]["name"]},
     "finish_reasons": sorted({p["finish_reason"] for p in one["predictions"]}),
