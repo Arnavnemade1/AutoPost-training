@@ -49,11 +49,15 @@ function rng(seed: number) {
 
 // Exponential moving average seeded with the mean of the first 10 steps, as loss plots do.
 const SEED = LOSS.slice(0, 10).reduce((p, v) => p + v, 0) / 10;
-const SMOOTH = LOSS.reduce<number[]>((acc, v, i) => {
+const SMOOTH: number[] = LOSS.reduce<number[]>((acc, v, i) => {
   const prev = i ? acc[i - 1] : SEED;
-  acc.push(prev + 0.06 * (v - prev));
+  acc.push(prev + 0.035 * (v - prev));
   return acc;
 }, []);
+// Light centered smoothing of the averaged curve so the ribbon reads as one line.
+for (let pass = 0; pass < 3; pass++)
+  for (let i = 1; i < SMOOTH.length - 1; i++)
+    SMOOTH[i] = (SMOOTH[i - 1] + 2 * SMOOTH[i] + SMOOTH[i + 1]) / 4;
 const LO = Math.min(...SMOOTH);
 const HI = Math.max(...SMOOTH);
 
@@ -148,7 +152,7 @@ function buildStates() {
       i,
       -4.2 + (col / 255) * 8.4,
       -1.4 + ((y - LO) / (HI - LO)) * 2.8 + (row / 15 - 0.5) * 0.14,
-      g() * 0.18,
+      g() * 0.08,
     );
 
     // 4. Result: before and after, as two bars in the same frame. Heights follow the
@@ -198,7 +202,7 @@ const VERT = /* glsl */ `
     float depth = clamp((-mv.z - 9.0) / 6.0, 0.0, 1.0);
     vAlpha = mix(shade(uFrom), shade(uTo), uMix) * (1.0 - depth * 0.55);
     vAlpha += 0.25 * smoothstep(0.9, 0.0, dist);
-    gl_PointSize = (2.2 + aSeed * 2.0) * uDpr * (12.0 / -mv.z);
+    gl_PointSize = (3.4 + aSeed * 2.6) * uDpr * (12.0 / -mv.z);
   }
 `;
 const FRAG = /* glsl */ `
@@ -207,7 +211,9 @@ const FRAG = /* glsl */ `
     vec2 c = gl_PointCoord - 0.5;
     float d = length(c);
     if (d > 0.5) discard;
-    gl_FragColor = vec4(0.067, 0.067, 0.067, vAlpha * smoothstep(0.5, 0.35, d));
+    float core = smoothstep(0.32, 0.2, d);
+    float halo = 0.22 * exp(-d * d * 18.0);
+    gl_FragColor = vec4(0.067, 0.067, 0.067, vAlpha * clamp(core + halo, 0.0, 1.0));
   }
 `;
 

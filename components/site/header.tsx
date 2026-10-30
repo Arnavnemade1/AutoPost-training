@@ -178,7 +178,7 @@ export function SiteHeader() {
             </nav>
             <div className={s.headerRight}>
               <a href="#results" className={s.btnSmGhost}>
-                See results
+                How it learns
               </a>
               <Link href="/" className={s.btnSm}>
                 Open the lab
@@ -331,7 +331,7 @@ export function SiteHeader() {
             className={s.btnGhost}
             onClick={() => setMenu(false)}
           >
-            See results
+            How it learns
           </a>
           <Link href="/" className={s.btn}>
             Open the lab
