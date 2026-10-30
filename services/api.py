@@ -15,6 +15,7 @@ from services.core.contracts import CampaignConfig
 from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
+from services.chaos_routes import router as chaos_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -38,6 +39,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Forge research control plane", lifespan=lifespan)
+app.include_router(chaos_router)
 
 
 API_PORT = httpx.URL(os.environ.get("FORGE_API_URL", "http://127.0.0.1:8000")).port or 8000

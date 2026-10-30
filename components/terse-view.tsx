@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Campaign, Environment, duration } from "@/lib/types";
 import { EnvironmentsView, Empty, Status } from "./views";
 import { Icon } from "./icon";
+import { CrashTest } from "./crash-test";
 
 type ActorState = {
   read_at: string;
@@ -41,6 +42,7 @@ export function TerseView({
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const campaignId = campaign?.id;
+  const reread = useCallback(() => setAttempt((n) => n + 1), []);
   useEffect(() => {
     let active = true;
     async function read() {
@@ -79,7 +81,7 @@ export function TerseView({
         description="Launch research to inspect its actor state and versioned training worlds."
       />
     );
-  if (error)
+  if (error && !state)
     return (
       <div className="error-banner" role="alert">
         <p>{error}</p>
@@ -121,6 +123,16 @@ export function TerseView({
           State version {c.version}
         </span>
       </section>
+      <CrashTest campaignId={campaign.id} onRecovered={reread} />
+      {error && (
+        <p className="actor-stale" role="status">
+          Runtime unavailable. Showing the last committed read, from{" "}
+          {new Date(state.read_at).toLocaleTimeString("en-GB", {
+            timeZone: "UTC",
+          })}{" "}
+          UTC.
+        </p>
+      )}
       <div className="actor-grid">
         <section className="actor-card">
           <span className="actor-class mono">ResearchCampaignActor</span>
