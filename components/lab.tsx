@@ -13,6 +13,7 @@ import {
   agentNames,
   duration,
   hardwareLabel,
+  modelLabel,
 } from "@/lib/types";
 import { ForgeMark, Icon } from "./icon";
 import { Benchmark, LossChart, ResearchGraph } from "./charts";
@@ -525,7 +526,7 @@ export function Lab() {
                   <div className="campaign-meta">
                     <span>
                       <Icon name="chip" size={14} />
-                      Qwen2.5 · 0.5B
+                      {modelLabel(campaign.config.model_id)}
                     </span>
                     <span className="meta-divider" />
                     <span>GSM8K subset</span>
@@ -1055,8 +1056,8 @@ export function Lab() {
             <h3>01 / Define the research</h3>
             <p>
               Launch a campaign with an objective, an experiment count and a
-              compute time limit. The initial supported model is
-              Qwen2.5-0.5B-Instruct. Runs execute on{" "}
+              compute time limit. Campaigns train Qwen2.5-0.5B-Instruct by
+              default, or Qwen3.5-4B on a cloud GPU. Runs execute on{" "}
               {health?.compute?.backend === "modal"
                 ? `a Modal NVIDIA ${health.compute.gpu} GPU`
                 : "the local GPU"}

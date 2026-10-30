@@ -146,3 +146,16 @@ def test_health_reports_the_engine_the_relay_bridge_uses(monkeypatch):
         assert relay["mode"] == ("Local runtime" if kind == "local" else "Hosted Relaycast")
         assert relay["transport"] == bridge["transport"]
         assert relay["endpoint"] == bridge["endpoint"]
+
+
+def test_the_4b_model_is_refused_where_it_cannot_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA", tmp_path)
+    four = {"model_id": "Qwen/Qwen3.5-4B", "strategies": ["targeted_sft", "broad_sft"]}
+    with TestClient(api.app, base_url=LOCAL) as c:
+        monkeypatch.setenv("FORGE_BACKEND", "local")
+        refused = c.post("/campaigns", json=four)
+        assert refused.status_code == 422 and "needs a cloud GPU" in refused.json()["detail"]
+        monkeypatch.setenv("FORGE_BACKEND", "modal")
+        for extra in ({"strategies": ["grpo"]}, {"final_backend": "lm_eval_azure"}):
+            refused = c.post("/campaigns", json=four | extra)
+            assert refused.status_code == 422, extra

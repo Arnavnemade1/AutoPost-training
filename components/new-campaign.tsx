@@ -66,8 +66,11 @@ export function NewCampaign({
         <div className="form-model">
           <span className="model-monogram">Q</span>
           <div>
-            <strong>Qwen2.5-0.5B-Instruct</strong>
-            <span>494M parameters · Apache 2.0 · pinned revision</span>
+            <strong>{health?.model?.id ?? "Qwen/Qwen2.5-0.5B-Instruct"}</strong>
+            <span>
+              {health?.model?.parameters ?? "494M"} parameters · Apache 2.0 ·
+              pinned revision
+            </span>
           </div>
           <span className="tag">
             {modal ? `Modal ${health?.compute?.gpu}` : "Local GPU"}

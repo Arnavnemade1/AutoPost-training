@@ -6,11 +6,10 @@ from pathlib import Path
 
 from forge_training.artifacts import file_sha256
 from forge_training.scoring import extract_answer, wilson_interval
-from services.core.contracts import MODEL_REVISION
+from services.core.contracts import model_spec
 
 DATASET_REVISION = "740312add88f781978c0658806c59bc2815b9866"
 PROMPT_VERSION = "math_completion_v1"
-MAX_NEW_TOKENS = 256
 
 
 def sha(path):
@@ -29,7 +28,9 @@ def equal(a, b):
         return False
 
 
-def collect(rows, predictions, progress, split, worlds, started, device, batch_size=1, seconds=None):
+def collect(
+    rows, predictions, progress, split, worlds, started, device, batch_size=1, seconds=None, model_id=None
+):
     """Score streamed predictions in row order: Terse worlds, progress and the summary stay local."""
     results = []
     # Not strict: a remote stream carries its final result after the last prediction.
@@ -43,6 +44,7 @@ def collect(rows, predictions, progress, split, worlds, started, device, batch_s
         progress(i + 1, len(rows), p)
     if len(results) != len(rows):
         raise RuntimeError(f"Evaluation returned {len(results)} of {len(rows)} predictions")
+    spec = model_spec(model_id)
     n = len(results)
     correct = sum(p["correct"] for p in results)
     return {
@@ -57,8 +59,14 @@ def collect(rows, predictions, progress, split, worlds, started, device, batch_s
         "dataset_revision": DATASET_REVISION,
         "scoring": "forge_numeric_v1, strict final #### numeric line (shared training-core scorer)",
         "prompt_version": PROMPT_VERSION,
-        "decoding": {"do_sample": False, "max_new_tokens": MAX_NEW_TOKENS, "batch_size": batch_size},
+        "decoding": {
+            "do_sample": False,
+            "max_new_tokens": spec["max_new_tokens"],
+            "batch_size": batch_size,
+            **spec["chat_template_kwargs"],
+        },
         "seconds": time.monotonic() - started if seconds is None else seconds,
-        "model_revision": MODEL_REVISION,
+        "model_id": spec["id"],
+        "model_revision": spec["revision"],
         "device": device,
     }

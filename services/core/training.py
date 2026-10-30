@@ -1,5 +1,6 @@
 """Real Qwen LoRA optimization and deterministic, sample-level evaluation."""
 
+import functools
 import gc
 import hashlib
 import json
@@ -14,10 +15,9 @@ from forge_training.config import Example
 from forge_training.data import verify_separation
 from forge_training.modeling import prompt_for
 from forge_training.training import encode_completion, collate_completion
-from services.core.contracts import MODEL_ID, MODEL_REVISION
+from services.core.contracts import MODEL_ID, MODEL_REVISION, model_spec  # noqa: F401
 from services.core.protocol import (  # noqa: F401  (re-exported for the runner)
     DATASET_REVISION,
-    MAX_NEW_TOKENS,
     PROMPT_VERSION,
     collect,
     equal,
@@ -102,17 +102,25 @@ def device_info():
     }
 
 
-def load(adapter=None):
+def load(adapter=None, model_id=None):
+    spec = model_spec(model_id)
     device = device_name()
-    dtype = torch.float32 if device == "cpu" else torch.float16
+    dtype = torch.float32 if device == "cpu" else getattr(torch, spec["dtype"])
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID, revision=MODEL_REVISION, dtype=dtype, attn_implementation="eager"
+        spec["id"], revision=spec["revision"], dtype=dtype, attn_implementation="eager"
     )
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, revision=MODEL_REVISION)
+    tokenizer = AutoTokenizer.from_pretrained(spec["id"], revision=spec["revision"])
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
+    if spec["chat_template_kwargs"]:
+        # Every prompt, for evaluation and for training targets, renders with the same template
+        # settings (Qwen3.5: non-thinking mode).
+        tokenizer.apply_chat_template = functools.partial(
+            tokenizer.apply_chat_template, **spec["chat_template_kwargs"]
+        )
     if adapter:
         model = PeftModel.from_pretrained(model, str(adapter))
+    model.forge_model_id = spec["id"]
     return model.to(device), tokenizer
 
 
@@ -130,8 +138,9 @@ def predict(model, tokenizer, rows):
     """Greedy answers for a batch of rows. With one row this is exactly the original protocol."""
     texts = [prompt_for(tokenizer, row["question"]) for row in rows]
     inputs = tokenizer(texts, return_tensors="pt", padding=True).to(model.device)
+    limit = model_spec(getattr(model, "forge_model_id", None))["max_new_tokens"]
     tokens = model.generate(
-        **inputs, do_sample=False, max_new_tokens=MAX_NEW_TOKENS, pad_token_id=tokenizer.eos_token_id
+        **inputs, do_sample=False, max_new_tokens=limit, pad_token_id=tokenizer.eos_token_id
     )
     stops = {tokenizer.eos_token_id}
     configured = getattr(model.generation_config, "eos_token_id", None)
@@ -172,21 +181,25 @@ def generate(model, tokenizer, rows, cancelled, batch_size=1):
 def evaluate(model, tokenizer, rows, progress, cancelled, split="development", worlds=None, batch_size=1):
     started = time.monotonic()
     stream = generate(model, tokenizer, rows, cancelled, batch_size)
-    return collect(rows, stream, progress, split, worlds, started, device_info(), batch_size)
+    model_id = getattr(model, "forge_model_id", None)
+    return collect(
+        rows, stream, progress, split, worlds, started, device_info(), batch_size, model_id=model_id
+    )
 
 
 def train(proposal, config, rows, folder, progress, cancelled):
     torch.manual_seed(config["seed"])
     random.seed(config["seed"])
     device = device_info()
-    model, tokenizer = load()
+    spec = model_spec(config.get("model_id"))
+    model, tokenizer = load(model_id=spec["id"])
     model = get_peft_model(
         model,
         LoraConfig(
             r=proposal["lora_rank"],
             lora_alpha=proposal["lora_rank"] * 2,
             lora_dropout=0.05,
-            target_modules=["q_proj", "v_proj"],
+            target_modules=spec["lora_targets"],
             task_type="CAUSAL_LM",
         ),
     )
@@ -260,7 +273,9 @@ def train(proposal, config, rows, folder, progress, cancelled):
                 "excluded_oversize_ids": excluded,
                 "max_sequence_length": 768,
                 "prompt_version": PROMPT_VERSION,
-                "model_revision": MODEL_REVISION,
+                "model_id": spec["id"],
+                "model_revision": spec["revision"],
+                "lora_targets": spec["lora_targets"],
                 "device": device,
             },
             indent=2,
@@ -276,5 +291,7 @@ def train(proposal, config, rows, folder, progress, cancelled):
         "sha256": sha(folder / "adapter_model.safetensors"),
         "seconds": time.monotonic() - started,
         "max_sequence_length": 768,
+        "lora_targets": spec["lora_targets"],
+        "dtype": spec["dtype"],
         "device": device,
     }

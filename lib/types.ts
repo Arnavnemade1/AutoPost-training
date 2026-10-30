@@ -92,6 +92,8 @@ export type Experiment = {
     after_hash: string;
     seconds: number;
     max_sequence_length?: number;
+    lora_targets?: string[];
+    dtype?: string;
     device?: Hardware;
   };
 };
@@ -116,6 +118,12 @@ export type Environment = {
   reward_version: string;
   checksum: string;
 };
+const MODEL_LABELS: Record<string, string> = {
+  "Qwen/Qwen2.5-0.5B-Instruct": "Qwen2.5 · 0.5B",
+  "Qwen/Qwen3.5-4B": "Qwen3.5 · 4B",
+};
+export const modelLabel = (id?: string) =>
+  (id && MODEL_LABELS[id]) || id || "Qwen2.5 · 0.5B";
 export type Config = {
   name: string;
   objective: string;
@@ -258,6 +266,7 @@ export type Health = {
   ok: boolean;
   worker: string;
   compute?: { backend: string; label: string | null; gpu: string | null };
+  model?: { id: string; label: string; parameters: string };
   version: string;
   services: Record<
     string,

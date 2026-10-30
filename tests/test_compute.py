@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from services.core import compute, protocol
+from services.core import compute, contracts, protocol
 
 H100 = {
     "backend": "modal",
@@ -126,7 +126,7 @@ def test_remote_evaluation_streams_progress_and_keeps_worlds_local():
     assert result["correct"] == 2 and result["n"] == 3 and result["split"] == "development"
     assert result["device"] == H100 and result["gpu_seconds"] == 1.5
     assert result["decoding"] == {"do_sample": False, "max_new_tokens": 256, "batch_size": 1}
-    assert result["model_revision"] == protocol.MODEL_REVISION
+    assert result["model_revision"] == contracts.MODEL_REVISION
     assert result["dataset_revision"] == protocol.DATASET_REVISION
     assert all(p["finish_reason"] == "stop" for p in result["predictions"])
     # Planned hardware first, then the measured GPU exactly once.
@@ -353,3 +353,34 @@ def test_remote_gpu_is_named_before_the_first_prediction_arrives():
     model, tokenizer = backend.load()
     backend.evaluate(model, tokenizer, ROWS, lambda *_: names.append(backend.hardware["name"]), never)
     assert names == ["NVIDIA H100 80GB HBM3"] * 3
+
+
+def test_default_model_is_unchanged_and_the_4b_is_described_by_its_own_spec():
+    assert contracts.CampaignConfig().model_id == "Qwen/Qwen2.5-0.5B-Instruct"
+    small = contracts.model_spec(None)
+    assert small["lora_targets"] == ["q_proj", "v_proj"] and small["max_new_tokens"] == 256
+    assert small["dtype"] == "float16" and small["chat_template_kwargs"] == {}
+    big = contracts.model_spec("Qwen/Qwen3.5-4B")
+    assert big["revision"] == "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    assert big["dtype"] == "bfloat16" and big["remote_only"]
+    assert big["chat_template_kwargs"] == {"enable_thinking": False}
+    assert "in_proj_qkv" in big["lora_targets"]  # 24 of its 32 layers are linear attention
+    assert contracts.CampaignConfig(model_id="Qwen/Qwen3.5-4B").model_id == "Qwen/Qwen3.5-4B"
+    with pytest.raises(ValueError):
+        contracts.CampaignConfig(model_id="Qwen/Qwen3.5-9B")
+
+
+def test_remote_jobs_carry_the_campaign_model_and_record_its_protocol():
+    remote = FakeRemote()
+    backend = compute.Remote(remote)
+    model, tokenizer = backend.load(model_id="Qwen/Qwen3.5-4B")
+    result = backend.evaluate(model, tokenizer, ROWS, lambda *_: None, never)
+    assert remote.jobs[0]["model_id"] == "Qwen/Qwen3.5-4B"
+    assert result["model_id"] == "Qwen/Qwen3.5-4B"
+    assert result["model_revision"] == "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    assert result["decoding"] == {
+        "do_sample": False,
+        "max_new_tokens": 512,
+        "batch_size": 1,
+        "enable_thinking": False,
+    }

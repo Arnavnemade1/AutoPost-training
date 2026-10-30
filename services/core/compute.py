@@ -50,8 +50,8 @@ class Local:
         if on_hardware:
             on_hardware(self.hardware)
 
-    def load(self, adapter=None):
-        return self.training.load(adapter)
+    def load(self, adapter=None, model_id=None):
+        return self.training.load(adapter, model_id)
 
     def unload(self, model):
         self.training.unload(model)
@@ -69,8 +69,9 @@ class Local:
 class RemoteModel:
     """A handle for a model that lives on the remote GPU: the base model or a saved adapter."""
 
-    def __init__(self, adapter=None):
+    def __init__(self, adapter=None, model_id=None):
         self.path = str(adapter) if adapter else None
+        self.model_id = model_id
         self.adapter = None
         if adapter:
             folder = Path(adapter)
@@ -94,8 +95,8 @@ class Remote:
             if self.on_hardware:
                 self.on_hardware(device)
 
-    def load(self, adapter=None):
-        return RemoteModel(adapter), None
+    def load(self, adapter=None, model_id=None):
+        return RemoteModel(adapter, model_id), None
 
     def unload(self, model):
         pass
@@ -106,6 +107,7 @@ class Remote:
             "kind": "evaluate",
             "rows": [{k: r[k] for k in ("id", "question", "answer")} for r in rows],
             "adapter": model.adapter,
+            "model_id": model.model_id,
         }
         done = {}
 
@@ -119,7 +121,9 @@ class Remote:
                     done.update(value)
 
         events = stream()
-        evaluation = protocol.collect(rows, events, progress, split, worlds, started, None)
+        evaluation = protocol.collect(
+            rows, events, progress, split, worlds, started, None, model_id=model.model_id
+        )
         for _ in events:  # Drain to the final result; a surplus prediction is a protocol error.
             raise RuntimeError("Remote evaluation returned more predictions than rows")
         if not done:
@@ -127,6 +131,8 @@ class Remote:
         self._measured(done["device"])
         evaluation["device"] = done["device"]
         evaluation["gpu_seconds"] = done["seconds"]
+        if "peak_gpu_memory_gb" in done:
+            evaluation["peak_gpu_memory_gb"] = done["peak_gpu_memory_gb"]
         return evaluation
 
     def train(self, proposal, config, rows, folder, progress, cancelled):
