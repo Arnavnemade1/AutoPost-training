@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ForgeMark, Icon } from "@/components/icon";
 import s from "./site.module.css";
+import { ThemeToggle } from "./theme";
 
 export const PRODUCT_LINKS = [
   {
@@ -177,36 +178,40 @@ export function SiteHeader() {
               ))}
             </nav>
             <div className={s.headerRight}>
+              <ThemeToggle className={s.themeBtn} />
               <a href="#results" className={s.btnSmGhost}>
                 How it learns
               </a>
-              <Link href="/" className={s.btnSm}>
+              <Link href="/lab" className={s.btnSm}>
                 Open the lab
               </Link>
             </div>
-            <button
-              ref={menuButton}
-              type="button"
-              className={s.menuButton}
-              aria-label="Open menu"
-              aria-expanded={menu}
-              aria-controls="site-mobile-menu"
-              onClick={() => setMenu(true)}
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                aria-hidden="true"
+            <div className={s.mobileTools}>
+              <ThemeToggle className={s.themeBtn} />
+              <button
+                ref={menuButton}
+                type="button"
+                className={s.menuButton}
+                aria-label="Open menu"
+                aria-expanded={menu}
+                aria-controls="site-mobile-menu"
+                onClick={() => setMenu(true)}
               >
-                <path
-                  d="M3 7h14M3 13h14"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 7h14M3 13h14"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
         <div
@@ -333,7 +338,7 @@ export function SiteHeader() {
           >
             How it learns
           </a>
-          <Link href="/" className={s.btn}>
+          <Link href="/lab" className={s.btn}>
             Open the lab
           </Link>
         </div>

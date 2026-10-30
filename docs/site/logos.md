@@ -1,4 +1,4 @@
-# Logos on `/site`
+# Logos on the landing page (`/`)
 
 The "Built with" strip shows only software Forge depends on, using each project's own
 mark. Every file in `public/site/logos/` was downloaded on 2026-10-29 from the source

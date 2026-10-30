@@ -12,9 +12,11 @@ import {
   Scene,
   ShaderMaterial,
   Vector2,
+  Vector3,
   WebGLRenderer,
 } from "three";
 import { LOSS } from "./data";
+import { useSiteTheme } from "./theme";
 import s from "./live.module.css";
 
 const N = 4096;
@@ -206,6 +208,7 @@ const VERT = /* glsl */ `
   }
 `;
 const FRAG = /* glsl */ `
+  uniform vec3 uColor;
   varying float vAlpha;
   void main() {
     vec2 c = gl_PointCoord - 0.5;
@@ -213,7 +216,7 @@ const FRAG = /* glsl */ `
     if (d > 0.5) discard;
     float core = smoothstep(0.32, 0.2, d);
     float halo = 0.22 * exp(-d * d * 18.0);
-    gl_FragColor = vec4(0.067, 0.067, 0.067, vAlpha * clamp(core + halo, 0.0, 1.0));
+    gl_FragColor = vec4(uColor, vAlpha * clamp(core + halo, 0.0, 1.0));
   }
 `;
 
@@ -222,6 +225,12 @@ const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
 export function ParticleHero() {
   const wrap = useRef<HTMLDivElement>(null);
   const [state, setState] = useState(0);
+  const theme = useSiteTheme();
+  const color = useRef<Vector3 | null>(null);
+  // #111111 on light, #ededed on dark; the shader reads it every frame.
+  useEffect(() => {
+    color.current?.setScalar(theme === "dark" ? 0.929 : 0.067);
+  }, [theme]);
 
   useEffect(() => {
     const host = wrap.current;
@@ -267,7 +276,13 @@ export function ParticleHero() {
       uMouse: { value: new Vector2(99, 99) },
       uDpr: { value: dpr },
       uRise: { value: 1 },
+      uColor: {
+        value: new Vector3().setScalar(
+          document.documentElement.dataset.siteTheme === "dark" ? 0.929 : 0.067,
+        ),
+      },
     };
+    color.current = uniforms.uColor.value;
     const mat = new ShaderMaterial({
       vertexShader: VERT,
       fragmentShader: FRAG,

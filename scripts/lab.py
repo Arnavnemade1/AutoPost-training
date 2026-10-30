@@ -152,7 +152,7 @@ try:
     web = f"http://127.0.0.1:{PORT['web']}"
     start("web", ["npx", "next", "dev", "--hostname", "127.0.0.1", "--port", str(PORT["web"])], web)
     print(
-        f"\nForge is ready: {web}\nCtrl+C stops only services started by this command.",
+        f"\nForge is ready: lab {web}/lab, landing page {web}/\nCtrl+C stops only services started by this command.",
         flush=True,
     )
     while True:

@@ -21,9 +21,9 @@ def main(campaign_id):
     target = folder / "evidence-tour.webm"
     if target.exists():
         raise FileExistsError(target)
-    browser("--args", "--disable-gpu", "--idle-timeout", "0", "open", "http://127.0.0.1:3000")
+    browser("--args", "--disable-gpu", "--idle-timeout", "0", "open", "http://127.0.0.1:3000/lab")
     browser("set", "viewport", "1440", "1000")
-    browser("record", "start", str(target), "http://127.0.0.1:3000")
+    browser("record", "start", str(target), "http://127.0.0.1:3000/lab")
     began = time.monotonic()
     markers = {}
     captures = {}
@@ -35,7 +35,7 @@ def main(campaign_id):
         captures[name] = {"file": path.name, "captured_at": store.now()}
 
     try:
-        browser("open", "http://127.0.0.1:3000")
+        browser("open", "http://127.0.0.1:3000/lab")
         browser("wait", "#campaign-select")
         browser("select", "#campaign-select", campaign_id)
         browser(

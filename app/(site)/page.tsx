@@ -181,7 +181,7 @@ export default function SitePage() {
                 yours to keep.
               </p>
               <div className={s.ctaRow}>
-                <Link href="/" className={s.btn}>
+                <Link href="/lab" className={s.btn}>
                   Open the lab
                 </Link>
                 <a href="#example" className={s.btnGhost}>
@@ -593,7 +593,7 @@ export default function SitePage() {
                 Your model.
               </h2>
               <div className={s.ctaRow}>
-                <Link href="/" className={s.btn}>
+                <Link href="/lab" className={s.btn}>
                   Open the lab
                 </Link>
                 <a href="#example" className={s.btnGhost}>
@@ -652,7 +652,7 @@ export default function SitePage() {
                 <h2>Lab</h2>
                 <ul>
                   <li>
-                    <Link href="/">Open the lab</Link>
+                    <Link href="/lab">Open the lab</Link>
                   </li>
                   <li>
                     <a href="#lab">Inside the lab</a>

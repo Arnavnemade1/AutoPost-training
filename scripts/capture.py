@@ -61,15 +61,15 @@ def main():
             time.sleep(5)
         else:
             raise TimeoutError("The queued capture expired after three hours without launching compute")
-    browser("--args", "--disable-gpu", "--idle-timeout", "0", "open", "http://127.0.0.1:3000")
+    browser("--args", "--disable-gpu", "--idle-timeout", "0", "open", "http://127.0.0.1:3000/lab")
     browser("set", "viewport", "1440", "1000")
-    browser("open", "http://127.0.0.1:3000")
+    browser("open", "http://127.0.0.1:3000/lab")
     browser("wait", "--fn", "document.body.innerText.includes('Systems connected')")
     # Recording creates a fresh browser context. Explicitly reopen the app before launch.
     raw = ROOT / "artifacts" / f"capture-{uuid.uuid4().hex[:8]}.webm"
-    browser("record", "start", str(raw), "http://127.0.0.1:3000")
+    browser("record", "start", str(raw), "http://127.0.0.1:3000/lab")
     video_started = time.monotonic()
-    browser("open", "http://127.0.0.1:3000")
+    browser("open", "http://127.0.0.1:3000/lab")
     browser("wait", "--fn", "document.body.innerText.includes('Systems connected')")
     start = datetime.now(timezone.utc).isoformat()
     client = httpx.Client(timeout=60)
@@ -118,7 +118,7 @@ def main():
             time.sleep(0.5)
         else:
             raise RuntimeError("Campaign did not initialize; prelaunch capture is preserved")
-        browser("open", "http://127.0.0.1:3000")
+        browser("open", "http://127.0.0.1:3000/lab")
     if not args.campaign:
         raise ValueError("Use --launch or --campaign")
     if not args.launch:
@@ -176,8 +176,8 @@ def main():
         for index in range(3000):
             began = time.monotonic()
             current = browser("get", "url").strip()
-            if not current.startswith("http://127.0.0.1:3000"):
-                browser("open", "http://127.0.0.1:3000")
+            if not current.startswith("http://127.0.0.1:3000/lab"):
+                browser("open", "http://127.0.0.1:3000/lab")
             shot = frames / f"{index:06d}.png"
             browser("screenshot", str(shot))
             manifest["frames"].append(

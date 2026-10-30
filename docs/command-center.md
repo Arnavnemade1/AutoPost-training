@@ -41,7 +41,7 @@ chmod 600 .env
 npm run lab
 ```
 
-Open <http://127.0.0.1:3000>. The launcher starts/reuses Terse (7100), Relaycast (7528),
+Open the lab at <http://127.0.0.1:3000/lab> (the landing page is <http://127.0.0.1:3000/>). The launcher starts/reuses Terse (7100), Relaycast (7528),
 the recipient-verifying Relay bridge (7529), the API (8000), and Next.js (3000).
 Services bind to loopback. The API is a trusted local control plane, without a public
 authentication layer. Do not expose these ports publicly.

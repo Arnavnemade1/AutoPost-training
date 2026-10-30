@@ -1,12 +1,24 @@
 /* Live illustrations on /site. Tokens match components/site/site.module.css. */
 .card,
-.example {
+.example,
+.art {
   --fg: #111111;
   --muted: #5c5c5c;
   --dim: #6b6b6b;
   --line: #ebebeb;
   --line-strong: #dcdcdc;
   --chip: #f2f2f2;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --panel: #f6f6f6;
+  --hairline: rgba(0, 0, 0, 0.05);
+  --ghost: rgba(0, 0, 0, 0.05);
+  --ink: #111111;
+  --ink-on: #ffffff;
+  --kill: #b42318;
+  --hatch-a: #c4c4c4;
+  --hatch-b: #e6e6e6;
+  --mark: #fff1a8;
   --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);
   --mono: var(--site-mono), "IBM Plex Mono", ui-monospace, monospace;
   color: var(--fg);
@@ -51,7 +63,7 @@
   gap: 6px;
   padding: 10px 12px;
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--line);
 }
 .flagRow {
@@ -102,8 +114,8 @@
   place-items: center;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #111111;
-  color: #ffffff;
+  background: var(--ink);
+  color: var(--ink-on);
   font-weight: 600;
   letter-spacing: 0.2px;
   line-height: 1;
@@ -111,9 +123,6 @@
 
 /* ---------- Hero art (three.js points) ---------- */
 .art {
-  --fg: #111111;
-  --muted: #5c5c5c;
-  --dim: #6b6b6b;
   --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);
   display: flex;
   flex-direction: column;
@@ -160,7 +169,7 @@
 
 .stepTabOn {
   color: var(--fg);
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--ghost);
 }
 
 /* ---------- Shared card ---------- */
@@ -168,7 +177,7 @@
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--line-strong);
-  background: #ffffff;
+  background: var(--surface);
   overflow: hidden;
   text-align: left;
 }
@@ -213,8 +222,8 @@
 }
 .roleFrom .avatar {
   box-shadow:
-    0 0 0 2px #ffffff,
-    0 0 0 3px #111111;
+    0 0 0 2px var(--surface),
+    0 0 0 3px var(--ink);
 }
 .flow {
   display: flex;
@@ -227,7 +236,7 @@
 .flowRow {
   padding: 12px 14px;
   border-radius: 10px;
-  background: #fafafa;
+  background: var(--surface-2);
   border: 1px solid var(--line);
 }
 .flowMeta {
@@ -284,13 +293,17 @@
   bottom: 0;
 }
 .segKill {
-  background: #b42318;
+  background: var(--kill);
 }
 .segHold {
-  background: repeating-linear-gradient(135deg, #c4c4c4 0 4px, #e6e6e6 4px 8px);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--hatch-a) 0 4px,
+    var(--hatch-b) 4px 8px
+  );
 }
 .segBack {
-  background: #111111;
+  background: var(--ink);
 }
 .playhead {
   position: absolute;
@@ -298,7 +311,7 @@
   bottom: -2px;
   width: 2px;
   margin-left: -1px;
-  background: #111111;
+  background: var(--ink);
 }
 
 .cells {
@@ -312,7 +325,7 @@
 }
 .cell {
   padding: 14px 16px;
-  background: #ffffff;
+  background: var(--surface);
   opacity: 0.35;
   transition: opacity 250ms var(--ease-out);
 }
@@ -364,8 +377,8 @@
 }
 .exampleQ {
   border-radius: 7px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  background: #f6f6f6;
+  border: 1px solid var(--hairline);
+  background: var(--panel);
   padding: 32px;
 }
 .exampleQ p {
@@ -387,7 +400,7 @@
   flex-direction: column;
   border-radius: 10px;
   border: 1px solid var(--line-strong);
-  background: #ffffff;
+  background: var(--surface);
   overflow: hidden;
 }
 .exampleHead {
@@ -419,10 +432,10 @@
   overflow-wrap: anywhere;
 }
 .mark {
-  background: #fff1a8;
+  background: var(--mark);
   color: inherit;
   border-radius: 3px;
-  box-shadow: 0 0 0 2px #fff1a8;
+  box-shadow: 0 0 0 2px var(--mark);
 }
 .exampleFoot {
   margin-top: auto;
@@ -449,8 +462,8 @@
   color: var(--fg);
 }
 .verdictOk {
-  background: #111111;
-  color: #ffffff;
+  background: var(--ink);
+  color: var(--ink-on);
 }
 .exampleNote {
   margin: 16px 0 0;
@@ -563,4 +576,28 @@
   .ship li {
     transition: none;
   }
+}
+
+/* Dark theme: an authored palette, not an inversion. Contrast on --surface #161616:
+   fg 15.0:1, muted 7.2:1, dim 5.6:1. */
+:global(html[data-site-theme="dark"]) .card,
+:global(html[data-site-theme="dark"]) .example,
+:global(html[data-site-theme="dark"]) .art {
+  --fg: #ededed;
+  --muted: #a3a3a3;
+  --dim: #919191;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --chip: rgba(255, 255, 255, 0.08);
+  --surface: #161616;
+  --surface-2: #1c1c1c;
+  --panel: #141414;
+  --hairline: rgba(255, 255, 255, 0.06);
+  --ghost: rgba(255, 255, 255, 0.08);
+  --ink: #ededed;
+  --ink-on: #0e0e0e;
+  --kill: #f0614f;
+  --hatch-a: #3a3a3a;
+  --hatch-b: #242424;
+  --mark: rgba(250, 204, 21, 0.26);
 }

@@ -1,8 +1,8 @@
 # Landing page reference measurements
 
-The Forge landing page (`/site`) borrows the layout system, type metrics, spacing and
+The Forge landing page (`/`) borrows the layout system, type metrics, spacing and
 motion of a public infrastructure landing page studied on 2026-10-29. This file records
-what was measured, so every value on `/site` can be traced to a number. No logos,
+what was measured, so every value on the landing page (`/`) can be traced to a number. No logos,
 illustrations, images, icons, fonts or copy were taken from it; only measurements.
 
 Method: Playwright (headless Chromium 1234 shell, playwright-core 1.55) at 1440x900,
@@ -155,7 +155,7 @@ toast transitions off.
 | secondary button 5% white | 5% black, hover 9% black | 15.6:1 |
 | light band `#e3e5e1` (inverted band) | dark band `#111111`, text `#f2f2f2`, muted `#a3a3a3` | 16.5:1 / 7.4:1 |
 
-## Where `/site` deliberately differs
+## Where the landing page deliberately differs
 
 | Reference element | On Forge | Why |
 | --- | --- | --- |

@@ -4,6 +4,7 @@ import { Icon } from "@/components/icon";
 import DotGrid from "./reactbits/DotGrid";
 import LogoLoop from "./reactbits/LogoLoop";
 import s from "./site.module.css";
+import { useSiteTheme } from "./theme";
 
 const reduced = () =>
   typeof window !== "undefined" &&
@@ -72,6 +73,7 @@ export function ProductNav({
 }
 
 export function HeroGrid({ className }: { className: string }) {
+  const dark = useSiteTheme() === "dark";
   const [on, setOn] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => setOn(true));
@@ -85,8 +87,8 @@ export function HeroGrid({ className }: { className: string }) {
       <DotGrid
         dotSize={3}
         gap={15}
-        baseColor="#dedede"
-        activeColor="#111111"
+        baseColor={dark ? "#2a2a2a" : "#dedede"}
+        activeColor={dark ? "#ededed" : "#111111"}
         proximity={110}
         swell={0.6}
         stretch={0.3}
@@ -100,13 +102,14 @@ export function HeroGrid({ className }: { className: string }) {
 }
 
 export function CtaGrid({ className }: { className: string }) {
+  const dark = useSiteTheme() === "dark";
   return (
     <div className={className} aria-hidden="true">
       <DotGrid
         dotSize={3}
         gap={15}
-        baseColor="#dedede"
-        activeColor="#111111"
+        baseColor={dark ? "#2a2a2a" : "#dedede"}
+        activeColor={dark ? "#ededed" : "#111111"}
         proximity={110}
         swell={0.6}
         stretch={0.3}
