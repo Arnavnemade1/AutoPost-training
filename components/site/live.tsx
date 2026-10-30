@@ -187,7 +187,8 @@ function LossChart({
 /* Hero: a campaign replayed end to end                                 */
 /* ------------------------------------------------------------------ */
 
-const HERO = { launch: 0, work: 4600, train: 9200, result: 13200, end: 19500 };
+// Scene cadence measured on the reference hero: a new state every ~5.05 s, 4 states per loop.
+const HERO = { launch: 0, work: 5050, train: 10100, result: 15150, end: 20200 };
 const SCENES = [
   { at: HERO.launch, label: "Launch" },
   { at: HERO.work, label: "Find mistakes" },

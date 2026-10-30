@@ -169,3 +169,33 @@ toast transitions off.
 | 36px mobile buttons | 44px tall on mobile | Tap-target minimum |
 | One light band on a dark page | One dark band (`#111`) on a light page; header switches theme over it | Same contrast inversion, mirrored |
 | Section added | "One question": GSM8K test-885 before and after, verbatim | Requested: a plain example high on the page |
+
+## Hero, frame by frame (1440x900, no input, 20 s)
+
+Recorded with Playwright `recordVideo` plus a screenshot and a state read every 500 ms
+(`site/hero-modal/idle-*.png`, `hero-log.txt`, video in `site/hero-modal/video`).
+Timestamps are from navigation start.
+
+| t (s) | What is on screen | Notes |
+| --- | --- | --- |
+| 0.74 | Headline, sub and buttons already at full opacity; art area empty | Text never animates: no type-on, no fade, `opacity: 1` throughout |
+| 1.25 | Particles burst out from a center point into a six-point star | One-time intro; `opacity` transition on the canvas (200ms, `cubic-bezier(0,0,0.2,1)`) and an SVG glyph flash (`v2-glyph-flash`, 93 `<use>` nodes) |
+| 2.2 | Star resolves into an isometric cube; brighter on arrival, settles over ~1 s | First held state |
+| 2.2 to 6.7 | Cube held; particles shimmer in place | |
+| 7.2 | Cube re-forms as three stacked layers (morph completes inside one 500 ms sample) | |
+| 7.2 to 11.8 | Layers held | |
+| 12.3 | Layers break into seven separate hexagonal blocks | |
+| 12.3 to 16.8 | Blocks held | |
+| 17.3 | Blocks rebuild as a staircase | |
+| 17.3 to ~22.3 | Staircase held, then the loop returns to the cube | Loop: 4 states x ~5.05 s = ~20.2 s, plus the 1.5 s intro once |
+
+Cursor over the art: particles near the pointer brighten locally; the shape does not move
+or tilt. Buttons: color/background 150ms `cubic-bezier(0.4,0,0.2,1)` (primary `#e3e5e1` to
+`#ffffff`; secondary 5% to 10% white). All hero motion is canvas-driven, so
+`document.getAnimations()` is empty after 2.7 s; the cadence above comes from frames.
+
+**Forge hero (`HeroCampaign`)** keeps that structure: static headline, then a product
+illustration that changes state every 5.05 s through 4 states per 20.2 s loop (Launch, Find
+mistakes, Train, Result), each state entering with the measured figure transition
+(opacity, 16px translate, 3px blur, 500ms out-quart) and the DotGrid behind it brightening
+under the pointer like the reference particles.
