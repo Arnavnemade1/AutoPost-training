@@ -122,7 +122,10 @@ export function HeroGrid({ className }: { className: string }) {
     return () => cancelAnimationFrame(id);
   }, []);
   return (
-    <div className={`${className} ${on ? s.heroGridOn : ""}`} aria-hidden="true">
+    <div
+      className={`${className} ${on ? s.heroGridOn : ""}`}
+      aria-hidden="true"
+    >
       <DotGrid
         dotSize={3}
         gap={15}
@@ -160,21 +163,42 @@ export function CtaGrid({ className }: { className: string }) {
   );
 }
 
-export function BuiltWith({ items }: { items: string[] }) {
+export type Logo = {
+  src: string;
+  name: string;
+  width: number;
+  height: number;
+  /** Rendered height in px, tuned so every mark reads at the same visual weight. */
+  h: number;
+};
+
+/** Official marks, recolored to one neutral grey. Sources: docs/site/logos.md. */
+export function BuiltWith({ logos }: { logos: Logo[] }) {
   return (
     <LogoLoop
-      logos={items.map((t) => ({
-        node: <span className={s.stripItem}>{t}</span>,
-        title: t,
+      logos={logos.map((l) => ({
+        node: (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={l.src}
+            alt={l.name}
+            width={l.width}
+            height={l.height}
+            className={s.stripLogo}
+            style={{ height: l.h, width: "auto" }}
+            draggable={false}
+          />
+        ),
+        title: l.name,
       }))}
       speed={13}
-      gap={48}
+      gap={56}
       logoHeight={32}
       fadeOut
       fadeOutWidth={0.09}
       pauseOnHover={false}
       intro={false}
-      ariaLabel="Parts Forge is built with"
+      ariaLabel="Software Forge is built with"
     />
   );
 }

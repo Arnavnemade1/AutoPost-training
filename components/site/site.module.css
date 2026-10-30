@@ -572,6 +572,11 @@
   min-width: 0;
   color: var(--dim);
 }
+.stripLogo {
+  display: block;
+  max-width: none;
+  user-select: none;
+}
 .stripItem {
   font-size: 18px;
   line-height: 32px;
@@ -1269,7 +1274,6 @@
   line-height: 22px;
   color: var(--muted);
 }
-
 
 /* One question, before and after */
 .example {

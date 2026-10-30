@@ -8,9 +8,20 @@ export function TracesDrawing() {
       {rows.map((r) => (
         <g key={r} transform={`translate(20 ${20 + r * 36})`}>
           <rect width="220" height="24" rx="4" {...stroke} />
-          <path d={`M14 12h${r % 2 ? 120 : 150}`} {...stroke} strokeDasharray="2 4" />
+          <path
+            d={`M14 12h${r % 2 ? 120 : 150}`}
+            {...stroke}
+            strokeDasharray="2 4"
+          />
           {r === 2 || r === 4 ? (
-            <rect x="196" y="6" width="12" height="12" rx="2" fill="currentColor" />
+            <rect
+              x="196"
+              y="6"
+              width="12"
+              height="12"
+              rx="2"
+              fill="currentColor"
+            />
           ) : (
             <rect x="196" y="6" width="12" height="12" rx="2" {...stroke} />
           )}
@@ -36,11 +47,24 @@ export function TeamDrawing() {
         return <path key={`e${i}`} d={`M${x} ${y}L${nx} ${ny}`} {...stroke} />;
       })}
       {nodes.map(([x, y], i) => (
-        <path key={`c${i}`} d={`M130 128L${x} ${y}`} {...stroke} strokeDasharray="2 4" />
+        <path
+          key={`c${i}`}
+          d={`M130 128L${x} ${y}`}
+          {...stroke}
+          strokeDasharray="2 4"
+        />
       ))}
       <rect x="122" y="120" width="16" height="16" rx="3" {...stroke} />
       {nodes.map(([x, y], i) => (
-        <rect key={i} x={x - 5} y={y - 5} width="10" height="10" rx="2" fill="currentColor" />
+        <rect
+          key={i}
+          x={x - 5}
+          y={y - 5}
+          width="10"
+          height="10"
+          rx="2"
+          fill="currentColor"
+        />
       ))}
     </svg>
   );
@@ -64,7 +88,14 @@ export function JournalDrawing() {
       {[0, 1, 2, 3, 4].map((r) => (
         <g key={r} transform="translate(94 0)">
           <path d={`M0 ${100 + r * 22}h66`} {...stroke} />
-          <rect x="-16" y={95 + r * 22} width="10" height="10" rx="2" fill="currentColor" />
+          <rect
+            x="-16"
+            y={95 + r * 22}
+            width="10"
+            height="10"
+            rx="2"
+            fill="currentColor"
+          />
         </g>
       ))}
     </svg>

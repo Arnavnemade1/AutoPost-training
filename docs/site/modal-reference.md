@@ -154,3 +154,18 @@ toast transitions off.
 | primary button `#e3e5e1` / `#10120f` | `#111111` / `#ffffff`, hover `#000000` | 18.9:1 |
 | secondary button 5% white | 5% black, hover 9% black | 15.6:1 |
 | light band `#e3e5e1` (inverted band) | dark band `#111111`, text `#f2f2f2`, muted `#a3a3a3` | 16.5:1 / 7.4:1 |
+
+## Where `/site` deliberately differs
+
+| Reference element | On Forge | Why |
+| --- | --- | --- |
+| Hero canvas art (particle glyphs) | React Bits DotGrid behind a real Agent chat capture | No illustrations copied; the product shot is Forge's own UI |
+| Logo marquee of customer logos | LogoLoop of the parts Forge is built with, set as text | Forge has no customers to show; text avoids third-party logos |
+| Customer quotes | Verbatim Agent Relay messages from campaign forge-e84925eb | Real words from the recorded run |
+| 4 x 2 logo tiles | 3 x 2 tiles of the six durable actors | Six real actors |
+| Blog cards | Three lab views, linking to the lab at `/` | The repository is private, so docs have no public URL |
+| Glow pulse, blinking cursor | Not reproduced | Forge bans pulsing and blinking indicators |
+| Accent green h1 span | Two-tone neutral: muted words, then `#111` accent words | Forge's accent is neutral black |
+| 36px mobile buttons | 44px tall on mobile | Tap-target minimum |
+| One light band on a dark page | One dark band (`#111`) on a light page; header switches theme over it | Same contrast inversion, mirrored |
+| Section added | "One question": GSM8K test-885 before and after, verbatim | Requested: a plain example high on the page |

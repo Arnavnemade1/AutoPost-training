@@ -8,6 +8,7 @@ import {
   LoopVideo,
   ProductNav,
   QuoteCarousel,
+  type Logo,
   type Quote,
 } from "@/components/site/motion";
 import {
@@ -17,14 +18,17 @@ import {
 } from "@/components/site/drawings";
 import s from "@/components/site/site.module.css";
 
-// Every number on this page comes from campaign forge-e84925eb 
+// Every number on this page comes from campaign forge-e84925eb
 // artifacts/forge-e84925eb/report.json, events.jsonl and data/chaos/incidents.json.
 
 // GSM8K test-885, verbatim from artifacts/forge-e84925eb/final-evaluation.json.
 const EXAMPLE = {
-  question: "The Ben and Aggie Burrito Shop makes 125 chimichangas on Tuesdays, 125 chimichangas on Wednesdays and twice as many on Friday. How many chimichangas do they make on those three days?",
-  before: "To determine how many chimichangas the Ben and Aggie Burrito Shop makes on each of the three days (Tuesday, Wednesday, and Friday), we can follow these steps:\n\n1. Identify the number of chimichangas made on Tuesday.\n   - The shop makes 125 chimichangas on Tuesday.\n\n2. Identify the number of chimichangas made on Wednesday.\n   - The shop makes twice as many chimichangas on Wednesday as it does on Tuesday.\n   - Therefore, the number of chimichangas made on Wednesday is \\(2 \\times 125 = 250\\).\n\n3. Identify the number of chimichangas made on Friday.\n   - The shop makes 125 chimichangas on Friday.\n\n4. Sum up the total number of chimichangas made over the three days.\n   - Total chimichangas = Chimbachamas on Tuesday + Chimbachamas on Wednesday + Chimbachamas on Friday\n   - Total chimichangas = 125 + 250 + 125\n\nNow, let's perform the addition:\n\\[125 + 250 = 375\\]\n\\[",
-  after: "On Tuesday, they make 125.\nOn Wednesday, they make 125.\nOn Friday, they make twice as many as on Tuesday, which is 2*125 = <<125*2=250>>250.\nIn total, they make 125+125+250 = <<125+125+250=500>>500 chimichangas.\n#### 500",
+  question:
+    "The Ben and Aggie Burrito Shop makes 125 chimichangas on Tuesdays, 125 chimichangas on Wednesdays and twice as many on Friday. How many chimichangas do they make on those three days?",
+  before:
+    "To determine how many chimichangas the Ben and Aggie Burrito Shop makes on each of the three days (Tuesday, Wednesday, and Friday), we can follow these steps:\n\n1. Identify the number of chimichangas made on Tuesday.\n   - The shop makes 125 chimichangas on Tuesday.\n\n2. Identify the number of chimichangas made on Wednesday.\n   - The shop makes twice as many chimichangas on Wednesday as it does on Tuesday.\n   - Therefore, the number of chimichangas made on Wednesday is \\(2 \\times 125 = 250\\).\n\n3. Identify the number of chimichangas made on Friday.\n   - The shop makes 125 chimichangas on Friday.\n\n4. Sum up the total number of chimichangas made over the three days.\n   - Total chimichangas = Chimbachamas on Tuesday + Chimbachamas on Wednesday + Chimbachamas on Friday\n   - Total chimichangas = 125 + 250 + 125\n\nNow, let's perform the addition:\n\\[125 + 250 = 375\\]\n\\[",
+  after:
+    "On Tuesday, they make 125.\nOn Wednesday, they make 125.\nOn Friday, they make twice as many as on Tuesday, which is 2*125 = <<125*2=250>>250.\nIn total, they make 125+125+250 = <<125+125+250=500>>500 chimichangas.\n#### 500",
 };
 
 const SIDE = [
@@ -34,14 +38,14 @@ const SIDE = [
   { id: "training", label: "Training", icon: "chip" },
 ];
 
-const BUILT_WITH = [
-  "Qwen2.5-0.5B-Instruct",
-  "Agent Relay",
-  "Terse durable actors",
-  "LoRA fine-tuning",
-  "PyTorch",
-  "GSM8K",
-  "EleutherAI evaluation harness",
+// Official marks only; every one is a dependency in pyproject.toml or package.json.
+const BUILT_WITH: Logo[] = [
+  { src: "/site/logos/pytorch.svg", name: "PyTorch", width: 487, height: 120, h: 26 },
+  { src: "/site/logos/huggingface.svg", name: "Hugging Face", width: 963, height: 256, h: 34 },
+  { src: "/site/logos/qwen.svg", name: "Qwen", width: 24, height: 24, h: 28 },
+  { src: "/site/logos/eleutherai.svg", name: "EleutherAI", width: 800, height: 149, h: 22 },
+  { src: "/site/logos/agent-relay.svg", name: "Agent Relay", width: 340, height: 54, h: 24 },
+  { src: "/site/logos/terse-durable-actors.png", name: "Durable Actors by Terse", width: 1370, height: 290, h: 32 },
 ];
 
 const QUOTES: Quote[] = [
@@ -97,11 +101,23 @@ const ACTORS = [
 ];
 
 const CODE_LINES: { k?: string; v: string; t?: "str" | "num" }[][] = [
-  [{ v: "await fetch(" }, { v: '"/api/lab/campaigns"', t: "str" }, { v: ", {" }],
+  [
+    { v: "await fetch(" },
+    { v: '"/api/lab/campaigns"', t: "str" },
+    { v: ", {" },
+  ],
   [{ v: "  method: " }, { v: '"POST"', t: "str" }, { v: "," }],
   [{ v: "  body: JSON.stringify({" }],
-  [{ k: "    production_scan: " }, { v: '"scan-b1b36ecf"', t: "str" }, { v: "," }],
-  [{ k: "    strategies: " }, { v: '["targeted_sft", "broad_sft"]', t: "str" }, { v: "," }],
+  [
+    { k: "    production_scan: " },
+    { v: '"scan-b1b36ecf"', t: "str" },
+    { v: "," },
+  ],
+  [
+    { k: "    strategies: " },
+    { v: '["targeted_sft", "broad_sft"]', t: "str" },
+    { v: "," },
+  ],
   [{ k: "    max_experiments: " }, { v: "2", t: "num" }, { v: "," }],
   [{ k: "    train_steps: " }, { v: "96", t: "num" }, { v: "," }],
   [{ k: "    dev_samples: " }, { v: "24", t: "num" }, { v: "," }],
@@ -111,7 +127,13 @@ const CODE_LINES: { k?: string; v: string; t?: "str" | "num" }[][] = [
   [{ v: "});" }],
 ];
 
-function Eyebrow({ icon, children }: { icon: string; children: React.ReactNode }) {
+function Eyebrow({
+  icon,
+  children,
+}: {
+  icon: string;
+  children: React.ReactNode;
+}) {
   return (
     <span className={s.eyebrow}>
       <span className={s.eyebrowIcon}>
@@ -122,7 +144,15 @@ function Eyebrow({ icon, children }: { icon: string; children: React.ReactNode }
   );
 }
 
-function Feature({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+function Feature({
+  icon,
+  title,
+  children,
+}: {
+  icon: string;
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className={s.feature}>
       <h4>
@@ -134,13 +164,24 @@ function Feature({ icon, title, children }: { icon: string; title: string; child
   );
 }
 
-function Scale({ before, after, n }: { before: number; after: number; n: number }) {
+function Scale({
+  before,
+  after,
+  n,
+}: {
+  before: number;
+  after: number;
+  n: number;
+}) {
   const max = 0.5;
   const x = (v: number) => `${(v / n / max) * 100}%`;
   return (
     <div className={s.scale} aria-hidden="true">
       <div className={s.scaleTrack} />
-      <div className={s.scaleSpan} style={{ left: x(before), width: `calc(${x(after)} - ${x(before)})` }} />
+      <div
+        className={s.scaleSpan}
+        style={{ left: x(before), width: `calc(${x(after)} - ${x(before)})` }}
+      />
       <span className={`${s.dot} ${s.dotBefore}`} style={{ left: x(before) }} />
       <span className={`${s.dot} ${s.dotAfter}`} style={{ left: x(after) }} />
       <span className={s.dotLabel} style={{ left: x(before) }}>
@@ -173,8 +214,9 @@ export default function SitePage() {
                 fully automated
               </h1>
               <p className={`${s.lead} ${s.heroSub}`}>
-                Turn your agent&apos;s production traffic into a private model, fine-tuned to be
-                the best at your own tasks. You own the weights and the costs.
+                Turn your agent&apos;s production traffic into a private model,
+                fine-tuned to be the best at your own tasks. You own the weights
+                and the costs.
               </p>
               <div className={s.ctaRow}>
                 <a href="/" className={s.btn}>
@@ -195,14 +237,15 @@ export default function SitePage() {
                 />
               </div>
               <figcaption className={s.caption}>
-                Agent chat after campaign forge-e84925eb: every handoff between the five agents.
+                Agent chat after campaign forge-e84925eb: every handoff between
+                the five agents.
               </figcaption>
             </figure>
             <div className={s.strip}>
               <p className={s.stripLabel}>Built with</p>
               <span className={s.stripDivider} aria-hidden="true" />
               <div className={s.stripLoop}>
-                <BuiltWith items={BUILT_WITH} />
+                <BuiltWith logos={BUILT_WITH} />
               </div>
             </div>
           </div>
@@ -213,11 +256,15 @@ export default function SitePage() {
           <div className={s.container}>
             <div className={s.sectionHead}>
               <Eyebrow icon="target">One question</Eyebrow>
-              <h2 className={s.h2}>The same question, before and after Forge</h2>
+              <h2 className={s.h2}>
+                The same question, before and after Forge
+              </h2>
             </div>
             <figure className={s.example}>
               <div className={s.exampleQ}>
-                <span className={s.exampleLabel}>Sealed test question · GSM8K test-885</span>
+                <span className={s.exampleLabel}>
+                  Sealed test question · GSM8K test-885
+                </span>
                 <p>{EXAMPLE.question}</p>
               </div>
               <div className={s.exampleCols}>
@@ -237,7 +284,8 @@ export default function SitePage() {
                 </div>
               </div>
               <figcaption className={s.caption}>
-                Both answers are shown exactly as the models wrote them, from campaign forge-e84925eb.
+                Both answers are shown exactly as the models wrote them, from
+                campaign forge-e84925eb.
               </figcaption>
             </figure>
           </div>
@@ -257,21 +305,22 @@ export default function SitePage() {
                   <div className={s.blockText}>
                     <h3 className={s.h3}>Find what your agent gets wrong</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Upload your agent&apos;s real answers. Forge spots the wrong ones on its own
-                      and checks its accuracy against reviewer labels.
+                      Upload your agent&apos;s real answers. Forge spots the
+                      wrong ones on its own and checks its accuracy against
+                      reviewer labels.
                     </p>
                     <div className={s.features}>
                       <Feature icon="search" title="Four detectors">
-                        Miscalculations, missing final answers, cut-off replies and user
-                        corrections.
+                        Miscalculations, missing final answers, cut-off replies
+                        and user corrections.
                       </Feature>
                       <Feature icon="target" title="Measured accuracy">
-                        100% precision and 98.4% recall on the recorded scan. All 62 flagged
-                        answers were truly wrong.
+                        100% precision and 98.4% recall on the recorded scan.
+                        All 62 flagged answers were truly wrong.
                       </Feature>
                       <Feature icon="lock" title="Test questions stay sealed">
-                        Traffic that matches a sealed test question is set aside before the
-                        scan begins.
+                        Traffic that matches a sealed test question is set aside
+                        before the scan begins.
                       </Feature>
                     </div>
                     <a href="/" className={`${s.btn} ${s.blockButton}`}>
@@ -289,7 +338,8 @@ export default function SitePage() {
                         />
                       </div>
                       <figcaption className={s.visualCap}>
-                        Detector audit for scan-b1b36ecf: 64 answers, 62 flagged.
+                        Detector audit for scan-b1b36ecf: 64 answers, 62
+                        flagged.
                       </figcaption>
                     </figure>
                   </div>
@@ -299,20 +349,22 @@ export default function SitePage() {
                   <div className={s.blockText}>
                     <h3 className={s.h3}>Five agents, one research room</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      One click starts a data researcher, director, trainer, evaluator and
-                      governance council. They coordinate over Agent Relay.
+                      One click starts a data researcher, director, trainer,
+                      evaluator and governance council. They coordinate over
+                      Agent Relay.
                     </p>
                     <div className={s.features}>
                       <Feature icon="message" title="Direct messages">
-                        Each handoff lands in one agent&apos;s inbox, and work starts once that
-                        agent confirms it.
+                        Each handoff lands in one agent&apos;s inbox, and work
+                        starts once that agent confirms it.
                       </Feature>
                       <Feature icon="chat" title="One research room">
-                        Plans, checkpoints and the final result are posted where every agent
-                        can read them.
+                        Plans, checkpoints and the final result are posted where
+                        every agent can read them.
                       </Feature>
                       <Feature icon="governance" title="Verdicts in threads">
-                        Governance answers under each checkpoint post and adds a reaction.
+                        Governance answers under each checkpoint post and adds a
+                        reaction.
                       </Feature>
                       <Feature icon="check" title="Read receipts">
                         Every message shows who received it and when.
@@ -341,23 +393,25 @@ export default function SitePage() {
 
                 <article className={s.block} id="durable">
                   <div className={s.blockText}>
-                    <h3 className={s.h3}>A record you can always resume from</h3>
+                    <h3 className={s.h3}>
+                      A record you can always resume from
+                    </h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Every budget, lease, review and checkpoint lives in signed, journaled
-                      Terse durable actors.
+                      Every budget, lease, review and checkpoint lives in
+                      signed, journaled Terse durable actors.
                     </p>
                     <div className={s.features}>
                       <Feature icon="terse" title="Six durable actors">
-                        ResearchCampaign, Experiment, Governance, ArtifactRegistry, RLWorld and
-                        ResearchLedger.
+                        ResearchCampaign, Experiment, Governance,
+                        ArtifactRegistry, RLWorld and ResearchLedger.
                       </Feature>
                       <Feature icon="refresh" title="Back in 28.3 seconds">
-                        We force-stopped the runtime mid-training. It returned with 4 of 4
-                        actors exactly as they were.
+                        We force-stopped the runtime mid-training. It returned
+                        with 4 of 4 actors exactly as they were.
                       </Feature>
                       <Feature icon="clock" title="Every second counted once">
-                        Training picked up 0.6 seconds later under its original request ID.
-                        198.7 seconds settled, once.
+                        Training picked up 0.6 seconds later under its original
+                        request ID. 198.7 seconds settled, once.
                       </Feature>
                     </div>
                     <a href="/" className={`${s.btn} ${s.blockButton}`}>
@@ -375,7 +429,8 @@ export default function SitePage() {
                         />
                       </div>
                       <figcaption className={s.visualCap}>
-                        The crash test during the recorded run, shown 2 times faster.
+                        The crash test during the recorded run, shown 2 times
+                        faster.
                       </figcaption>
                     </figure>
                   </div>
@@ -385,24 +440,25 @@ export default function SitePage() {
                   <div className={s.blockText}>
                     <h3 className={s.h3}>Train, test, approve, download</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Forge trains your model, tests it on questions held back for the purpose,
-                      and hands you the weights.
+                      Forge trains your model, tests it on questions held back
+                      for the purpose, and hands you the weights.
                     </p>
                     <div className={s.features}>
                       <Feature icon="production" title="Held-out failures">
-                        Half of the labeled failures are kept for testing. 0 of 33 became 9 of
-                        33.
+                        Half of the labeled failures are kept for testing. 0 of
+                        33 became 9 of 33.
                       </Feature>
                       <Feature icon="lock" title="A sealed final test">
-                        The winning checkpoint is locked before the sealed questions open. 1 of
-                        24 became 6 of 24.
+                        The winning checkpoint is locked before the sealed
+                        questions open. 1 of 24 became 6 of 24.
                       </Feature>
                       <Feature icon="governance" title="Governance decides">
-                        The council promotes the checkpoint with the best development score.
-                        Here, exp-001.
+                        The council promotes the checkpoint with the best
+                        development score. Here, exp-001.
                       </Feature>
                       <Feature icon="download" title="Your weights">
-                        Download the checkpoint, the report and the full research trace.
+                        Download the checkpoint, the report and the full
+                        research trace.
                       </Feature>
                     </div>
                     <a href="#results" className={`${s.btn} ${s.blockButton}`}>
@@ -428,7 +484,11 @@ export default function SitePage() {
                                   <span
                                     key={m}
                                     className={
-                                      p.t === "str" ? s.tokStr : p.t === "num" ? s.tokNum : undefined
+                                      p.t === "str"
+                                        ? s.tokStr
+                                        : p.t === "num"
+                                          ? s.tokNum
+                                          : undefined
                                     }
                                   >
                                     {p.v}
@@ -466,9 +526,9 @@ export default function SitePage() {
                 </div>
                 <h3 className={s.h3}>Learns from your own traffic</h3>
                 <p className={s.body}>
-                  Forge reads your agent&apos;s real answers and flags the wrong ones by itself:
-                  a missing final answer, a cut-off reply, a miscalculation or a user&apos;s
-                  correction.
+                  Forge reads your agent&apos;s real answers and flags the wrong
+                  ones by itself: a missing final answer, a cut-off reply, a
+                  miscalculation or a user&apos;s correction.
                 </p>
               </div>
               <div className={s.col}>
@@ -478,8 +538,9 @@ export default function SitePage() {
                 </div>
                 <h3 className={s.h3}>A team that checks its own work</h3>
                 <p className={s.body}>
-                  The trainer hands each checkpoint to the evaluator. The governance council
-                  reviews every checkpoint against a fixed policy before promotion.
+                  The trainer hands each checkpoint to the evaluator. The
+                  governance council reviews every checkpoint against a fixed
+                  policy before promotion.
                 </p>
               </div>
               <div className={s.col}>
@@ -489,8 +550,8 @@ export default function SitePage() {
                 </div>
                 <h3 className={s.h3}>A signed record of every step</h3>
                 <p className={s.body}>
-                  Each change to a campaign carries a signature and is saved to a journal, so
-                  the whole run can be replayed and checked.
+                  Each change to a campaign carries a signature and is saved to
+                  a journal, so the whole run can be replayed and checked.
                 </p>
               </div>
             </div>
@@ -512,7 +573,8 @@ export default function SitePage() {
                 <div className={s.resultLabel}>
                   <h3>Held-out production failures</h3>
                   <p className={s.small}>
-                    Real failures from the traffic, kept out of training to measure the fix.
+                    Real failures from the traffic, kept out of training to
+                    measure the fix.
                   </p>
                 </div>
                 <Scale before={0} after={9} n={33} />
@@ -520,14 +582,17 @@ export default function SitePage() {
                   <div className={s.gainNum}>
                     +27.3<small>pp</small>
                   </div>
-                  <p className={s.small}>95% interval +12.1 to +42.4. Validated.</p>
+                  <p className={s.small}>
+                    95% interval +12.1 to +42.4. Validated.
+                  </p>
                 </div>
               </div>
               <div className={s.resultRow}>
                 <div className={s.resultLabel}>
                   <h3>Sealed final test</h3>
                   <p className={s.small}>
-                    24 grade-school math questions, opened once after the checkpoint was locked.
+                    24 grade-school math questions, opened once after the
+                    checkpoint was locked.
                   </p>
                 </div>
                 <Scale before={1} after={6} n={24} />
@@ -535,12 +600,15 @@ export default function SitePage() {
                   <div className={s.gainNum}>
                     +20.8<small>pp</small>
                   </div>
-                  <p className={s.small}>95% interval +4.2 to +37.5. Validated.</p>
+                  <p className={s.small}>
+                    95% interval +4.2 to +37.5. Validated.
+                  </p>
                 </div>
               </div>
             </div>
             <p className={s.resultsMeta}>
-              Campaign forge-e84925eb · Qwen2.5-0.5B-Instruct · about 12 minutes · paired bootstrap 95% intervals
+              Campaign forge-e84925eb · Qwen2.5-0.5B-Instruct · about 12 minutes
+              · paired bootstrap 95% intervals
             </p>
             <div className={s.cols4}>
               <div className={s.col4}>
@@ -549,8 +617,8 @@ export default function SitePage() {
                   Every right answer kept
                 </h3>
                 <p className={s.body}>
-                  All held-out and sealed questions the original model got right, it still
-                  gets right.
+                  All held-out and sealed questions the original model got
+                  right, it still gets right.
                 </p>
               </div>
               <div className={s.col4}>
@@ -559,8 +627,8 @@ export default function SitePage() {
                   Chosen on practice questions
                 </h3>
                 <p className={s.body}>
-                  The checkpoint is picked from development results, keeping the test scores a
-                  fair measure.
+                  The checkpoint is picked from development results, keeping the
+                  test scores a fair measure.
                 </p>
               </div>
               <div className={s.col4}>
@@ -568,7 +636,9 @@ export default function SitePage() {
                   <Icon name="lock" size={16} />
                   One sealed attempt
                 </h3>
-                <p className={s.body}>Each model answers the sealed test exactly once.</p>
+                <p className={s.body}>
+                  Each model answers the sealed test exactly once.
+                </p>
               </div>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
@@ -576,8 +646,8 @@ export default function SitePage() {
                   What improved
                 </h3>
                 <p className={s.body}>
-                  A 0.5B model on grade-school math learned to finish its answers in the
-                  expected format.
+                  A 0.5B model on grade-school math learned to finish its
+                  answers in the expected format.
                 </p>
               </div>
             </div>
@@ -593,8 +663,9 @@ export default function SitePage() {
                 <h2 className={s.h2}>Every decision is on the record</h2>
               </div>
               <p>
-                Each message, review, checkpoint and score is saved with the campaign. Replay
-                the run and trace any number back to its evidence.
+                Each message, review, checkpoint and score is saved with the
+                campaign. Replay the run and trace any number back to its
+                evidence.
               </p>
             </div>
             <div className={s.cards3}>
@@ -613,8 +684,8 @@ export default function SitePage() {
                   Experiments with their evidence
                 </h3>
                 <p className={s.body}>
-                  Each experiment keeps its settings, development score, checkpoint hash and
-                  verdict.
+                  Each experiment keeps its settings, development score,
+                  checkpoint hash and verdict.
                 </p>
               </div>
               <div className={s.card}>
@@ -632,7 +703,8 @@ export default function SitePage() {
                   Held-out checks you can read
                 </h3>
                 <p className={s.body}>
-                  Each test question shows the original answer and the new one, side by side.
+                  Each test question shows the original answer and the new one,
+                  side by side.
                 </p>
               </div>
               <div className={s.card}>
@@ -646,12 +718,11 @@ export default function SitePage() {
                   />
                 </div>
                 <h3 className={s.h3sm}>
-                  <Icon name="governance" size={16} />
-                  A governance ledger
+                  <Icon name="governance" size={16} />A governance ledger
                 </h3>
                 <p className={s.body}>
-                  Preflight and checkpoint reviews, each tied to a policy version and an
-                  experiment.
+                  Preflight and checkpoint reviews, each tied to a policy
+                  version and an experiment.
                 </p>
               </div>
             </div>
@@ -659,7 +730,11 @@ export default function SitePage() {
         </section>
 
         {/* Inverted band: the agents in their own words */}
-        <section className={`${s.sectionTight} ${s.dark}`} data-header-theme="dark" id="voices">
+        <section
+          className={`${s.sectionTight} ${s.dark}`}
+          data-header-theme="dark"
+          id="voices"
+        >
           <div className={s.container}>
             <QuoteCarousel quotes={QUOTES} />
             <div className={s.tiles}>
@@ -682,12 +757,30 @@ export default function SitePage() {
             </div>
             <div className={s.labCards}>
               {[
-                ["view-production-failures", "Production failures", "Every flagged answer, the detector that caught it and the audit against reviewer labels."],
-                ["view-agent-chat", "Agent chat", "The research room and every direct message between the five agents."],
-                ["view-results", "Results", "The sealed test, the held-out failures and a download for your checkpoint."],
+                [
+                  "view-production-failures",
+                  "Production failures",
+                  "Every flagged answer, the detector that caught it and the audit against reviewer labels.",
+                ],
+                [
+                  "view-agent-chat",
+                  "Agent chat",
+                  "The research room and every direct message between the five agents.",
+                ],
+                [
+                  "view-results",
+                  "Results",
+                  "The sealed test, the held-out failures and a download for your checkpoint.",
+                ],
               ].map(([img, title, text]) => (
                 <a href="/" className={s.labCard} key={img}>
-                  <img src={`/site/${img}.webp`} width={1440} height={900} alt={`Forge ${title} view`} loading="lazy" />
+                  <img
+                    src={`/site/${img}.webp`}
+                    width={1440}
+                    height={900}
+                    alt={`Forge ${title} view`}
+                    loading="lazy"
+                  />
                   <h3>{title}</h3>
                   <p className={s.small}>{text}</p>
                   <span className={s.tag}>Lab view</span>
@@ -715,7 +808,10 @@ export default function SitePage() {
                   See the results
                 </a>
               </div>
-              <p className={s.ctaNote}>One recorded campaign took about 12 minutes from click to weights.</p>
+              <p className={s.ctaNote}>
+                One recorded campaign took about 12 minutes from click to
+                weights.
+              </p>
             </div>
           </div>
         </section>
@@ -732,25 +828,43 @@ export default function SitePage() {
               <div>
                 <h2>Product</h2>
                 <ul>
-                  <li><a href="#production">Production failures</a></li>
-                  <li><a href="#agents">Agents</a></li>
-                  <li><a href="#durable">Durable actors</a></li>
-                  <li><a href="#training">Training</a></li>
+                  <li>
+                    <a href="#production">Production failures</a>
+                  </li>
+                  <li>
+                    <a href="#agents">Agents</a>
+                  </li>
+                  <li>
+                    <a href="#durable">Durable actors</a>
+                  </li>
+                  <li>
+                    <a href="#training">Training</a>
+                  </li>
                 </ul>
               </div>
               <div>
                 <h2>Evidence</h2>
                 <ul>
-                  <li><a href="#platform">How it works</a></li>
-                  <li><a href="#results">Results</a></li>
-                  <li><a href="#record">The record</a></li>
+                  <li>
+                    <a href="#platform">How it works</a>
+                  </li>
+                  <li>
+                    <a href="#results">Results</a>
+                  </li>
+                  <li>
+                    <a href="#record">The record</a>
+                  </li>
                 </ul>
               </div>
               <div>
                 <h2>Lab</h2>
                 <ul>
-                  <li><a href="/">Open the lab</a></li>
-                  <li><a href="#lab">Lab views</a></li>
+                  <li>
+                    <a href="/">Open the lab</a>
+                  </li>
+                  <li>
+                    <a href="#lab">Lab views</a>
+                  </li>
                 </ul>
               </div>
             </div>

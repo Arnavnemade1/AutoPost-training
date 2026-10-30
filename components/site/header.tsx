@@ -192,7 +192,12 @@ export function SiteHeader() {
               aria-controls="site-mobile-menu"
               onClick={() => setMenu(true)}
             >
-              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
                 <path
                   d="M3 7h14M3 13h14"
                   stroke="currentColor"
@@ -325,7 +330,11 @@ export function SiteHeader() {
           ))}
         </div>
         <div className={`${s.container} ${s.mobileActions}`}>
-          <a href="#results" className={s.btnGhost} onClick={() => setMenu(false)}>
+          <a
+            href="#results"
+            className={s.btnGhost}
+            onClick={() => setMenu(false)}
+          >
             See results
           </a>
           <a href="/" className={s.btn}>
