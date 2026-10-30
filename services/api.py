@@ -9,15 +9,24 @@ from dotenv import load_dotenv
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
-from services.core import compute, production, store
-from services.core.contracts import DEFAULT_MODEL_ID, MODEL_ID, CampaignConfig, model_spec
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from services.core import compute, distill, packs, production, store, strategies, uploads
+from services.core.packs import register as pack_register
+from services.core.overseer import (
+    review as overseer_review,
+    traces as overseer_traces,
+    worker as overseer_worker,
+)
+from services.core.contracts import DEFAULT_MODEL_ID, MODEL_ID, MODELS, CampaignConfig, model_spec
 from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
 from services.chaos_routes import router as chaos_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+
+OVERSEER_SECONDS = float(os.environ.get("FORGE_OVERSEER_SECONDS", "60"))
 
 
 @asynccontextmanager
@@ -29,13 +38,23 @@ async def lifespan(_app):
             await asyncio.sleep(3)
             await asyncio.to_thread(reconcile)
 
-    task = asyncio.create_task(monitor())
+    async def oversee():
+        # Production traces: pull from the Supabase buffer, check, judge within budget, alert.
+        while True:
+            await asyncio.sleep(OVERSEER_SECONDS)
+            with suppress(Exception):
+                await asyncio.to_thread(overseer_worker.cycle)
+
+    tasks = [asyncio.create_task(monitor())]
+    if OVERSEER_SECONDS > 0:
+        tasks.append(asyncio.create_task(oversee()))
     try:
         yield
     finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(title="Forge research control plane", lifespan=lifespan)
@@ -112,6 +131,193 @@ def list_campaigns():
     ]
 
 
+@app.get("/models")
+def list_models():
+    return [
+        {
+            "id": model_id,
+            "label": spec["label"],
+            "parameters": spec["parameters"],
+            "remote_only": spec["remote_only"],
+        }
+        for model_id, spec in MODELS.items()
+    ]
+
+
+@app.get("/strategies")
+def list_strategies():
+    return strategies.listing()
+
+
+@app.get("/packs")
+def list_packs():
+    return [packs.summary(pack) for pack in packs.available()]
+
+
+@app.get("/packs/{pack_id}")
+def get_pack(pack_id: str):
+    try:
+        pack = packs.get(pack_id)
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
+    detail = packs.summary(pack) | {
+        "task": pack.task.model_dump(mode="json"),
+        "limitations": pack.limitations,
+    }
+    if not detail["builtin"]:
+        report = json.loads((packs.folder(pack_id) / "report.json").read_text())
+        # Training samples only. Development and sealed rows are never previewed.
+        detail |= {
+            "samples": report["samples"],
+            "invalid": report["invalid"],
+            "duplicates": report["duplicates"],
+        }
+    return detail
+
+
+class UploadStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    size: int = Field(ge=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class UploadPart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    index: int = Field(ge=0, le=99_999)
+    text: str = Field(max_length=uploads.MAX_PART)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class UploadDone(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    parts: int = Field(ge=1, le=100_000)
+
+
+@app.post("/uploads", status_code=201)
+def start_upload(upload: UploadStart):
+    try:
+        return uploads.start(upload.name, upload.size, upload.sha256)
+    except ValueError as error:
+        raise HTTPException(413, str(error)) from error
+
+
+@app.post("/uploads/{upload_id}/parts")
+def upload_part(upload_id: str, part: UploadPart):
+    try:
+        return uploads.part(upload_id, part.index, part.text, part.sha256)
+    except KeyError as error:
+        raise HTTPException(404, "Upload not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/uploads/{upload_id}/complete")
+def complete_upload(upload_id: str, done: UploadDone):
+    try:
+        return uploads.complete(upload_id, done.parts)
+    except (KeyError, FileNotFoundError) as error:
+        raise HTTPException(404, "Upload not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+class PackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    draft: pack_register.Draft
+    upload_id: str | None = None
+    text: str | None = Field(default=None, max_length=uploads.MAX_PART)
+
+
+def _draft(request: PackRequest):
+    if (request.upload_id is None) == (request.text is None):
+        raise HTTPException(422, "Send either an upload id or inline text")
+    try:
+        text = request.text if request.text is not None else uploads.text(request.upload_id)
+        return pack_register.build(request.draft, text)
+    except KeyError as error:
+        raise HTTPException(404, "Upload not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/packs/preview")
+def preview_pack(request: PackRequest):
+    pack, _, report = _draft(request)
+    return {k: v for k, v in report.items() if k != "salt"} | {"checker": pack.task.make_checker().checker_id}
+
+
+@app.post("/packs", status_code=201)
+def register_pack(request: PackRequest):
+    pack, pools, report = _draft(request)
+    if report["problems"]:
+        raise HTTPException(422, "; ".join(report["problems"]))
+    return packs.summary(packs.save(pack, pools, report))
+
+
+class TeacherRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    teacher: dict
+
+
+class TeacherJob(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    teacher: dict
+    sampling: dict | None = None
+    budget: dict | None = None
+    selection: str = Field(default="shortest_correct", pattern=r"^(shortest_correct|first_correct)$")
+    seed: int = Field(default=42, ge=0, le=2147483647)
+    dev_samples: int = Field(default=12, ge=4, le=100)
+
+
+@app.post("/distill/probe")
+def probe_teacher(request: TeacherRequest):
+    # The local proxy gives up after 30 seconds; a probe must answer well within it.
+    teacher = request.teacher | {
+        "timeout_s": min(float(request.teacher.get("timeout_s", 20)), 20),
+        "max_retries": 0,
+    }
+    try:
+        return distill.probe(teacher)
+    except ValidationError as error:
+        raise HTTPException(422, str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(502, str(error)) from error
+
+
+@app.post("/packs/{pack_id}/teacher-data", status_code=201)
+def start_teacher_data(pack_id: str, job: TeacherJob):
+    try:
+        return distill.start(
+            pack_id, job.teacher, job.sampling, job.budget, job.selection, job.seed, job.dev_samples
+        )
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
+    except ValidationError as error:
+        raise HTTPException(422, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.get("/packs/{pack_id}/teacher-data")
+def teacher_data_jobs(pack_id: str):
+    try:
+        packs.get(pack_id)
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
+    return distill.jobs(pack_id)
+
+
+@app.get("/packs/{pack_id}/teacher-data/{syn_id}")
+def teacher_data_job(pack_id: str, syn_id: str):
+    job = distill.status(pack_id, syn_id) if packs.PACK_ID.match(pack_id) else None
+    if not job:
+        raise HTTPException(404, "Teacher dataset not found")
+    return job
+
+
 @app.post("/campaigns", status_code=201)
 def create_campaign(config: CampaignConfig):
     # A single local GPU slot. Serialize check + persist + dispatch across API threads.
@@ -122,12 +328,27 @@ def create_campaign(config: CampaignConfig):
 def initialize_campaign(config: CampaignConfig):
     if any(s["status"] not in TERMINAL for s in store.campaigns()):
         raise HTTPException(409, "A campaign already owns the local GPU. Stop it or wait for completion.")
+    if any(job["local"] for job in distill.running()):
+        raise HTTPException(409, "A local teacher is writing a dataset. Wait for it to finish.")
     try:
         backend = compute.configured()
     except ValueError as error:
         raise HTTPException(503, str(error)) from error
+    try:
+        pack = packs.get(config.task_pack)
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
     if backend != "local" and "grpo" in config.strategies:
         raise HTTPException(422, "GRPO runs only on the local backend. Choose SFT strategies for Modal.")
+    found = strategies.problems(config.model_dump(), pack, backend)
+    if found:
+        raise HTTPException(422, " ".join(found))
+    if backend != "local" and not pack.capabilities.remote:
+        raise HTTPException(422, f"{pack.display.name} is evaluated on the local backend only.")
+    if config.final_backend == "lm_eval_azure" and not pack.capabilities.lm_eval_final:
+        raise HTTPException(422, f"The independent harness final is not available for {pack.display.name}.")
+    if config.synthetic_dataset and not distill.find(pack.id, config.synthetic_dataset):
+        raise HTTPException(404, "Teacher dataset not found for this task pack")
     spec = model_spec(config.model_id)
     if spec["remote_only"] and backend == "local":
         raise HTTPException(
@@ -139,15 +360,22 @@ def initialize_campaign(config: CampaignConfig):
         raise HTTPException(
             422, f"{config.model_id} supports SFT strategies and the shared final scorer only."
         )
-    if config.production_scan and not production.load_scan(config.production_scan):
-        raise HTTPException(404, "Production scan not found")
+    if config.production_scan:
+        scan = production.load_scan(config.production_scan)
+        if not scan:
+            raise HTTPException(404, "Production scan not found")
+        if scan.get("task_pack", packs.DEFAULT) != pack.id:
+            raise HTTPException(422, "That production scan belongs to a different task")
     cid = "forge-" + uuid.uuid4().hex[:8]
     c = config.model_dump()
     state = json.loads(actor(cid).initialize(json.dumps(c)))
     governance(cid).initialize(
         json.dumps(
             {
-                "reward_version": "exact-answer-v1",
+                "reward_version": pack.reward_version,
+                "task_pack": pack.id,
+                "task_pack_sha256": pack.sha256,
+                "policy_version": "forge-policy-v2",
                 "max_regression_drop": 0.25,
                 "objective": config.objective,
                 "model": config.model_id,
@@ -352,3 +580,69 @@ def production_scan(scan_id: str):
     if not report:
         raise HTTPException(404, "Production scan not found")
     return report
+
+
+class OverseerTraces(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    task_pack: str = "gsm8k"
+    traces: list[dict] = Field(min_length=1, max_length=overseer_traces.MAX_BATCH)
+
+
+class OverseerLabel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(min_length=3, max_length=300)
+    answer: str = Field(min_length=1, max_length=32000)
+    reviewer: str = Field(default="reviewer", min_length=1, max_length=80)
+
+
+class OverseerExport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_pack: str
+    name: str = Field(min_length=1, max_length=80)
+
+
+@app.get("/overseer/summary")
+def overseer_summary(task_pack: str | None = None):
+    return overseer_worker.summary(task_pack)
+
+
+@app.post("/overseer/traces", status_code=202)
+def overseer_ingest(batch: OverseerTraces):
+    """Local intake for apps on this machine and demos. Remote deployments use the Supabase buffer."""
+    try:
+        return overseer_traces.ingest(batch.traces, batch.source, batch.task_pack)
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/overseer/cycle")
+def overseer_cycle():
+    return overseer_worker.cycle()
+
+
+@app.get("/overseer/queue")
+def overseer_queue(task_pack: str = "gsm8k", limit: int = 50):
+    return overseer_review.queue(task_pack, max(1, min(limit, 200)))
+
+
+@app.post("/overseer/labels")
+def overseer_label(label: OverseerLabel):
+    try:
+        return overseer_review.label(label.key, label.answer, label.reviewer)
+    except KeyError as error:
+        raise HTTPException(404, "Trace not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/overseer/export", status_code=201)
+def overseer_export(request: OverseerExport):
+    try:
+        return overseer_review.export(request.task_pack, request.name)
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
