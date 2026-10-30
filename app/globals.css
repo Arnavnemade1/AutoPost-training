@@ -6412,6 +6412,21 @@ td:last-child {
   height: 100%;
   background: var(--accent);
 }
+/* Overseer sections: the same 21px inset as the production findings list. */
+.overseer-panel {
+  padding: 18px 21px 20px;
+}
+.overseer-panel h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.overseer-panel .finding-list {
+  padding: 0;
+}
+.overseer-panel > .muted {
+  margin: 12px 0 0;
+}
 .overseer-queue-head {
   display: flex;
   justify-content: space-between;

@@ -147,7 +147,7 @@ export function OverseerView({ onSent }: { onSent: () => void }) {
             </div>
           </section>
           {summary.alerts.length > 0 && (
-            <section className="panel" aria-label="Alerts">
+            <section className="panel overseer-panel" aria-label="Alerts">
               <h3>Alerts</h3>
               <ul className="overseer-alerts">
                 {summary.alerts.map((a) => {
@@ -170,7 +170,7 @@ export function OverseerView({ onSent }: { onSent: () => void }) {
             </section>
           )}
           {summary.signals.length > 0 && (
-            <section className="panel" aria-label="Signals">
+            <section className="panel overseer-panel" aria-label="Signals">
               <h3>What the checks found</h3>
               <ul className="overseer-signals">
                 {summary.signals.map((s) => (
@@ -191,7 +191,10 @@ export function OverseerView({ onSent }: { onSent: () => void }) {
           )}
         </>
       )}
-      <section className="panel production-findings" aria-label="Review queue">
+      <section
+        className="panel production-findings overseer-panel"
+        aria-label="Review queue"
+      >
         <header className="overseer-queue-head">
           <div>
             <h3>Review queue</h3>
