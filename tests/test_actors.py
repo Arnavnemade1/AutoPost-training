@@ -199,6 +199,49 @@ def test_rejected_checkpoint_cannot_be_reapproved_or_promoted(runtime):
         g.review(json.dumps(e | {"reward_version": "exact-answer-v1", "sealed_data_access": False}))
 
 
+def test_v1_policies_review_as_before_and_v2_policies_pin_the_task_pack(runtime):
+    v1 = actors.GovernanceActor.get(identity(), runtime[0])
+    v1.initialize(json.dumps({"reward_version": "exact-answer-v1", "max_regression_drop": 0.25}))
+    old = json.loads(v1.review(json.dumps(evidence("old", "w", "e"))))
+    assert old["decision"] == "approved" and old["policy_version"] == "forge-policy-v1"
+
+    v2 = actors.GovernanceActor.get(identity(), runtime[0])
+    policy = {
+        "reward_version": "exact-answer-v1",
+        "max_regression_drop": 0.25,
+        "task_pack_sha256": "c" * 64,
+        "policy_version": "forge-policy-v2",
+    }
+    v2.initialize(json.dumps(policy))
+    same = json.loads(v2.review(json.dumps(evidence("same", "w", "e") | {"task_pack_sha256": "c" * 64})))
+    assert same["decision"] == "approved" and same["policy_version"] == "forge-policy-v2"
+    swapped = json.loads(v2.review(json.dumps(evidence("swap", "w", "e") | {"task_pack_sha256": "d" * 64})))
+    assert swapped["reason_codes"] == ["TASK_PACK_MODIFIED"]
+
+
+def test_synthetic_training_data_needs_verified_provenance_terms_and_separation(runtime):
+    g = actors.GovernanceActor.get(identity(), runtime[0])
+    g.initialize(json.dumps({"reward_version": "exact-answer-v1", "max_regression_drop": 0.25}))
+    good = {
+        "provenance_verified": True,
+        "teacher_terms_present": True,
+        "checker_matches_pack": True,
+        "separation_verified": True,
+        "verification": "reference",
+    }
+    ok = json.loads(g.review(json.dumps(evidence("syn-ok", "w", "e") | {"synthetic": good})))
+    assert ok["decision"] == "approved"
+    bad = {key: False for key in good} | {"verification": "format_only"}
+    rejected = json.loads(g.review(json.dumps(evidence("syn-bad", "w", "e") | {"synthetic": bad})))
+    assert rejected["reason_codes"] == [
+        "SYNTHETIC_PROVENANCE_MISSING",
+        "TEACHER_TERMS_MISSING",
+        "SYNTHETIC_CHECKER_MISMATCH",
+        "SYNTHETIC_SEPARATION_FAILED",
+        "SYNTHETIC_UNVERIFIED",
+    ]
+
+
 def test_zz_committed_state_survives_native_sigkill(runtime):
     client, process, commands, env, log = runtime
     cid = identity()

@@ -192,12 +192,27 @@ class GovernanceActor(Actor):
                 reasons.append("ARTIFACT_INTEGRITY_FAILURE")
             if e.get("regression_drop", 1) > p["max_regression_drop"]:
                 reasons.append("REGRESSION_THRESHOLD_EXCEEDED")
+        # Policies from before task packs carry no pack hash, so their reviews replay unchanged.
+        if "task_pack_sha256" in p and e.get("task_pack_sha256") != p["task_pack_sha256"]:
+            reasons.append("TASK_PACK_MODIFIED")
+        synthetic = e.get("synthetic")
+        if synthetic is not None:
+            if not synthetic.get("provenance_verified"):
+                reasons.append("SYNTHETIC_PROVENANCE_MISSING")
+            if not synthetic.get("teacher_terms_present"):
+                reasons.append("TEACHER_TERMS_MISSING")
+            if not synthetic.get("checker_matches_pack"):
+                reasons.append("SYNTHETIC_CHECKER_MISMATCH")
+            if not synthetic.get("separation_verified"):
+                reasons.append("SYNTHETIC_SEPARATION_FAILED")
+            if synthetic.get("verification") != "reference" and not p.get("allow_unverified_synthetic"):
+                reasons.append("SYNTHETIC_UNVERIFIED")
         result = {
             "id": e["id"],
             "decision": "rejected" if reasons else "approved",
             "reason_codes": reasons,
             "evidence": e,
-            "policy_version": "forge-policy-v1",
+            "policy_version": p.get("policy_version", "forge-policy-v1"),
         }
         reviews = json.loads(self.reviews)
         if e["id"] in reviews and reviews[e["id"]] != result:
