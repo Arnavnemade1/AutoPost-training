@@ -24,6 +24,21 @@ DETECTORS = {
     "truncated": "Generation stopped at the length limit",
     "user_reported": "The user marked the answer wrong or sent a correction",
 }
+# Detectors for any other task pack: its own checker decides whether an answer is usable.
+GENERIC_DETECTORS = {
+    "format_failure": "The answer does not have the format the task's checker reads",
+    "truncated": DETECTORS["truncated"],
+    "user_reported": DETECTORS["user_reported"],
+}
+
+
+def _math(pack):
+    return pack is None or pack.id == "gsm8k"
+
+
+def detectors(pack=None):
+    return DETECTORS if _math(pack) else GENERIC_DETECTORS
+
 
 NUMBER = r"\$?\d[\d,]*(?:\.\d+)?"
 TERM = rf"\(?\s*{NUMBER}\s*\)?"
@@ -94,13 +109,27 @@ def arithmetic_slips(output):
     return slips
 
 
-def detect(trace):
+def detect(trace, pack=None):
+    if not _math(pack):
+        return detect_generic(trace, pack)
     output = trace["output"]
     signals = []
     for slip in arithmetic_slips(output):
         signals.append({"kind": "arithmetic_slip", "evidence": slip})
     if extract_answer(output) is None:
         signals.append({"kind": "missing_final_answer", "evidence": {"tail": output[-120:]}})
+    if trace.get("finish_reason") == "length":
+        signals.append({"kind": "truncated", "evidence": {"finish_reason": "length"}})
+    feedback = trace.get("feedback") or {}
+    if feedback.get("rating", 0) < 0 or feedback.get("correction"):
+        signals.append({"kind": "user_reported", "evidence": {k: feedback[k] for k in feedback}})
+    return signals
+
+
+def detect_generic(trace, pack):
+    signals = []
+    if not pack.task.make_checker().format_ok(trace["output"]):
+        signals.append({"kind": "format_failure", "evidence": {"tail": trace["output"][-120:]}})
     if trace.get("finish_reason") == "length":
         signals.append({"kind": "truncated", "evidence": {"finish_reason": "length"}})
     feedback = trace.get("feedback") or {}
@@ -152,27 +181,42 @@ def parse(text):
     return traces, malformed
 
 
-def parse_labels(text):
+def parse_labels(text, pack=None):
     labels = {}
     for line in text.splitlines():
         if line.strip():
             row = json.loads(line)
-            if extract_answer(row["answer"]) is None:
-                raise ValueError(f"Label {row['id']} must end with a numeric '#### <answer>' line")
+            if _math(pack):
+                if extract_answer(row["answer"]) is None:
+                    raise ValueError(f"Label {row['id']} must end with a numeric '#### <answer>' line")
+            else:
+                try:
+                    pack.task.make_checker().check_reference(row["answer"])
+                except ValueError as error:
+                    raise ValueError(f"Label {row['id']}: {error}") from None
             labels[row["id"]] = row["answer"]
     return labels
 
 
-def scan(text, labels_text=None, sealed_questions=(), source="upload"):
+def wrong(output, label, pack=None):
+    """Whether a deployed answer disagrees with its reviewer label."""
+    if _math(pack):
+        actual = extract_answer(output)
+        return actual is None or actual != extract_answer(label)
+    return not pack.task.make_checker().score(output, label)["correct"]
+
+
+def scan(text, labels_text=None, sealed_questions=(), source="upload", pack=None):
     traces, malformed = parse(text)
-    labels = parse_labels(labels_text) if labels_text else {}
+    labels = parse_labels(labels_text, pack) if labels_text else {}
+    kinds = detectors(pack)
     sealed = {question_key(q) for q in sealed_questions}
     excluded = [t["id"] for t in traces if question_key(t["prompt"]) in sealed]
-    findings, counts = [], {kind: 0 for kind in DETECTORS}
+    findings, counts = [], {kind: 0 for kind in kinds}
     for trace in traces:
         if trace["id"] in excluded:
             continue
-        signals = detect(trace)
+        signals = detect(trace, pack)
         for kind in {s["kind"] for s in signals}:
             counts[kind] += 1
         if signals:
@@ -184,27 +228,28 @@ def scan(text, labels_text=None, sealed_questions=(), source="upload"):
         "malformed": malformed,
         "excluded_sealed_overlap": excluded,
         "flagged": len(findings),
-        "categories": [{"kind": kind, "label": DETECTORS[kind], "count": counts[kind]} for kind in DETECTORS],
+        "categories": [{"kind": kind, "label": kinds[kind], "count": counts[kind]} for kind in kinds],
         "findings": findings,
-        "audit": audit(traces, findings, labels, set(excluded)) if labels else None,
+        "audit": audit(traces, findings, labels, set(excluded), pack) if labels else None,
     }
+    if not _math(pack):
+        report["task_pack"] = pack.id
     return report
 
 
-def audit(traces, findings, labels, excluded):
+def audit(traces, findings, labels, excluded, pack=None):
     """Precision and recall of 'flagged' against reviewer labels; labels are not used to detect."""
     flagged = {f["trace"]["id"] for f in findings}
     tp = fp = fn = tn = 0
     for trace in traces:
         if trace["id"] in excluded or trace["id"] not in labels:
             continue
-        actual = extract_answer(trace["output"])
-        wrong = actual is None or actual != extract_answer(labels[trace["id"]])
+        bad = wrong(trace["output"], labels[trace["id"]], pack)
         hit = trace["id"] in flagged
-        tp += hit and wrong
-        fp += hit and not wrong
-        fn += wrong and not hit
-        tn += not hit and not wrong
+        tp += hit and bad
+        fp += hit and not bad
+        fn += bad and not hit
+        tn += not hit and not bad
     labeled = tp + fp + fn + tn
     return {
         "labeled": labeled,
@@ -217,9 +262,9 @@ def audit(traces, findings, labels, excluded):
     }
 
 
-def campaign_rows(report, labels_text):
+def campaign_rows(report, labels_text, pack=None):
     """Reviewer-labeled, wrongly answered production prompts, split by a stable hash into train and held out."""
-    labels = parse_labels(labels_text)
+    labels = parse_labels(labels_text, pack)
     rows = []
     for finding in report["findings"]:
         trace = finding["trace"]
@@ -228,7 +273,7 @@ def campaign_rows(report, labels_text):
         answer = labels.get(trace["id"])
         if answer is None:
             continue
-        if extract_answer(trace["output"]) == extract_answer(answer):
+        if not wrong(trace["output"], answer, pack):
             continue  # flagged, but the final answer was right; not a training target
         rows.append(
             {
@@ -292,11 +337,17 @@ def _folder():
 SCAN_ID = re.compile(r"^scan-[0-9a-f]{8}$")
 
 
-def save_scan(name, traces_text, labels_text=None, source="upload"):
+def save_scan(name, traces_text, labels_text=None, source="upload", pack=None):
     import uuid
     from services.core import store
 
-    report = scan(traces_text, labels_text, sealed_questions(), source)
+    if _math(pack):
+        sealed = sealed_questions()
+    else:
+        from services.core import packs
+
+        sealed = [row["question"] for row in packs.read(pack.id, "sealed")]
+    report = scan(traces_text, labels_text, sealed, source, pack)
     report |= {"id": f"scan-{uuid.uuid4().hex[:8]}", "name": name[:80], "created_at": store.now()}
     folder = _folder()
     (folder / f"{report['id']}.traces.jsonl").write_text(traces_text)

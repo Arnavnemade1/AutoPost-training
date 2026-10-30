@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from forge_training.config import Example
 from forge_training.data import question_key, verify_separation
-from services.core import compute, production, store, training
+from services.core import compute, distill, packs, production, store, training
 from services.core.director import propose, build_input
 from services.core.briefing import publish
 from services.core.verdict import SUMMARY as VERDICT_SUMMARY, final_verdict
@@ -28,14 +28,18 @@ from services.core.actor_client import get_actor
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
-def production_split(config, train_rows, dev_rows):
+def production_split(config, train_rows, dev_rows, pack=None):
     """Labeled production failures: half join training, half are held out to measure the fix."""
     if not config.get("production_scan"):
         return [], [], {"keys": set(), "report": None}
     report = production.load_scan(config["production_scan"])
     if not report:
         raise ValueError("Production scan not found")
-    train, held_out = production.campaign_rows(report, production.load_labels(config["production_scan"]))
+    train, held_out = production.campaign_rows(
+        report,
+        production.load_labels(config["production_scan"]),
+        None if pack is None or pack.id == "gsm8k" else pack,
+    )
     # Development rows stay pure: production failures that duplicate them are dropped.
     dev_keys = {question_key(r["question"]) for r in dev_rows}
     train = [r for r in train if question_key(r["question"]) not in dev_keys]
@@ -104,21 +108,27 @@ def run(cid):
         backend = compute.open_backend(
             on_hardware=hardware, on_notice=lambda text: store.event(cid, "error", text, "trainer")
         )
-        train_rows, dev_rows, sealed = training.benchmark_data(config)
-        prod_train, prod_held_out, scan = production_split(config, train_rows, dev_rows)
+        if backend.name == "local":
+            from forge_training.locking import acquire_model_lock
+
+            # One model job per machine: a local teacher or another worker would thrash memory.
+            model_lock = acquire_model_lock(f"campaign {cid}", wait=False)  # noqa: F841 (held until exit)
+        pack = packs.get(config.get("task_pack"))
+        # Terse worlds reward numeric answers; other packs are scored by their checker alone.
+        rewarded = worlds if pack.capabilities.terse_world else lambda stage: None
+        train_rows, dev_rows, sealed = packs.data(pack, config)
+        prod_train, prod_held_out, scan = production_split(config, train_rows, dev_rows, pack)
         train_rows = [{k: r[k] for k in ("id", "question", "answer")} for r in prod_train] + [
             r for r in train_rows if question_key(r["question"]) not in scan["keys"]
         ]
-        verify_separation(
-            [Example(**r) for r in train_rows],
-            [
-                Example(**r)
-                for r in dev_rows + [{k: r[k] for k in ("id", "question", "answer")} for r in prod_held_out]
-            ],
-        )
+
+        def example(r):
+            return Example(id=r["id"], question=r["question"], answer=r["answer"])
+
+        verify_separation([example(r) for r in train_rows], [example(r) for r in dev_rows + prod_held_out])
         manifest = {
-            "dataset": "openai/gsm8k",
-            "revision": training.DATASET_REVISION,
+            "dataset": pack.source.repo or pack.id,
+            "revision": pack.source.revision,
             "train_ids": [r["id"] for r in train_rows],
             "dev_ids": [r["id"] for r in dev_rows],
             "production_scan": config.get("production_scan"),
@@ -130,6 +140,22 @@ def run(cid):
         (folder / "dataset-manifest.json").write_text(json.dumps(manifest, indent=2))
         artifact(cid, folder / "dataset-manifest.json", "dataset", "Dataset provenance")
         held_rows = [{k: r[k] for k in ("id", "question", "answer")} for r in prod_held_out]
+        synthetic_rows, synthetic = [], None
+        if config.get("synthetic_dataset"):
+            protected = {question_key(r["question"]) for r in dev_rows + held_rows}
+            synthetic_rows, synthetic = distill.campaign_rows(
+                pack, config["synthetic_dataset"], train_rows, protected
+            )
+            save_field(synthetic=synthetic)
+            send(
+                cid,
+                "data",
+                "director",
+                "TEACHER_DATA_VERIFIED",
+                f"Teacher dataset {synthetic['dataset_id']} re-verified from bytes: {synthetic['rows']} solutions "
+                f"by {synthetic['teacher']['model']} match this campaign's training questions; "
+                f"{synthetic['overlap_dropped']} rows dropped for overlap.",
+            )
         if scan["report"]:
             r = scan["report"]
             found = ", ".join(
@@ -170,24 +196,26 @@ def run(cid):
             "director",
             "evaluator",
             "BASELINE_REQUESTED",
-            f"Evaluate {config['dev_samples']} disjoint development problems. Keep final test questions sealed.",
+            f"Evaluate {config['dev_samples']} disjoint development {pack.display.unit}. Keep final test questions sealed.",
         )
         transition(cid, "baseline", "Measuring the original model on development data")
         base_started = time.monotonic()
         actor(cid).reserve(cid + "-baseline", max(1, int(deadline - base_started)))
         model, tokenizer = backend.load(model_id=config["model_id"])
         baseline = backend.evaluate(
-            model, tokenizer, dev_rows, progress("Baseline"), stop, worlds=worlds("baseline")
+            model, tokenizer, dev_rows, progress("Baseline"), stop, worlds=rewarded("baseline"), pack=pack
         )
-        # A small declared math regression set. This is not a broad safety evaluation.
-        regressions = [
-            {"id": "reg-1", "question": "What is 6 times 7?", "answer": "#### 42"},
-            {"id": "reg-2", "question": "What is 81 divided by 9?", "answer": "#### 9"},
-            {"id": "reg-3", "question": "What is 125 minus 37?", "answer": "#### 88"},
-            {"id": "reg-4", "question": "What is 15 plus 26?", "answer": "#### 41"},
-        ]
+        # The pack's small declared regression set. This is not a broad safety evaluation.
+        regressions = [r.model_dump(exclude_none=True) for r in pack.regression]
+        reg_pack = packs.regression_pack(pack)
         base_reg = backend.evaluate(
-            model, tokenizer, regressions, progress("Baseline regression"), stop, split="regression"
+            model,
+            tokenizer,
+            regressions,
+            progress("Baseline regression"),
+            stop,
+            split="regression",
+            pack=reg_pack,
         )
         base_prod = (
             backend.evaluate(
@@ -197,6 +225,7 @@ def run(cid):
                 progress("Baseline production"),
                 stop,
                 split="production held-out",
+                pack=pack,
             )
             if held_rows
             else None
@@ -266,7 +295,9 @@ def run(cid):
                 {
                     "id": key + "-preflight",
                     "phase": "preflight",
-                    "reward_version": "exact-answer-v1",
+                    **({"synthetic": synthetic or {}} if proposal["strategy"] == "distill_sft" else {}),
+                    "reward_version": pack.reward_version,
+                    "task_pack_sha256": pack.sha256,
                     "sealed_data_access": False,
                     "provenance_valid": True,
                 },
@@ -325,7 +356,24 @@ def run(cid):
 
             adapter = folder / expid
             try:
-                if proposal["strategy"] == "grpo":
+                if proposal["strategy"] == "dpo":
+                    if not pack.capabilities.dpo or backend.name != "local":
+                        raise RuntimeError("DPO needs a preference task on the local backend")
+                    from services.core.preference import train_dpo
+
+                    result = train_dpo(
+                        proposal,
+                        config,
+                        train_rows,
+                        adapter,
+                        metric,
+                        stop,
+                        pack,
+                        warm_start=best["path"] if best else None,
+                    )
+                elif proposal["strategy"] == "grpo":
+                    if not pack.capabilities.grpo:
+                        raise RuntimeError(f"GRPO is not available for the {pack.display.name} task")
                     if backend.name != "local":
                         raise RuntimeError("GRPO runs only on the local backend; choose SFT strategies")
                     from services.core.rl import train_grpo
@@ -345,7 +393,11 @@ def run(cid):
                         cid, adapter / "trajectories.json", "trajectory", f"{expid} Terse reward trajectories"
                     )
                 else:
-                    result = backend.train(proposal, config, train_rows, adapter, metric, stop)
+                    rows = train_rows
+                    if proposal["strategy"] == "distill_sft":
+                        # Teacher solutions replace the references; labeled production failures stay first.
+                        rows = [r for r in train_rows if r["id"].startswith("prod-")] + synthetic_rows
+                    result = backend.train(proposal, config, rows, adapter, metric, stop, pack=pack)
             except InterruptedError:
                 raise
             except Exception as error:
@@ -390,10 +442,22 @@ def run(cid):
             update_exp(status="evaluating", training=result)
             model, tokenizer = backend.load(adapter, config["model_id"])
             evaluation = backend.evaluate(
-                model, tokenizer, dev_rows, progress(expid + " evaluation"), stop, worlds=worlds(expid)
+                model,
+                tokenizer,
+                dev_rows,
+                progress(expid + " evaluation"),
+                stop,
+                worlds=rewarded(expid),
+                pack=pack,
             )
             reg = backend.evaluate(
-                model, tokenizer, regressions, progress(expid + " regression"), stop, split="regression"
+                model,
+                tokenizer,
+                regressions,
+                progress(expid + " regression"),
+                stop,
+                split="regression",
+                pack=reg_pack,
             )
             prod_eval = (
                 backend.evaluate(
@@ -403,6 +467,7 @@ def run(cid):
                     progress(expid + " production"),
                     stop,
                     split="production held-out",
+                    pack=pack,
                 )
                 if held_rows
                 else None
@@ -418,7 +483,9 @@ def run(cid):
                 {
                     "id": key,
                     "phase": "checkpoint",
-                    "reward_version": "exact-answer-v1",
+                    **({"synthetic": synthetic or {}} if proposal["strategy"] == "distill_sft" else {}),
+                    "reward_version": pack.reward_version,
+                    "task_pack_sha256": pack.sha256,
                     "sealed_data_access": False,
                     "provenance_valid": True,
                     "weights_changed": result["weights_changed"],
@@ -554,13 +621,25 @@ def run(cid):
         else:
             model, tokenizer = backend.load(model_id=config["model_id"])
             final_base = backend.evaluate(
-                model, tokenizer, final_rows, progress("Final baseline"), stop, split="sealed final"
+                model,
+                tokenizer,
+                final_rows,
+                progress("Final baseline"),
+                stop,
+                split="sealed final",
+                pack=pack,
             )
             backend.unload(model)
             if best:
                 model, tokenizer = backend.load(best["path"], config["model_id"])
                 final_best = backend.evaluate(
-                    model, tokenizer, final_rows, progress("Final checkpoint"), stop, split="sealed final"
+                    model,
+                    tokenizer,
+                    final_rows,
+                    progress("Final checkpoint"),
+                    stop,
+                    split="sealed final",
+                    pack=pack,
                 )
                 backend.unload(model)
             else:
@@ -605,9 +684,7 @@ def run(cid):
             "config": config,
             "final": final,
             "limitations": [
-                "GSM8K subset only, not the full leaderboard evaluation; exact harness and scorer versions are in each report",
-                "Possible base model pretraining contamination",
-                "Four math regression questions, not a broad safety claim",
+                *pack.limitations,
                 "Local sponsor runtimes; no claim of cloud durability"
                 + ("; model work ran on a remote Modal GPU" if backend.name == "modal" else ""),
                 "Only executed strategies are claimed. GRPO uses actor-returned deterministic rewards when selected.",
