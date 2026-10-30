@@ -28,6 +28,11 @@ sample under a hard daily budget and sends reviewer-labeled failures back to the
 verified on fixtures and tiny models only; no model improvement from them is claimed yet
 ([verification](docs/verification/any-task-local.md)).
 
+**Model-backed agents with subagents:** with an Azure OpenAI or OpenAI key, all five roles
+reason with a model, and any of them can spin up subagents for focused, parallel analysis.
+Each decision is capped in subagents, depth and model calls, and its findings are posted as a
+Relay thread. Deterministic gates still decide promotion ([agents](docs/agents.md)).
+
 **Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
 rewards are Terse math-world transitions, eight durable Terse actors (campaigns,
 experiments, governance, artifacts, math worlds, a message outbox, a research ledger
@@ -67,6 +72,7 @@ so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md
 - [Teacher distillation](docs/distillation.md)
 - [Preference alignment (DPO)](docs/preference-alignment.md)
 - [Production overseer](docs/overseer.md)
+- [Research agents and subagents](docs/agents.md)
 - [Any-task, distillation, DPO and overseer verification](docs/verification/any-task-local.md)
 - [Training on a Modal H100](docs/remote-gpu.md)
 - [Durable workflow harness and SuperServe sandboxes](docs/workflow-harness.md)

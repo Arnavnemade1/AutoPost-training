@@ -95,6 +95,10 @@ The judge:
   measured usage after. A call that would cross `FORGE_OVERSEER_DAILY_USD` or
   `FORGE_OVERSEER_DAILY_CALLS` is not sent (fail closed). Prices come from
   `FORGE_OVERSEER_PRICE_IN_PER_M` and `FORGE_OVERSEER_PRICE_OUT_PER_M`.
+- **Reasoning models:** endpoints that refuse `max_tokens`, `temperature` or `top_p` (OpenAI
+  o-series, gpt-5 and later, also on Azure's v1 endpoint) are retried once with
+  `max_completion_tokens` and the model's default sampling. Every result records this. Example:
+  `FORGE_OVERSEER_JUDGE_URL=$AZURE_OPENAI_ENDPOINT`, `FORGE_OVERSEER_JUDGE_KEY_ENV=AZURE_OPENAI_API_KEY`.
 - **Cache:** identical inputs are answered from cache.
 - **Output:** a structured verdict (ok, fail or unsure), groundedness, hallucination (only when
   context was given), refusal, format, failure kinds, confidence and a short rationale. It never
