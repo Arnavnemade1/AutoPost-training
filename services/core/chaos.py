@@ -188,29 +188,49 @@ def alive(pid):
 
 
 def command_of(pid):
+    """Full command line. Linux ps truncates piped output without -ww, so prefer /proc."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        return raw.replace(b"\0", b" ").decode(errors="replace").strip()
+    except OSError:
+        pass
     try:
         return subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=2
+            ["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=2
         ).stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
 
-def supervised_runtime(folder=FOLDER):
-    """The runtime the lab supervisor owns, or None when nothing would bring it back."""
+def runtime_problem(folder=FOLDER):
+    """Why there is no supervised runtime to act on, or None when there is one."""
     state = read_json(Path(folder) / "runtime.json", None)
-    if not isinstance(state, dict) or not alive(state.get("supervisor_pid")) or not alive(state.get("pid")):
-        return None
+    if not isinstance(state, dict):
+        return "no runtime.json"
+    if not alive(state.get("supervisor_pid")):
+        return f"supervisor {state.get('supervisor_pid')} is not running"
+    if not alive(state.get("pid")):
+        return f"runtime {state.get('pid')} is not running"
     command = command_of(state["pid"])
     if "durable-actors" not in command or state["data_dir"] not in command:
+        return (
+            f"pid {state['pid']} is not the durable-actors runtime for {state['data_dir']}: {command[:300]!r}"
+        )
+    return None
+
+
+def supervised_runtime(folder=FOLDER):
+    """The runtime the lab supervisor owns, or None when nothing would bring it back."""
+    if runtime_problem(folder):
         return None
-    return state
+    return read_json(Path(folder) / "runtime.json", None)
 
 
 def kill_runtime(folder=FOLDER):
-    state = supervised_runtime(folder)
-    if not state:
-        raise RuntimeError("No supervised Terse runtime. Start the lab with scripts/lab.py.")
+    problem = runtime_problem(folder)
+    if problem:
+        raise RuntimeError(f"No supervised Terse runtime ({problem}). Start the lab with scripts/lab.py.")
+    state = read_json(Path(folder) / "runtime.json", None)
     pid = state["pid"]
     if os.getpgid(pid) != pid:
         raise RuntimeError("Terse runtime is not a process group leader; refusing to signal")
@@ -393,9 +413,10 @@ class Incidents:
     def begin(self, campaign_id, experiments):
         if self.active():
             raise RuntimeError("A crash test is already in progress")
-        state = supervised_runtime(self.folder)
-        if not state:
-            raise RuntimeError("No supervised Terse runtime. Start the lab with scripts/lab.py.")
+        problem = runtime_problem(self.folder)
+        if problem:
+            raise RuntimeError(f"No supervised Terse runtime ({problem}). Start the lab with scripts/lab.py.")
+        state = read_json(self.folder / "runtime.json", None)
         rows = campaign_actors(campaign_id, experiments)
         with self.client() as client:
             before = read_actors(client, rows)
