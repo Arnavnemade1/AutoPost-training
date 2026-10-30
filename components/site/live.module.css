@@ -1,5 +1,4 @@
 /* Live illustrations on /site. Tokens match components/site/site.module.css. */
-.hero,
 .card,
 .code,
 .example {
@@ -26,30 +25,7 @@
   color: var(--muted);
 }
 
-/* Motion primitives: the measured figure transition */
-.scene {
-  grid-area: 1 / 1;
-  opacity: 0;
-  translate: 0 16px;
-  filter: blur(3px);
-  pointer-events: none;
-  /* Leaving: quick fade so two states never overlap (the reference morph completes
-     inside one 500 ms sample). */
-  transition:
-    opacity 200ms var(--ease-out),
-    translate 200ms var(--ease-out),
-    filter 200ms var(--ease-out);
-}
-.sceneOn {
-  opacity: 1;
-  translate: 0 0;
-  filter: none;
-  pointer-events: auto;
-  transition:
-    opacity 500ms var(--ease-out) 150ms,
-    translate 500ms var(--ease-out) 150ms,
-    filter 500ms var(--ease-out) 150ms;
-}
+/* Motion primitive: the measured figure transition (opacity, 16px, 3px blur). */
 .rise {
   animation: rise 250ms var(--ease-out) both;
 }
@@ -58,14 +34,6 @@
     opacity: 0;
     translate: 0 16px;
     filter: blur(3px);
-  }
-}
-.fadeIn {
-  animation: fade 250ms var(--ease-out) both;
-}
-@keyframes fade {
-  from {
-    opacity: 0;
   }
 }
 
@@ -81,39 +49,42 @@
   line-height: 1;
 }
 
-/* ---------- Hero campaign ---------- */
-.hero {
+/* ---------- Hero art (three.js points) ---------- */
+.art {
+  --fg: #111111;
+  --muted: #5c5c5c;
+  --dim: #6b6b6b;
+  --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);
   display: flex;
   flex-direction: column;
-  aspect-ratio: 16 / 10;
-  border-radius: 10px;
-  border: 1px solid var(--line-strong);
-  background: #ffffff;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 24px 48px -24px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
-  text-align: left;
-}
-.heroBar {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: 48px;
-  padding: 0 16px 0 20px;
-  border-bottom: 1px solid var(--line);
-  flex: 0 0 auto;
 }
-.heroId {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--muted);
-}
-.steps {
+.artTabs {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
 }
+.artCanvas {
+  position: relative;
+  width: 100%;
+  height: 520px;
+}
+.artCanvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.artCaption {
+  min-height: 22px;
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 22px;
+  letter-spacing: 0.15px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .stepTab {
   height: 28px;
   padding: 0 12px;
@@ -126,252 +97,10 @@
     color 200ms var(--ease-out),
     background-color 200ms var(--ease-out);
 }
-.stepTabDone {
-  color: var(--fg);
-}
+
 .stepTabOn {
   color: var(--fg);
   background: rgba(0, 0, 0, 0.05);
-}
-.heroBody {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  padding: 28px;
-}
-
-.terminal {
-  align-self: center;
-  justify-self: center;
-  width: min(760px, 100%);
-  padding: 28px 32px;
-  border-radius: 10px;
-  border: 1px solid var(--line-strong);
-  background: #fafafa;
-  font-family: var(--mono);
-  font-size: 16px;
-  line-height: 28px;
-}
-.termLine {
-  display: flex;
-  gap: 12px;
-  min-height: 26px;
-  overflow-wrap: anywhere;
-}
-.prompt {
-  color: var(--dim);
-}
-.termOut {
-  margin: 4px 0 16px 24px;
-  color: var(--muted);
-}
-
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
-  min-height: 0;
-}
-.col {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: #fafafa;
-  padding: 16px;
-}
-.colHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-}
-.colHead .mono {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 13px;
-}
-.flagList,
-.msgList,
-.flow,
-.detectors,
-.actors {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.flagList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.flagRow {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 7px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-}
-.flagQ {
-  font-size: 14px;
-  line-height: 20px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.chip,
-.route {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 4px;
-  background: var(--chip);
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--fg);
-  white-space: nowrap;
-}
-.msgList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.msgRow {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-.msgWho {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-}
-.msgText {
-  margin: 2px 0 0;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.trainScene {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 12px;
-}
-.chart {
-  display: block;
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-.gridLine {
-  stroke: var(--line);
-  stroke-width: 1;
-}
-.lossLine {
-  fill: none;
-  stroke: #111111;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-.killLine {
-  stroke: #b42318;
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-.trainFoot {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 12px;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--muted);
-}
-.killNote {
-  color: var(--fg);
-}
-
-.resultScene {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 48px;
-  align-items: center;
-  padding: 0 24px;
-}
-.resultLabel {
-  display: block;
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--muted);
-}
-.bigNum,
-.bigNumSm {
-  margin: 8px 0 20px;
-  font-size: 96px;
-  line-height: 96px;
-  font-weight: 500;
-  letter-spacing: -1.6px;
-  font-variant-numeric: tabular-nums;
-}
-.bigNumSm {
-  font-size: 64px;
-  line-height: 72px;
-  letter-spacing: -0.9px;
-}
-.of {
-  font-size: 18px;
-  letter-spacing: 0;
-  color: var(--muted);
-  font-weight: 400;
-}
-.numSwap {
-  display: inline-block;
-  animation: rise 250ms var(--ease-out) both;
-}
-.squares {
-  display: grid;
-  grid-template-columns: repeat(12, 18px);
-  gap: 8px;
-}
-.square {
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  border: 1px solid var(--line-strong);
-  background: #ffffff;
-  transition:
-    background-color 250ms var(--ease-out),
-    border-color 250ms var(--ease-out);
-}
-.squareBase {
-  background: #9a9a9a;
-  border-color: #9a9a9a;
-}
-.squareOn {
-  background: #111111;
-  border-color: #111111;
 }
 
 /* ---------- Shared card ---------- */
@@ -760,10 +489,6 @@
 }
 
 @media (max-width: 1023px) {
-  .hero {
-    aspect-ratio: auto;
-    min-height: 560px;
-  }
   .split {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -836,9 +561,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .scene,
   .rise,
-  .fadeIn,
   .numSwap,
   .barFill,
   .square,

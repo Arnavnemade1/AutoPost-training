@@ -23,6 +23,7 @@
     "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "three": "0.180.0",
     "zod": "4.6.7"
   },
   "overrides": {
@@ -33,6 +34,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@types/three": "0.180.0",
     "eslint": "^9.39.0",
     "eslint-config-next": "16.4.3",
     "prettier": "^3.6.2",

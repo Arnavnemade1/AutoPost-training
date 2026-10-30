@@ -2,7 +2,6 @@
 // artifacts/forge-e84925eb/events.jsonl, final-evaluation.json, report.json,
 // data/production/scan-b1b36ecf.json and data/chaos/incidents.json.
 
-export const CAMPAIGN = "forge-e84925eb";
 export const SCAN = "scan-b1b36ecf";
 
 /** exp-001 training loss, steps 1 to 96 (events.jsonl "metric"). The runtime was killed after step 76. */
@@ -17,45 +16,6 @@ export const LOSS = [
   0.7988, 0.4118, 0.2108, 0.3199, 0.5888, 0.5869, 0.3717, 0.3079, 0.7323,
   0.4433, 0.8953, 0.548, 0.4031, 0.7762, 0.5723, 0.3453, 0.1987, 0.5476, 0.2813,
   0.2977, 0.8994, 0.5241, 0.9107, 0.5529, 0.4875, 0.4077, 0.379, 0.768, 0.3126,
-];
-export const KILLED_AFTER_STEP = 76;
-
-/** Six of the 62 flagged answers (scan-b1b36ecf findings), question shortened. */
-export const FLAGGED = [
-  {
-    id: "live-5282",
-    question:
-      "Willie came back from Europe with 70 euros. Normally 5 euros is\u2026",
-    signals: ["No final answer", "Cut off"],
-  },
-  {
-    id: "live-7180",
-    question:
-      "Fred was having a party and was responsible for buying canned\u2026",
-    signals: ["No final answer", "Cut off"],
-  },
-  {
-    id: "live-3613",
-    question:
-      "The balance of Pam's bank account tripled during the year. At\u2026",
-    signals: ["Miscalculation", "No final answer", "Cut off"],
-  },
-  {
-    id: "live-3747",
-    question: "A math teacher had $100 to buy three different types of\u2026",
-    signals: ["No final answer"],
-  },
-  {
-    id: "live-2356",
-    question:
-      "Betty bought 1 kg of oranges and 3 kg of apples. The total cost\u2026",
-    signals: ["No final answer"],
-  },
-  {
-    id: "live-2393",
-    question: "Robbie weighs 100 pounds. Patty was 4.5 times as heavy as\u2026",
-    signals: ["No final answer", "Cut off"],
-  },
 ];
 
 export const SCAN_STATS = {
@@ -169,17 +129,6 @@ export const CRASH = {
   ],
   budgetSettled: "198.7 s",
   attempts: 24,
-};
-
-export const RESULTS = {
-  production: {
-    before: 0,
-    after: 9,
-    n: 33,
-    pp: "+27.3",
-    ci: ["+12.1", "+42.4"],
-  },
-  sealed: { before: 1, after: 6, n: 24, pp: "+20.8", ci: ["+4.2", "+37.5"] },
 };
 
 /** report.json snapshot experiments and reviews. */

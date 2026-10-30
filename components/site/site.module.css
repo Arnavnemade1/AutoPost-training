@@ -540,8 +540,8 @@
 .heroShot {
   position: relative;
   z-index: 2;
-  width: min(979px, 100%);
-  margin: 64px auto 0;
+  width: min(1100px, 100%);
+  margin: 40px auto 0;
 }
 .frame {
   overflow: hidden;

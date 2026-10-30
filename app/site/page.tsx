@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ForgeMark, Icon } from "@/components/icon";
 import { SiteHeader } from "@/components/site/header";
+import { ParticleHero } from "@/components/site/particle-hero";
 import {
   BuiltWith,
   CtaGrid,
@@ -14,7 +15,6 @@ import {
 import {
   AgentFlow,
   AuditCard,
-  HeroCampaign,
   RecoveryTimeline,
   TypedCode,
   TypedExample,
@@ -216,11 +216,7 @@ export default function SitePage() {
               </div>
             </div>
             <div className={s.heroShot}>
-              <HeroCampaign />
-              <p className={s.caption}>
-                A replay of campaign forge-e84925eb, using the run&apos;s own
-                data.
-              </p>
+              <ParticleHero />
             </div>
             <div className={s.strip}>
               <p className={s.stripLabel}>Built with</p>
