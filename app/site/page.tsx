@@ -1,130 +1,119 @@
-/* eslint-disable @next/next/no-img-element -- static captures with fixed intrinsic sizes */
-import { Icon, ForgeMark } from "@/components/icon";
+/* eslint-disable @next/next/no-img-element -- one static product capture with fixed size */
+import Link from "next/link";
+import { ForgeMark, Icon } from "@/components/icon";
 import { SiteHeader } from "@/components/site/header";
 import {
   BuiltWith,
   CtaGrid,
   HeroGrid,
-  LoopVideo,
   ProductNav,
   QuoteCarousel,
   type Logo,
   type Quote,
 } from "@/components/site/motion";
 import {
+  AgentFlow,
+  AuditCard,
+  HeroCampaign,
+  RecoveryTimeline,
+  TypedCode,
+  TypedExample,
+} from "@/components/site/live";
+import {
   JournalDrawing,
   TeamDrawing,
   TracesDrawing,
 } from "@/components/site/drawings";
+import { EXPERIMENTS, MESSAGES, REVIEWS, ROLES } from "@/components/site/data";
 import s from "@/components/site/site.module.css";
 
-// Every number on this page comes from campaign forge-e84925eb
-// artifacts/forge-e84925eb/report.json, events.jsonl and data/chaos/incidents.json.
-
-// GSM8K test-885, verbatim from artifacts/forge-e84925eb/final-evaluation.json.
-const EXAMPLE = {
-  question:
-    "The Ben and Aggie Burrito Shop makes 125 chimichangas on Tuesdays, 125 chimichangas on Wednesdays and twice as many on Friday. How many chimichangas do they make on those three days?",
-  before:
-    "To determine how many chimichangas the Ben and Aggie Burrito Shop makes on each of the three days (Tuesday, Wednesday, and Friday), we can follow these steps:\n\n1. Identify the number of chimichangas made on Tuesday.\n   - The shop makes 125 chimichangas on Tuesday.\n\n2. Identify the number of chimichangas made on Wednesday.\n   - The shop makes twice as many chimichangas on Wednesday as it does on Tuesday.\n   - Therefore, the number of chimichangas made on Wednesday is \\(2 \\times 125 = 250\\).\n\n3. Identify the number of chimichangas made on Friday.\n   - The shop makes 125 chimichangas on Friday.\n\n4. Sum up the total number of chimichangas made over the three days.\n   - Total chimichangas = Chimbachamas on Tuesday + Chimbachamas on Wednesday + Chimbachamas on Friday\n   - Total chimichangas = 125 + 250 + 125\n\nNow, let's perform the addition:\n\\[125 + 250 = 375\\]\n\\[",
-  after:
-    "On Tuesday, they make 125.\nOn Wednesday, they make 125.\nOn Friday, they make twice as many as on Tuesday, which is 2*125 = <<125*2=250>>250.\nIn total, they make 125+125+250 = <<125+125+250=500>>500 chimichangas.\n#### 500",
-};
+// Every number on this page comes from campaign forge-e84925eb. Sources are listed in
+// components/site/data.ts and docs/site/modal-reference.md.
 
 const SIDE = [
-  { id: "production", label: "Production", icon: "production" },
+  { id: "production", label: "Mistakes", icon: "production" },
   { id: "agents", label: "Agents", icon: "chat" },
-  { id: "durable", label: "Durable actors", icon: "terse" },
-  { id: "training", label: "Training", icon: "chip" },
+  { id: "durable", label: "Memory", icon: "terse" },
+  { id: "training", label: "Proof", icon: "results" },
 ];
 
 // Official marks only; every one is a dependency in pyproject.toml or package.json.
 const BUILT_WITH: Logo[] = [
-  { src: "/site/logos/pytorch.svg", name: "PyTorch", width: 487, height: 120, h: 26 },
-  { src: "/site/logos/huggingface.svg", name: "Hugging Face", width: 963, height: 256, h: 34 },
+  {
+    src: "/site/logos/pytorch.svg",
+    name: "PyTorch",
+    width: 487,
+    height: 120,
+    h: 26,
+  },
+  {
+    src: "/site/logos/huggingface.svg",
+    name: "Hugging Face",
+    width: 963,
+    height: 256,
+    h: 34,
+  },
   { src: "/site/logos/qwen.svg", name: "Qwen", width: 24, height: 24, h: 28 },
-  { src: "/site/logos/eleutherai.svg", name: "EleutherAI", width: 800, height: 149, h: 22 },
-  { src: "/site/logos/agent-relay.svg", name: "Agent Relay", width: 340, height: 54, h: 24 },
-  { src: "/site/logos/terse-durable-actors.png", name: "Durable Actors by Terse", width: 1370, height: 290, h: 32 },
+  {
+    src: "/site/logos/eleutherai.svg",
+    name: "EleutherAI",
+    width: 800,
+    height: 149,
+    h: 22,
+  },
+  {
+    src: "/site/logos/agent-relay.svg",
+    name: "Agent Relay",
+    width: 340,
+    height: 54,
+    h: 24,
+  },
+  {
+    src: "/site/logos/terse-durable-actors.png",
+    name: "Durable Actors by Terse",
+    width: 1370,
+    height: 290,
+    h: 32,
+  },
 ];
 
-const QUOTES: Quote[] = [
-  {
-    initials: "DR",
-    from: "Data researcher",
-    to: "Research director",
-    category: "PRODUCTION_FAILURES_TRIAGED",
-    time: "00:25:13",
-    text: "62 of 64 production answers flagged (1 arithmetic slip, 62 missing final answer, 38 truncated). 28 labeled failures join training; 33 are held out to measure the fix.",
-  },
-  {
-    initials: "TE",
-    from: "Training engineer",
-    to: "Experiment evaluator",
-    category: "TRAINING_COMPLETED",
-    time: "00:29:22",
-    text: "exp-001 saved. Weights changed: True. SHA-256 15e585f199e9cec5. Reload independently for evaluation.",
-  },
-  {
-    initials: "EV",
-    from: "Experiment evaluator",
-    to: "Research director",
-    category: "EVALUATION_COMPLETED",
-    time: "00:31:34",
-    text: "exp-001: 8/24 development answers correct. Review approved. Regression change +25.0 pp. Held-out production failures now correct: 9/33 (baseline 0/33).",
-  },
-  {
-    initials: "GC",
-    from: "Governance council",
-    to: "Training engineer",
-    category: "CHECKPOINT_VERDICT",
-    time: "00:31:34",
-    text: "Approved for promotion. Integrity, regression and provenance checks passed for exp-001.",
-  },
-  {
-    initials: "RD",
-    from: "Research director",
-    to: "Governance council",
-    category: "CAMPAIGN_COMPLETED",
-    time: "00:36:46",
-    text: "Final evaluation complete. Validated improvement: the 95% paired interval is above zero. All sample-level evidence preserved.",
-  },
-];
+const QUOTES: Quote[] = MESSAGES.map((m) => ({
+  initials: ROLES[m.from].initials,
+  from: ROLES[m.from].name,
+  to: m.to === "room" ? "the research room" : ROLES[m.to].name,
+  category: m.category,
+  time: m.time,
+  text: m.text,
+}));
 
 const ACTORS = [
-  ["ResearchCampaign", "Goal, budget and the best checkpoint"],
+  ["ResearchCampaign", "The goal, the budget and the best checkpoint"],
   ["Experiment", "Settings, worker leases and results"],
-  ["Governance", "Signed approval for each checkpoint"],
-  ["ArtifactRegistry", "Checksums and where every file lives"],
+  ["Governance", "A signed approval for each checkpoint"],
+  ["ArtifactRegistry", "Every saved file and its checksum"],
   ["RLWorld", "Math worlds that score each answer"],
   ["ResearchLedger", "Every diagnosis, idea and decision"],
 ];
 
-const CODE_LINES: { k?: string; v: string; t?: "str" | "num" }[][] = [
-  [
-    { v: "await fetch(" },
-    { v: '"/api/lab/campaigns"', t: "str" },
-    { v: ", {" },
-  ],
-  [{ v: "  method: " }, { v: '"POST"', t: "str" }, { v: "," }],
-  [{ v: "  body: JSON.stringify({" }],
-  [
-    { k: "    production_scan: " },
-    { v: '"scan-b1b36ecf"', t: "str" },
-    { v: "," },
-  ],
-  [
-    { k: "    strategies: " },
-    { v: '["targeted_sft", "broad_sft"]', t: "str" },
-    { v: "," },
-  ],
-  [{ k: "    max_experiments: " }, { v: "2", t: "num" }, { v: "," }],
-  [{ k: "    train_steps: " }, { v: "96", t: "num" }, { v: "," }],
-  [{ k: "    dev_samples: " }, { v: "24", t: "num" }, { v: "," }],
-  [{ k: "    final_samples: " }, { v: "24", t: "num" }, { v: "," }],
-  [{ k: "    max_seconds: " }, { v: "5400", t: "num" }, { v: "," }],
-  [{ v: "  })," }],
-  [{ v: "});" }],
+const LAUNCH = `await fetch("/api/lab/campaigns", {
+  method: "POST",
+  body: JSON.stringify({
+    production_scan: "scan-b1b36ecf",
+    strategies: ["targeted_sft", "broad_sft"],
+    max_experiments: 2,
+    train_steps: 96,
+    dev_samples: 24,
+    final_samples: 24,
+  }),
+});`;
+
+const ARTIFACTS = [
+  ["Dataset provenance", "00:25:13"],
+  ["Baseline evaluation", "00:28:32"],
+  ["exp-001 LoRA weights", "00:29:22"],
+  ["exp-001 checkpoint bundle", "00:29:22"],
+  ["Sealed final evaluation", "00:36:46"],
+  ["Research report", "00:36:46"],
 ];
 
 function Eyebrow({
@@ -173,8 +162,7 @@ function Scale({
   after: number;
   n: number;
 }) {
-  const max = 0.5;
-  const x = (v: number) => `${(v / n / max) * 100}%`;
+  const x = (v: number) => `${(v / n / 0.5) * 100}%`;
   return (
     <div className={s.scale} aria-hidden="true">
       <div className={s.scaleTrack} />
@@ -210,37 +198,30 @@ export default function SitePage() {
           <div className={s.container}>
             <div className={s.heroText}>
               <h1 className={s.h1}>
-                <span className={s.soft}>Post-training, </span>
-                fully automated
+                <span className={s.soft}>Turn your agent&apos;s mistakes </span>
+                into your own model
               </h1>
               <p className={`${s.lead} ${s.heroSub}`}>
-                Turn your agent&apos;s production traffic into a private model,
-                fine-tuned to be the best at your own tasks. You own the weights
-                and the costs.
+                Forge reads your agent&apos;s real conversations, trains a
+                private model on the answers it missed, and shows you exactly
+                what improved. You keep the model.
               </p>
               <div className={s.ctaRow}>
-                <a href="/" className={s.btn}>
+                <Link href="/" className={s.btn}>
                   Open the lab
-                </a>
+                </Link>
                 <a href="#results" className={s.btnGhost}>
                   See the results
                 </a>
               </div>
             </div>
-            <figure className={s.heroShot}>
-              <div className={s.frame}>
-                <img
-                  src="/site/hero-chat.webp"
-                  width={2000}
-                  height={1250}
-                  alt="Forge Agent chat: the research room full of messages between the five agents"
-                />
-              </div>
-              <figcaption className={s.caption}>
-                Agent chat after campaign forge-e84925eb: every handoff between
-                the five agents.
-              </figcaption>
-            </figure>
+            <div className={s.heroShot}>
+              <HeroCampaign />
+              <p className={s.caption}>
+                A replay of campaign forge-e84925eb, using the run&apos;s own
+                data.
+              </p>
+            </div>
             <div className={s.strip}>
               <p className={s.stripLabel}>Built with</p>
               <span className={s.stripDivider} aria-hidden="true" />
@@ -252,142 +233,79 @@ export default function SitePage() {
         </section>
 
         {/* One question, before and after */}
-        <section className={`${s.section} ${s.ruleTop}`} id="example">
+        <section className={s.section} id="example">
           <div className={s.container}>
             <div className={s.sectionHead}>
-              <Eyebrow icon="target">One question</Eyebrow>
-              <h2 className={s.h2}>
-                The same question, before and after Forge
-              </h2>
+              <Eyebrow icon="target">Example</Eyebrow>
+              <h2 className={s.h2}>One question, before and after</h2>
             </div>
-            <figure className={s.example}>
-              <div className={s.exampleQ}>
-                <span className={s.exampleLabel}>
-                  Sealed test question · GSM8K test-885
-                </span>
-                <p>{EXAMPLE.question}</p>
-              </div>
-              <div className={s.exampleCols}>
-                <div className={s.exampleCol}>
-                  <div className={s.exampleHead}>
-                    <strong>Before Forge</strong>
-                    <span>Qwen2.5-0.5B-Instruct</span>
-                  </div>
-                  <pre className={s.transcript}>{EXAMPLE.before}</pre>
-                </div>
-                <div className={s.exampleCol}>
-                  <div className={s.exampleHead}>
-                    <strong>After Forge</strong>
-                    <span>Checkpoint exp-001</span>
-                  </div>
-                  <pre className={s.transcript}>{EXAMPLE.after}</pre>
-                </div>
-              </div>
-              <figcaption className={s.caption}>
-                Both answers are shown exactly as the models wrote them, from
-                campaign forge-e84925eb.
-              </figcaption>
-            </figure>
+            <TypedExample />
           </div>
         </section>
 
         {/* Product */}
-        <section className={s.section} id="product">
+        <section className={`${s.section} ${s.ruleTop}`} id="product">
           <div className={s.container}>
             <div className={s.sectionHead}>
-              <Eyebrow icon="overview">Product</Eyebrow>
-              <h2 className={s.h2}>Your traffic in, your own model out</h2>
+              <Eyebrow icon="overview">How Forge works</Eyebrow>
+              <h2 className={s.h2}>From real mistakes to a model you own</h2>
             </div>
             <div className={`${s.grid} ${s.product}`}>
               <ProductNav items={SIDE} />
               <div className={s.blocks}>
                 <article className={s.block} id="production">
                   <div className={s.blockText}>
-                    <h3 className={s.h3}>Find what your agent gets wrong</h3>
+                    <h3 className={s.h3}>It finds the mistakes</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Upload your agent&apos;s real answers. Forge spots the
-                      wrong ones on its own and checks its accuracy against
-                      reviewer labels.
+                      Upload your agent&apos;s conversations. Forge flags the
+                      answers that went wrong, with no answer key.
                     </p>
                     <div className={s.features}>
-                      <Feature icon="search" title="Four detectors">
-                        Miscalculations, missing final answers, cut-off replies
-                        and user corrections.
+                      <Feature icon="search" title="Four checks">
+                        A missing final answer, a reply that was cut off, a
+                        miscalculation, or a correction from the user.
                       </Feature>
-                      <Feature icon="target" title="Measured accuracy">
-                        100% precision and 98.4% recall on the recorded scan.
-                        All 62 flagged answers were truly wrong.
+                      <Feature icon="target" title="Checked by people">
+                        Reviewers confirmed all 62 flagged answers. Forge caught
+                        62 of the 63.
                       </Feature>
-                      <Feature icon="lock" title="Test questions stay sealed">
-                        Traffic that matches a sealed test question is set aside
-                        before the scan begins.
+                      <Feature icon="lock" title="Test questions set aside">
+                        Anything that matches the final test is removed first.
                       </Feature>
                     </div>
-                    <a href="/" className={`${s.btn} ${s.blockButton}`}>
-                      Open the lab
-                    </a>
                   </div>
                   <div className={s.visual}>
-                    <figure className={s.visualInner}>
-                      <div className={s.frame}>
-                        <img
-                          src="/site/audit.webp"
-                          width={562}
-                          height={376}
-                          alt="Detector audit: precision 100.0%, recall 98.4%, 62 of 62 flagged answers were actually wrong."
-                        />
-                      </div>
-                      <figcaption className={s.visualCap}>
-                        Detector audit for scan-b1b36ecf: 64 answers, 62
-                        flagged.
-                      </figcaption>
-                    </figure>
+                    <AuditCard />
                   </div>
                 </article>
 
                 <article className={s.block} id="agents">
                   <div className={s.blockText}>
-                    <h3 className={s.h3}>Five agents, one research room</h3>
+                    <h3 className={s.h3}>Five agents do the work</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      One click starts a data researcher, director, trainer,
-                      evaluator and governance council. They coordinate over
-                      Agent Relay.
+                      A data researcher, a director, a trainer, an evaluator and
+                      a governance council. They talk over Agent Relay, and
+                      every message is kept.
                     </p>
                     <div className={s.features}>
                       <Feature icon="message" title="Direct messages">
-                        Each handoff lands in one agent&apos;s inbox, and work
-                        starts once that agent confirms it.
+                        Each handoff goes to one agent, who confirms it before
+                        starting.
                       </Feature>
-                      <Feature icon="chat" title="One research room">
-                        Plans, checkpoints and the final result are posted where
-                        every agent can read them.
+                      <Feature icon="chat" title="A shared room">
+                        Plans, checkpoints and results are posted for the whole
+                        team.
                       </Feature>
-                      <Feature icon="governance" title="Verdicts in threads">
-                        Governance answers under each checkpoint post and adds a
-                        reaction.
+                      <Feature icon="governance" title="Replies in threads">
+                        The council answers under each checkpoint.
                       </Feature>
                       <Feature icon="check" title="Read receipts">
-                        Every message shows who received it and when.
+                        You can see who read each message, and when.
                       </Feature>
                     </div>
-                    <a href="/" className={`${s.btn} ${s.blockButton}`}>
-                      Open Agent chat
-                    </a>
                   </div>
                   <div className={s.visual}>
-                    <figure className={s.visualInner}>
-                      <div className={s.frame}>
-                        <LoopVideo
-                          name="relay"
-                          width={1280}
-                          height={619}
-                          label="Agent Relay messages arriving in Forge's Agent chat"
-                        />
-                      </div>
-                      <figcaption className={s.visualCap}>
-                        Agent chat as messages arrive, shown 2 times faster.
-                      </figcaption>
-                    </figure>
+                    <AgentFlow />
                   </div>
                 </article>
 
@@ -397,68 +315,53 @@ export default function SitePage() {
                       A record you can always resume from
                     </h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Every budget, lease, review and checkpoint lives in
-                      signed, journaled Terse durable actors.
+                      Budgets, reviews and checkpoints live in Terse durable
+                      actors, so a run picks up exactly where it was.
                     </p>
                     <div className={s.features}>
-                      <Feature icon="terse" title="Six durable actors">
-                        ResearchCampaign, Experiment, Governance,
-                        ArtifactRegistry, RLWorld and ResearchLedger.
+                      <Feature icon="alert" title="Stopped on purpose">
+                        In the recorded run we force-stopped the runtime during
+                        training.
                       </Feature>
                       <Feature icon="refresh" title="Back in 28.3 seconds">
-                        We force-stopped the runtime mid-training. It returned
-                        with 4 of 4 actors exactly as they were.
+                        All 4 actors came back exactly as they were.
                       </Feature>
                       <Feature icon="clock" title="Every second counted once">
-                        Training picked up 0.6 seconds later under its original
-                        request ID. 198.7 seconds settled, once.
+                        Training continued 0.6 seconds later. 198.7 seconds of
+                        compute, counted once.
                       </Feature>
                     </div>
-                    <a href="/" className={`${s.btn} ${s.blockButton}`}>
-                      Open Durable actors
-                    </a>
                   </div>
                   <div className={s.visual}>
-                    <figure className={s.visualInner}>
-                      <div className={s.frame}>
-                        <LoopVideo
-                          name="crash"
-                          width={1280}
-                          height={451}
-                          label="Crash test timeline: SIGKILL, runtime back in 28.3 seconds, 4 of 4 actors restored, campaign resumed"
-                        />
-                      </div>
-                      <figcaption className={s.visualCap}>
-                        The crash test during the recorded run, shown 2 times
-                        faster.
-                      </figcaption>
-                    </figure>
+                    <RecoveryTimeline />
                   </div>
                 </article>
 
                 <article className={s.block} id="training">
                   <div className={s.blockText}>
-                    <h3 className={s.h3}>Train, test, approve, download</h3>
+                    <h3 className={s.h3}>It proves the result</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Forge trains your model, tests it on questions held back
-                      for the purpose, and hands you the weights.
+                      Forge tests the new model on questions it never trained
+                      on. Then you download it.
                     </p>
                     <div className={s.features}>
-                      <Feature icon="production" title="Held-out failures">
-                        Half of the labeled failures are kept for testing. 0 of
-                        33 became 9 of 33.
+                      <Feature
+                        icon="production"
+                        title="Saved-for-later failures"
+                      >
+                        Half of the real failures are kept for testing. 0 of 33
+                        became 9 of 33.
                       </Feature>
-                      <Feature icon="lock" title="A sealed final test">
-                        The winning checkpoint is locked before the sealed
-                        questions open. 1 of 24 became 6 of 24.
+                      <Feature icon="lock" title="A final test, opened once">
+                        1 of 24 became 6 of 24.
                       </Feature>
-                      <Feature icon="governance" title="Governance decides">
+                      <Feature icon="governance" title="A council approves">
                         The council promotes the checkpoint with the best
-                        development score. Here, exp-001.
+                        practice score.
                       </Feature>
-                      <Feature icon="download" title="Your weights">
-                        Download the checkpoint, the report and the full
-                        research trace.
+                      <Feature icon="download" title="Yours to keep">
+                        Download the model, the report and every step of the
+                        research.
                       </Feature>
                     </div>
                     <a href="#results" className={`${s.btn} ${s.blockButton}`}>
@@ -466,41 +369,10 @@ export default function SitePage() {
                     </a>
                   </div>
                   <div className={s.visual}>
-                    <div className={`${s.visualInner} ${s.code}`}>
-                      <div className={s.codeHead}>
-                        <span>Start a campaign from production failures</span>
-                        <span>TypeScript</span>
-                      </div>
-                      <pre className={s.codeBody}>
-                        <code>
-                          {CODE_LINES.map((line, n) => (
-                            <span key={n}>
-                              {line.map((p, m) =>
-                                p.k ? (
-                                  <span key={m} className={s.tokKey}>
-                                    {p.k}
-                                  </span>
-                                ) : (
-                                  <span
-                                    key={m}
-                                    className={
-                                      p.t === "str"
-                                        ? s.tokStr
-                                        : p.t === "num"
-                                          ? s.tokNum
-                                          : undefined
-                                    }
-                                  >
-                                    {p.v}
-                                  </span>
-                                ),
-                              )}
-                              {"\n"}
-                            </span>
-                          ))}
-                        </code>
-                      </pre>
-                    </div>
+                    <TypedCode
+                      title="Start a campaign from your failures"
+                      code={LAUNCH}
+                    />
                   </div>
                 </article>
               </div>
@@ -512,11 +384,8 @@ export default function SitePage() {
         <section className={`${s.section} ${s.band}`} id="platform">
           <div className={s.container}>
             <div className={`${s.sectionHead} ${s.narrow}`}>
-              <Eyebrow icon="environments">How it works</Eyebrow>
+              <Eyebrow icon="environments">Under the hood</Eyebrow>
               <h2 className={s.h2}>Every step leaves evidence you can check</h2>
-              <a href="#results" className={`${s.btn} ${s.headButton}`}>
-                See the results
-              </a>
             </div>
             <div className={s.cols3}>
               <div className={s.col}>
@@ -524,11 +393,9 @@ export default function SitePage() {
                 <div className={s.drawing}>
                   <TracesDrawing />
                 </div>
-                <h3 className={s.h3}>Learns from your own traffic</h3>
+                <h3 className={s.h3}>It learns from your traffic</h3>
                 <p className={s.body}>
-                  Forge reads your agent&apos;s real answers and flags the wrong
-                  ones by itself: a missing final answer, a cut-off reply, a
-                  miscalculation or a user&apos;s correction.
+                  Your agent&apos;s own answers become the lesson plan.
                 </p>
               </div>
               <div className={s.col}>
@@ -536,11 +403,10 @@ export default function SitePage() {
                 <div className={s.drawing}>
                   <TeamDrawing />
                 </div>
-                <h3 className={s.h3}>A team that checks its own work</h3>
+                <h3 className={s.h3}>The team checks its own work</h3>
                 <p className={s.body}>
-                  The trainer hands each checkpoint to the evaluator. The
-                  governance council reviews every checkpoint against a fixed
-                  policy before promotion.
+                  The trainer hands each checkpoint to the evaluator, and the
+                  council reviews it against a fixed policy.
                 </p>
               </div>
               <div className={s.col}>
@@ -548,10 +414,10 @@ export default function SitePage() {
                 <div className={s.drawing}>
                   <JournalDrawing />
                 </div>
-                <h3 className={s.h3}>A signed record of every step</h3>
+                <h3 className={s.h3}>Every step is signed and saved</h3>
                 <p className={s.body}>
-                  Each change to a campaign carries a signature and is saved to
-                  a journal, so the whole run can be replayed and checked.
+                  Each change carries a signature and goes into a journal, so
+                  the whole run can be replayed.
                 </p>
               </div>
             </div>
@@ -564,17 +430,13 @@ export default function SitePage() {
             <div className={`${s.sectionHead} ${s.narrow}`}>
               <Eyebrow icon="results">Results</Eyebrow>
               <h2 className={s.h2}>Measured on questions it had never seen</h2>
-              <a href="/" className={`${s.btn} ${s.headButton}`}>
-                Open the results
-              </a>
             </div>
             <div className={s.resultsPanel}>
               <div className={s.resultRow}>
                 <div className={s.resultLabel}>
-                  <h3>Held-out production failures</h3>
+                  <h3>Saved-for-later production failures</h3>
                   <p className={s.small}>
-                    Real failures from the traffic, kept out of training to
-                    measure the fix.
+                    Real failures from the traffic, kept out of training.
                   </p>
                 </div>
                 <Scale before={0} after={9} n={33} />
@@ -582,17 +444,14 @@ export default function SitePage() {
                   <div className={s.gainNum}>
                     +27.3<small>pp</small>
                   </div>
-                  <p className={s.small}>
-                    95% interval +12.1 to +42.4. Validated.
-                  </p>
+                  <p className={s.small}>95% interval +12.1 to +42.4</p>
                 </div>
               </div>
               <div className={s.resultRow}>
                 <div className={s.resultLabel}>
-                  <h3>Sealed final test</h3>
+                  <h3>Final test</h3>
                   <p className={s.small}>
-                    24 grade-school math questions, opened once after the
-                    checkpoint was locked.
+                    24 grade-school math questions, opened once at the end.
                   </p>
                 </div>
                 <Scale before={1} after={6} n={24} />
@@ -600,9 +459,7 @@ export default function SitePage() {
                   <div className={s.gainNum}>
                     +20.8<small>pp</small>
                   </div>
-                  <p className={s.small}>
-                    95% interval +4.2 to +37.5. Validated.
-                  </p>
+                  <p className={s.small}>95% interval +4.2 to +37.5</p>
                 </div>
               </div>
             </div>
@@ -617,27 +474,27 @@ export default function SitePage() {
                   Every right answer kept
                 </h3>
                 <p className={s.body}>
-                  All held-out and sealed questions the original model got
-                  right, it still gets right.
+                  Every question the original model answered correctly, the new
+                  one still does.
                 </p>
               </div>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
                   <Icon name="experiments" size={16} />
-                  Chosen on practice questions
+                  Picked on practice questions
                 </h3>
                 <p className={s.body}>
-                  The checkpoint is picked from development results, keeping the
-                  test scores a fair measure.
+                  The best checkpoint is chosen from practice scores, so the
+                  test stays fair.
                 </p>
               </div>
               <div className={s.col4}>
                 <h3 className={s.h3sm}>
                   <Icon name="lock" size={16} />
-                  One sealed attempt
+                  One attempt
                 </h3>
                 <p className={s.body}>
-                  Each model answers the sealed test exactly once.
+                  Each model answers the final test exactly once.
                 </p>
               </div>
               <div className={s.col4}>
@@ -646,8 +503,8 @@ export default function SitePage() {
                   What improved
                 </h3>
                 <p className={s.body}>
-                  A 0.5B model on grade-school math learned to finish its
-                  answers in the expected format.
+                  A small model learned to finish its answers in the expected
+                  format.
                 </p>
               </div>
             </div>
@@ -664,65 +521,96 @@ export default function SitePage() {
               </div>
               <p>
                 Each message, review, checkpoint and score is saved with the
-                campaign. Replay the run and trace any number back to its
-                evidence.
+                campaign. Trace any number back to where it came from.
               </p>
             </div>
             <div className={s.cards3}>
               <div className={s.card}>
-                <div className={s.cardMedia}>
-                  <img
-                    src="/site/experiments.webp"
-                    width={1142}
-                    height={308}
-                    alt="Experiment history with development results for exp-001 and exp-002"
-                    loading="lazy"
-                  />
+                <div className={s.recordCard}>
+                  <div className={s.recordHead}>Experiments</div>
+                  <table className={s.table}>
+                    <thead>
+                      <tr>
+                        <th>Run</th>
+                        <th>Practice</th>
+                        <th>Held out</th>
+                        <th>Verdict</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {EXPERIMENTS.map((e) => (
+                        <tr key={e.id}>
+                          <td className={s.mono}>{e.id}</td>
+                          <td className={s.num}>{e.dev}</td>
+                          <td className={s.num}>{e.heldOut}</td>
+                          <td>{e.verdict}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className={s.recordNote}>
+                    Learning rate {EXPERIMENTS[0].lr} and {EXPERIMENTS[1].lr},
+                    96 steps each.
+                  </p>
                 </div>
                 <h3 className={s.h3sm}>
                   <Icon name="experiments" size={16} />
                   Experiments with their evidence
                 </h3>
                 <p className={s.body}>
-                  Each experiment keeps its settings, development score,
-                  checkpoint hash and verdict.
+                  Each run keeps its settings, scores, checkpoint hash and
+                  verdict.
                 </p>
               </div>
               <div className={s.card}>
-                <div className={s.cardMedia}>
-                  <img
-                    src="/site/brief-production.webp"
-                    width={1142}
-                    height={99}
-                    alt="Held-out production failures: original 0 of 33, candidate 9 of 33"
-                    loading="lazy"
-                  />
-                </div>
-                <h3 className={s.h3sm}>
-                  <Icon name="production" size={16} />
-                  Held-out checks you can read
-                </h3>
-                <p className={s.body}>
-                  Each test question shows the original answer and the new one,
-                  side by side.
-                </p>
-              </div>
-              <div className={s.card}>
-                <div className={s.cardMedia}>
-                  <img
-                    src="/site/ledger.webp"
-                    width={1142}
-                    height={515}
-                    alt="Governance decision ledger with four reviews"
-                    loading="lazy"
-                  />
+                <div className={s.recordCard}>
+                  <div className={s.recordHead}>Governance reviews</div>
+                  <ul className={s.ledger}>
+                    {REVIEWS.map((r) => (
+                      <li key={`${r.title}-${r.target}`}>
+                        <span className={s.tick}>
+                          <Icon name="check" size={14} />
+                        </span>
+                        <span>
+                          {r.title}
+                          <span className={s.mono}>
+                            {r.target} · forge-policy-v1 · {r.time}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
                 <h3 className={s.h3sm}>
                   <Icon name="governance" size={16} />A governance ledger
                 </h3>
                 <p className={s.body}>
-                  Preflight and checkpoint reviews, each tied to a policy
-                  version and an experiment.
+                  Every review is tied to a policy version and an experiment.
+                </p>
+              </div>
+              <div className={s.card}>
+                <div className={s.recordCard}>
+                  <div className={s.recordHead}>Saved files</div>
+                  <ul className={s.ledger}>
+                    {ARTIFACTS.map(([name, time]) => (
+                      <li key={name}>
+                        <span className={s.tick}>
+                          <Icon name="artifacts" size={14} />
+                        </span>
+                        <span>
+                          {name}
+                          <span className={s.mono}>{time} UTC</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <h3 className={s.h3sm}>
+                  <Icon name="download" size={16} />
+                  Everything is downloadable
+                </h3>
+                <p className={s.body}>
+                  The weights, the report and the full research trace.
                 </p>
               </div>
             </div>
@@ -748,45 +636,30 @@ export default function SitePage() {
           </div>
         </section>
 
-        {/* Lab views */}
+        {/* The product, once */}
         <section className={`${s.sectionTight} ${s.band}`} id="lab">
           <div className={s.container}>
-            <div className={s.sectionHead}>
-              <Eyebrow icon="overview">The lab</Eyebrow>
-              <h2 className={s.h2}>Watch it work, live</h2>
+            <div className={s.splitHead}>
+              <div className={s.sectionHead}>
+                <Eyebrow icon="overview">The lab</Eyebrow>
+                <h2 className={s.h2}>Watch every run as it happens</h2>
+              </div>
+              <p>
+                The research room, every experiment and the results live in one
+                place while the run is going.
+              </p>
             </div>
-            <div className={s.labCards}>
-              {[
-                [
-                  "view-production-failures",
-                  "Production failures",
-                  "Every flagged answer, the detector that caught it and the audit against reviewer labels.",
-                ],
-                [
-                  "view-agent-chat",
-                  "Agent chat",
-                  "The research room and every direct message between the five agents.",
-                ],
-                [
-                  "view-results",
-                  "Results",
-                  "The sealed test, the held-out failures and a download for your checkpoint.",
-                ],
-              ].map(([img, title, text]) => (
-                <a href="/" className={s.labCard} key={img}>
-                  <img
-                    src={`/site/${img}.webp`}
-                    width={1440}
-                    height={900}
-                    alt={`Forge ${title} view`}
-                    loading="lazy"
-                  />
-                  <h3>{title}</h3>
-                  <p className={s.small}>{text}</p>
-                  <span className={s.tag}>Lab view</span>
-                </a>
-              ))}
-            </div>
+            <figure className={s.productShot}>
+              <div className={s.frame}>
+                <img
+                  src="/site/hero-chat.webp"
+                  width={2000}
+                  height={1250}
+                  alt="Forge lab: the research room with messages between the five agents"
+                  loading="lazy"
+                />
+              </div>
+            </figure>
           </div>
         </section>
 
@@ -801,16 +674,15 @@ export default function SitePage() {
                 Your model.
               </h2>
               <div className={s.ctaRow}>
-                <a href="/" className={s.btn}>
+                <Link href="/" className={s.btn}>
                   Open the lab
-                </a>
+                </Link>
                 <a href="#results" className={s.btnGhost}>
                   See the results
                 </a>
               </div>
               <p className={s.ctaNote}>
-                One recorded campaign took about 12 minutes from click to
-                weights.
+                The recorded run took about 12 minutes from click to model.
               </p>
             </div>
           </div>
@@ -829,16 +701,16 @@ export default function SitePage() {
                 <h2>Product</h2>
                 <ul>
                   <li>
-                    <a href="#production">Production failures</a>
+                    <a href="#production">Finding mistakes</a>
                   </li>
                   <li>
                     <a href="#agents">Agents</a>
                   </li>
                   <li>
-                    <a href="#durable">Durable actors</a>
+                    <a href="#durable">Memory</a>
                   </li>
                   <li>
-                    <a href="#training">Training</a>
+                    <a href="#training">Proof</a>
                   </li>
                 </ul>
               </div>
@@ -846,7 +718,7 @@ export default function SitePage() {
                 <h2>Evidence</h2>
                 <ul>
                   <li>
-                    <a href="#platform">How it works</a>
+                    <a href="#example">Example</a>
                   </li>
                   <li>
                     <a href="#results">Results</a>
@@ -860,17 +732,17 @@ export default function SitePage() {
                 <h2>Lab</h2>
                 <ul>
                   <li>
-                    <a href="/">Open the lab</a>
+                    <Link href="/">Open the lab</Link>
                   </li>
                   <li>
-                    <a href="#lab">Lab views</a>
+                    <a href="#lab">Inside the lab</a>
                   </li>
                 </ul>
               </div>
             </div>
           </div>
           <div className={s.footerBottom}>
-            <span>Forge · Fully automated post-training</span>
+            <span>Forge · Your own model, trained on your own traffic</span>
             <span>© 2026 Forge</span>
           </div>
         </div>

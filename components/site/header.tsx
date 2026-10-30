@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ForgeMark, Icon } from "@/components/icon";
 import s from "./site.module.css";
@@ -7,26 +8,26 @@ export const PRODUCT_LINKS = [
   {
     href: "#production",
     icon: "production",
-    title: "Production failures",
-    text: "Find the answers your agent gets wrong in real traffic.",
+    title: "Finding mistakes",
+    text: "Forge flags the answers your agent got wrong.",
   },
   {
     href: "#agents",
     icon: "chat",
     title: "Agents",
-    text: "Five agents plan, train, test and review your model together.",
+    text: "Five agents plan, train, test and review together.",
   },
   {
     href: "#durable",
     icon: "terse",
-    title: "Durable actors",
-    text: "Every budget, review and checkpoint is kept safe on the record.",
+    title: "Memory",
+    text: "A record every run can resume from.",
   },
   {
     href: "#training",
     icon: "chip",
-    title: "Training and evaluation",
-    text: "Training measured on questions held back for testing.",
+    title: "Proof",
+    text: "Scores on questions the model never trained on.",
   },
 ];
 
@@ -179,9 +180,9 @@ export function SiteHeader() {
               <a href="#results" className={s.btnSmGhost}>
                 See results
               </a>
-              <a href="/" className={s.btnSm}>
+              <Link href="/" className={s.btnSm}>
                 Open the lab
-              </a>
+              </Link>
             </div>
             <button
               ref={menuButton}
@@ -244,17 +245,14 @@ export function SiteHeader() {
                 className={s.dropFeature}
                 onClick={() => setOpen(false)}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/site/result-hero.webp"
-                  alt="Forge results view: the sealed test score rose from 4.2% to 25.0%."
-                  className={s.dropFeatureImg}
-                  loading="lazy"
-                />
-                <span className={s.dropItemTitle}>A recorded campaign</span>
+                <span className={s.dropStat}>
+                  9<span> of 33</span>
+                </span>
+                <span className={s.dropItemTitle}>
+                  Saved-for-later failures, answered after training
+                </span>
                 <span className={s.dropItemText}>
-                  Sealed test: 1 in 24 became 6 in 24. Held-out production
-                  failures: 0 in 33 became 9 in 33.
+                  Final test: 1 of 24 became 6 of 24.
                 </span>
               </a>
             </div>
@@ -337,9 +335,9 @@ export function SiteHeader() {
           >
             See results
           </a>
-          <a href="/" className={s.btn}>
+          <Link href="/" className={s.btn}>
             Open the lab
-          </a>
+          </Link>
         </div>
       </div>
     </>

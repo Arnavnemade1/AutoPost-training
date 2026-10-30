@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
 import DotGrid from "./reactbits/DotGrid";
 import LogoLoop from "./reactbits/LogoLoop";
@@ -68,50 +68,6 @@ export function ProductNav({
         </a>
       ))}
     </nav>
-  );
-}
-
-/** Real Forge footage: plays only while on screen (IO rootMargin 10%), poster only under reduced motion. */
-export function LoopVideo({
-  name,
-  label,
-  width,
-  height,
-}: {
-  name: string;
-  label: string;
-  width: number;
-  height: number;
-}) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const v = ref.current;
-    if (!v || reduced()) return;
-    const io = new IntersectionObserver(
-      ([e]) => {
-        if (e.isIntersecting) void v.play().catch(() => undefined);
-        else v.pause();
-      },
-      { rootMargin: "10% 0px" },
-    );
-    io.observe(v);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <video
-      ref={ref}
-      muted
-      loop
-      playsInline
-      preload="metadata"
-      poster={`/site/${name}-poster.jpg`}
-      width={width}
-      height={height}
-      aria-label={label}
-    >
-      <source src={`/site/${name}.webm`} type="video/webm" />
-      <source src={`/site/${name}.mp4`} type="video/mp4" />
-    </video>
   );
 }
 

@@ -207,7 +207,10 @@ const DotGrid = ({
     dpr
   };
   const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  // FORGE: sync the ref after render instead of during it (react-hooks/refs).
+  useEffect(() => {
+    settingsRef.current = settings;
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;
