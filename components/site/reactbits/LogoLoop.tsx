@@ -1,8 +1,15 @@
-'use client';
+"use client";
 // React Bits LogoLoop (https://reactbits.dev, registry https://reactbits.dev/r/LogoLoop-TS-CSS.json, MIT + Commons Clause). Copied unmodified on 2026-10-29 except where marked FORGE.
 
-import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import './LogoLoop.css';
+import React, {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import "./LogoLoop.css";
 
 export type LogoItem =
   | {
@@ -27,7 +34,7 @@ export type LogoItem =
 export interface LogoLoopProps {
   logos: LogoItem[];
   speed?: number;
-  direction?: 'left' | 'right' | 'up' | 'down';
+  direction?: "left" | "right" | "up" | "down";
   width?: number | string;
   logoHeight?: number;
   gap?: number;
@@ -37,7 +44,7 @@ export interface LogoLoopProps {
   fadeOutWidth?: number;
   fadeOutColor?: string;
   scaleOnHover?: boolean;
-  layout?: 'line' | 'wave' | 'arc' | 'orbit';
+  layout?: "line" | "wave" | "arc" | "orbit";
   bend?: number;
   focus?: number;
   magnify?: number;
@@ -45,7 +52,7 @@ export interface LogoLoopProps {
   tiltY?: number;
   step?: boolean;
   muted?: number;
-  labels?: 'none' | 'inline' | 'below' | 'hover';
+  labels?: "none" | "inline" | "below" | "hover";
   draggable?: boolean;
   scrollBoost?: number;
   intro?: boolean;
@@ -183,7 +190,8 @@ interface EngineState {
   destroyed: boolean;
 }
 
-const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 const SMOOTH_TAU = 0.25;
 const GLIDE_TAU = 0.8;
@@ -193,21 +201,27 @@ const INTRO_TIME = 0.7;
 const INTRO_STAGGER = 0.45;
 const HALF_SQRT_PI = Math.sqrt(Math.PI) / 2;
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
 
 const toCssLength = (value?: number | string): string | undefined =>
-  typeof value === 'number' ? `${value}px` : (value ?? undefined);
+  typeof value === "number" ? `${value}px` : (value ?? undefined);
 
 const erf = (x: number) => {
   const a = Math.abs(x);
   const t = 1 / (1 + 0.3275911 * a);
   const y =
     1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a);
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) *
+      t +
+      0.254829592) *
+      t *
+      Math.exp(-a * a);
   return x < 0 ? -y : y;
 };
 
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -218,12 +232,16 @@ const fadeMask = (size: number, vertical: boolean) => {
   if (span <= 0) return undefined;
   const stops: string[] = [];
   for (let i = 0; i <= 12; i++) {
-    stops.push(`rgba(0,0,0,${smootherstep(i / 12).toFixed(4)}) ${((span * i) / 12).toFixed(3)}%`);
+    stops.push(
+      `rgba(0,0,0,${smootherstep(i / 12).toFixed(4)}) ${((span * i) / 12).toFixed(3)}%`,
+    );
   }
   for (let i = 12; i >= 0; i--) {
-    stops.push(`rgba(0,0,0,${smootherstep(i / 12).toFixed(4)}) ${(100 - (span * i) / 12).toFixed(3)}%`);
+    stops.push(
+      `rgba(0,0,0,${smootherstep(i / 12).toFixed(4)}) ${(100 - (span * i) / 12).toFixed(3)}%`,
+    );
   }
-  return `linear-gradient(${vertical ? 'to bottom' : 'to right'}, ${stops.join(', ')})`;
+  return `linear-gradient(${vertical ? "to bottom" : "to right"}, ${stops.join(", ")})`;
 };
 
 const rotationMatrix = (degX: number, degY: number): number[] => {
@@ -236,7 +254,12 @@ const rotationMatrix = (degX: number, degY: number): number[] => {
   return [cb, 0, sb, sa * sb, ca, -sa * cb, -ca * sb, sa, ca * cb];
 };
 
-const unproject = (m: number[], depth: number, sx: number, sy: number): [number, number] | null => {
+const unproject = (
+  m: number[],
+  depth: number,
+  sx: number,
+  sy: number,
+): [number, number] | null => {
   const den = m[8] * depth - m[2] * sx - m[5] * sy;
   if (den <= 1e-6) return null;
   const t = (m[8] * depth) / den;
@@ -247,7 +270,12 @@ const unproject = (m: number[], depth: number, sx: number, sy: number): [number,
   return [m[0] * qx + m[3] * qy + m[6] * qz, m[1] * qx + m[4] * qy + m[7] * qz];
 };
 
-const project = (m: number[], depth: number, px: number, py: number): [number, number] => {
+const project = (
+  m: number[],
+  depth: number,
+  px: number,
+  py: number,
+): [number, number] => {
   const k = depth / (depth - (m[6] * px + m[7] * py));
   return [(m[0] * px + m[1] * py) * k, (m[3] * px + m[4] * py) * k];
 };
@@ -256,9 +284,12 @@ const createEngine = (
   root: HTMLDivElement,
   track: HTMLDivElement,
   config: React.MutableRefObject<LoopConfig>,
-  setLayout: (layout: LoopLayout) => void
+  setLayout: (layout: LoopLayout) => void,
 ) => {
-  const query = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const query =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
   const st: EngineState = {
     offset: 0,
     velocity: 0,
@@ -290,7 +321,7 @@ const createEngine = (
     scrollVel: 0,
     scrollY: window.scrollY,
     scrollT: 0,
-    visible: typeof IntersectionObserver === 'undefined',
+    visible: typeof IntersectionObserver === "undefined",
     introStart: -1,
     introDone: !config.current.intro,
     itemMode: false,
@@ -298,7 +329,7 @@ const createEngine = (
     raf: 0,
     last: 0,
     reduced: !!query?.matches,
-    destroyed: false
+    destroyed: false,
   };
 
   const collect = () => {
@@ -314,12 +345,12 @@ const createEngine = (
           center: 0,
           size: 0,
           cross: 0,
-          t: '',
-          o: '',
-          v: '',
-          z: '',
-          s: '',
-          p: ''
+          t: "",
+          o: "",
+          v: "",
+          z: "",
+          s: "",
+          p: "",
         });
       });
     });
@@ -329,13 +360,13 @@ const createEngine = (
 
   const clearItems = () => {
     for (const it of st.items) {
-      it.el.style.transform = '';
-      it.el.style.opacity = '';
-      it.el.style.visibility = '';
-      it.el.style.zIndex = '';
-      if (it.content) it.content.style.transform = '';
-      if (it.tip) it.tip.style.transform = '';
-      it.t = it.o = it.v = it.z = it.s = it.p = '';
+      it.el.style.transform = "";
+      it.el.style.opacity = "";
+      it.el.style.visibility = "";
+      it.el.style.zIndex = "";
+      if (it.content) it.content.style.transform = "";
+      if (it.tip) it.tip.style.transform = "";
+      it.t = it.o = it.v = it.z = it.s = it.p = "";
     }
   };
 
@@ -369,15 +400,15 @@ const createEngine = (
       tiltX: 0,
       tiltY: 0,
       m: [1, 0, 0, 0, 1, 0, 0, 0, 1],
-      persp: 0
+      persp: 0,
     };
     let pad = cfg.scaleOnHover ? hc * 0.1 : 0;
     const lens = (1 + geo.focus) * (1 + geo.magnify) - 1;
-    if (geo.mode === 'wave') {
+    if (geo.mode === "wave") {
       geo.amp = bend * (hc * 0.6 + L * 0.035);
       geo.k = (2 * Math.PI) / Math.max(1, L / 1.25);
       pad += Math.abs(geo.amp) + (lens * hc) / 2 + hc * 0.08;
-    } else if (geo.mode === 'arc' && Math.abs(bend) > 0.005) {
+    } else if (geo.mode === "arc" && Math.abs(bend) > 0.005) {
       const edge = Math.abs(bend) * (Math.PI / 4);
       const R = L / 2 / Math.sin(edge);
       const sag = R * (1 - Math.cos(edge));
@@ -385,14 +416,17 @@ const createEngine = (
       geo.sign = Math.sign(bend);
       geo.shift = sag / 2;
       geo.limit = Math.PI * 0.6;
-      const reach = R * Math.min(Math.PI / 2, Math.asin(Math.min(1, (L / 2 + w) / R))) + w;
+      const reach =
+        R * Math.min(Math.PI / 2, Math.asin(Math.min(1, (L / 2 + w) / R))) + w;
       geo.uMin = -reach;
       geo.uMax = reach;
       pad += sag / 2 + (w / 2) * Math.sin(edge) + (lens * hc) / 2;
-    } else if (geo.mode === 'orbit') {
+    } else if (geo.mode === "orbit") {
       const R = Math.max(40, L * 0.43 - w * 0.2);
       const k = Math.max(1, Math.round((2 * Math.PI * R) / P));
-      const alpha = Math.sign(bend) * Math.atan2(Math.abs(bend) * Math.max(hc * 2, R * 0.36), R);
+      const alpha =
+        Math.sign(bend) *
+        Math.atan2(Math.abs(bend) * Math.max(hc * 2, R * 0.36), R);
       const depth = R * 5;
       const pf = depth / (depth - R * Math.cos(alpha));
       const pb = depth / (depth + R * Math.cos(alpha));
@@ -413,7 +447,10 @@ const createEngine = (
     } else {
       pad += (lens * hc) / 2;
     }
-    if (cfg.labels === 'hover') pad += cfg.vertical ? st.tipMax : hc * 0.2 + Math.max(11, hc * 0.26) * 1.3;
+    if (cfg.labels === "hover")
+      pad += cfg.vertical
+        ? st.tipMax
+        : hc * 0.2 + Math.max(11, hc * 0.26) * 1.3;
     const tx = clamp(cfg.tiltX, -60, 60);
     const ty = clamp(cfg.tiltY, -60, 60);
     if (Math.abs(tx) > 0.01 || Math.abs(ty) > 0.01) {
@@ -424,7 +461,9 @@ const createEngine = (
       geo.persp = Math.max(L, 480) * 1.3;
       const edge = L / 2 + w;
       const along = (s: number) => {
-        const p = cfg.vertical ? unproject(geo.m, geo.persp, 0, s) : unproject(geo.m, geo.persp, s, 0);
+        const p = cfg.vertical
+          ? unproject(geo.m, geo.persp, 0, s)
+          : unproject(geo.m, geo.persp, s, 0);
         if (!p) return Math.sign(s) * L * 4;
         return clamp(cfg.vertical ? p[1] : p[0], -L * 4, L * 4);
       };
@@ -436,7 +475,9 @@ const createEngine = (
       let reach = band;
       for (const u of [a, b, 0]) {
         for (const v of [-band, band]) {
-          const q = cfg.vertical ? project(geo.m, geo.persp, v, u) : project(geo.m, geo.persp, u, v);
+          const q = cfg.vertical
+            ? project(geo.m, geo.persp, v, u)
+            : project(geo.m, geo.persp, u, v);
           reach = Math.max(reach, Math.abs(cfg.vertical ? q[0] : q[1]));
         }
       }
@@ -444,12 +485,19 @@ const createEngine = (
     }
     const extra = cfg.links ? 2 : 0;
     geo.lead = (Math.max(0, Math.ceil((-geo.uMin - L / 2) / P)) + extra) * P;
-    const copies = Math.max(2, Math.ceil((geo.uMax + L / 2 + geo.lead) / P) + 2 + (extra ? 1 : 0));
+    const copies = Math.max(
+      2,
+      Math.ceil((geo.uMax + L / 2 + geo.lead) / P) + 2 + (extra ? 1 : 0),
+    );
     const primary = Math.min(copies - 1, Math.floor((geo.lead + L / 2) / P));
     st.geo = geo;
-    root.style.setProperty('--logoloop-pad', `${Math.ceil(pad)}px`);
-    root.style.perspective = geo.tilted ? `${geo.persp}px` : '';
-    track.style.transformOrigin = geo.tilted ? (cfg.vertical ? `50% ${L / 2}px` : `${L / 2}px 50%`) : '';
+    root.style.setProperty("--logoloop-pad", `${Math.ceil(pad)}px`);
+    root.style.perspective = geo.tilted ? `${geo.persp}px` : "";
+    track.style.transformOrigin = geo.tilted
+      ? cfg.vertical
+        ? `50% ${L / 2}px`
+        : `${L / 2}px 50%`
+      : "";
     if (copies !== st.layout.copies || primary !== st.layout.primary) {
       st.layout = { copies, primary };
       setLayout(st.layout);
@@ -465,13 +513,16 @@ const createEngine = (
     }
     if (cfg.vertical) {
       const parentHeight = root.parentElement?.clientHeight ?? 0;
-      if (parentHeight > 0 && root.style.height !== `${Math.ceil(parentHeight)}px`) {
+      if (
+        parentHeight > 0 &&
+        root.style.height !== `${Math.ceil(parentHeight)}px`
+      ) {
         root.style.height = `${Math.ceil(parentHeight)}px`;
       }
     } else if (root.style.height) {
-      root.style.height = '';
+      root.style.height = "";
     }
-    track.style.transform = 'none';
+    track.style.transform = "none";
     clearItems();
     const rootRect = root.getBoundingClientRect();
     const k = root.offsetWidth ? rootRect.width / root.offsetWidth || 1 : 1;
@@ -482,27 +533,42 @@ const createEngine = (
     let tipMax = 0;
     for (const it of st.items) {
       const r = it.el.getBoundingClientRect();
-      it.center = ((cfg.vertical ? r.top + r.height / 2 : r.left + r.width / 2) - origin) / k;
+      it.center =
+        ((cfg.vertical ? r.top + r.height / 2 : r.left + r.width / 2) -
+          origin) /
+        k;
       it.size = (cfg.vertical ? r.height : r.width) / k;
       it.cross = (cfg.vertical ? r.width : r.height) / k;
       crossMax = Math.max(crossMax, it.cross);
       sizeMax = Math.max(sizeMax, it.size);
-      if (it.tip && it.copy === 0) tipMax = Math.max(tipMax, it.tip.offsetWidth);
+      if (it.tip && it.copy === 0)
+        tipMax = Math.max(tipMax, it.tip.offsetWidth);
     }
     const a = lists[0].getBoundingClientRect();
     const b = lists[1] ? lists[1].getBoundingClientRect() : null;
-    st.period = (b ? (cfg.vertical ? b.top - a.top : b.left - a.left) : cfg.vertical ? a.height : a.width) / k;
+    st.period =
+      (b
+        ? cfg.vertical
+          ? b.top - a.top
+          : b.left - a.left
+        : cfg.vertical
+          ? a.height
+          : a.width) / k;
     const cs = getComputedStyle(root);
     st.box = [root.offsetWidth, root.offsetHeight];
     st.length = cfg.vertical
-      ? root.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-      : root.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      ? root.clientHeight -
+        parseFloat(cs.paddingTop) -
+        parseFloat(cs.paddingBottom)
+      : root.clientWidth -
+        parseFloat(cs.paddingLeft) -
+        parseFloat(cs.paddingRight);
     st.crossMax = crossMax;
     st.sizeMax = sizeMax;
     st.tipMax = tipMax + crossMax * 0.25;
-    const first = st.items.filter(it => it.copy === 0);
+    const first = st.items.filter((it) => it.copy === 0);
     st.pitch = first.length ? st.period / first.length : st.period;
-    st.snaps = first.map(it => it.center);
+    st.snaps = first.map((it) => it.center);
     st.itemMode = false;
     if (st.period <= 0) return;
     geometry();
@@ -521,8 +587,10 @@ const createEngine = (
       sy = p[1];
     }
     const s = cfg.vertical ? sy : sx;
-    if (geo.mode === 'arc' && geo.R) return geo.R * Math.asin(clamp(s / geo.R, -1, 1));
-    if (geo.mode === 'orbit') return Math.asin(clamp(s / (geo.R * geo.pf), -1, 1));
+    if (geo.mode === "arc" && geo.R)
+      return geo.R * Math.asin(clamp(s / geo.R, -1, 1));
+    if (geo.mode === "orbit")
+      return Math.asin(clamp(s / (geo.R * geo.pf), -1, 1));
     return s;
   };
 
@@ -532,8 +600,12 @@ const createEngine = (
     let best: number | null = null;
     for (const c of st.snaps) {
       const s = c - base;
-      const candidate = dir > 0 ? s + P * Math.ceil((from + 0.5 - s) / P) : s + P * Math.floor((from - 0.5 - s) / P);
-      if (best === null || (dir > 0 ? candidate < best : candidate > best)) best = candidate;
+      const candidate =
+        dir > 0
+          ? s + P * Math.ceil((from + 0.5 - s) / P)
+          : s + P * Math.floor((from - 0.5 - s) / P);
+      if (best === null || (dir > 0 ? candidate < best : candidate > best))
+        best = candidate;
     }
     return best ?? from;
   };
@@ -555,7 +627,12 @@ const createEngine = (
   };
 
   const startMove = (target: number, duration: number) => {
-    st.move = { from: st.offset, delta: target - st.offset, t: 0, dur: duration };
+    st.move = {
+      from: st.offset,
+      delta: target - st.offset,
+      t: 0,
+      dur: duration,
+    };
   };
 
   const stepTiming = (speed: number) => {
@@ -566,10 +643,10 @@ const createEngine = (
 
   const write = (
     it: LoopItem,
-    key: 't' | 'o' | 'v' | 'z' | 's' | 'p',
-    prop: 'transform' | 'opacity' | 'visibility' | 'zIndex',
+    key: "t" | "o" | "v" | "z" | "s" | "p",
+    prop: "transform" | "opacity" | "visibility" | "zIndex",
     value: string,
-    target: HTMLElement
+    target: HTMLElement,
   ) => {
     if (it[key] !== value) {
       it[key] = value;
@@ -586,19 +663,23 @@ const createEngine = (
     const lineT = cfg.vertical
       ? `translate3d(0px, ${T.toFixed(2)}px, 0px)`
       : `translate3d(${T.toFixed(2)}px, 0px, 0px)`;
-    track.style.transform = geo.tilted ? `rotateX(${geo.tiltX}deg) rotateY(${geo.tiltY}deg) ${lineT}` : lineT;
+    track.style.transform = geo.tilted
+      ? `rotateX(${geo.tiltX}deg) rotateY(${geo.tiltY}deg) ${lineT}`
+      : lineT;
     const introRunning = st.introStart >= 0;
     const elapsed = introRunning ? (now - st.introStart) / 1000 : 0;
-    const lensFocus = geo.mode === 'orbit' ? clamp(cfg.focus, 0, 1) * 0.9 : geo.focus;
+    const lensFocus =
+      geo.mode === "orbit" ? clamp(cfg.focus, 0, 1) * 0.9 : geo.focus;
     const lensMag = geo.magnify * st.mag;
-    const cursorActive = lensMag > 0 && st.mag > 0.5 && geo.mode !== 'orbit';
+    const cursorActive = lensMag > 0 && st.mag > 0.5 && geo.mode !== "orbit";
     const wantsActive = cfg.focus > 0 || cfg.step || cursorActive;
-    const needItems = geo.mode !== 'line' || lensFocus > 0 || lensMag > 0.0005 || introRunning;
+    const needItems =
+      geo.mode !== "line" || lensFocus > 0 || lensMag > 0.0005 || introRunning;
     if (!needItems && st.itemMode) clearItems();
     st.itemMode = needItems;
     if (!needItems && !wantsActive) {
       if (st.active) {
-        st.active.el.removeAttribute('data-active');
+        st.active.el.removeAttribute("data-active");
         st.active = null;
       }
       return;
@@ -612,10 +693,10 @@ const createEngine = (
       let rot = 0;
       let scale = 1;
       let opacity = 1;
-      let z = '';
+      let z = "";
       let hidden = false;
       let dist = Math.abs(u);
-      if (geo.mode === 'orbit') {
+      if (geo.mode === "orbit") {
         if (u < -geo.C / 2 || u >= geo.C / 2) {
           hidden = true;
         } else {
@@ -625,10 +706,15 @@ const createEngine = (
           x = geo.R * Math.sin(th) * p;
           y = Z * Math.sin(geo.alpha) * p - geo.shift;
           scale = p;
-          if (lensFocus > 0) scale *= 1 + lensFocus * Math.exp(-((th / 0.55) ** 2));
+          if (lensFocus > 0)
+            scale *= 1 + lensFocus * Math.exp(-((th / 0.55) ** 2));
           if (lensMag > 0) {
             const span = (geo.magSigma * 2 * Math.PI) / geo.C;
-            scale *= 1 + lensMag * Math.max(0, Math.cos(th)) * Math.exp(-(((th - st.magU) / span) ** 2));
+            scale *=
+              1 +
+              lensMag *
+                Math.max(0, Math.cos(th)) *
+                Math.exp(-(((th - st.magU) / span) ** 2));
           }
           const facing = (Math.cos(th) + 1) / 2;
           opacity = 0.25 + 0.75 * facing * facing;
@@ -640,7 +726,11 @@ const createEngine = (
         if (lensFocus > 0) {
           const kf = w / geo.focusSigma;
           scale *= 1 + lensFocus * Math.exp(-kf * kf);
-          opacity *= 1 - 0.45 * lensFocus * (1 - Math.exp(-((u / (geo.focusSigma * 1.8)) ** 2)));
+          opacity *=
+            1 -
+            0.45 *
+              lensFocus *
+              (1 - Math.exp(-((u / (geo.focusSigma * 1.8)) ** 2)));
           w += lensFocus * geo.focusSigma * HALF_SQRT_PI * erf(kf);
         }
         const near = Math.abs(w - st.magU);
@@ -650,10 +740,11 @@ const createEngine = (
           w += lensMag * geo.magSigma * HALF_SQRT_PI * erf(km);
         }
         x = w;
-        if (geo.mode === 'wave') {
+        if (geo.mode === "wave") {
           y = geo.amp * Math.sin(geo.k * w);
-          rot = (Math.atan(geo.amp * geo.k * Math.cos(geo.k * w)) * 90) / Math.PI;
-        } else if (geo.mode === 'arc' && geo.R) {
+          rot =
+            (Math.atan(geo.amp * geo.k * Math.cos(geo.k * w)) * 90) / Math.PI;
+        } else if (geo.mode === "arc" && geo.R) {
           const phi = w / geo.R;
           if (Math.abs(phi) > geo.limit) hidden = true;
           x = geo.R * Math.sin(phi);
@@ -664,7 +755,9 @@ const createEngine = (
       }
       if (introRunning && !hidden) {
         const pos = clamp((x + half) / Math.max(1, L), 0, 1);
-        const e = easeOut(clamp((elapsed - pos * INTRO_STAGGER) / INTRO_TIME, 0, 1));
+        const e = easeOut(
+          clamp((elapsed - pos * INTRO_STAGGER) / INTRO_TIME, 0, 1),
+        );
         opacity *= e;
         y += (1 - e) * 14;
       }
@@ -675,35 +768,48 @@ const createEngine = (
       if (!needItems) continue;
       const along = x - u;
       const t = hidden
-        ? ''
+        ? ""
         : `${cfg.vertical ? `translate3d(${y.toFixed(2)}px, ${along.toFixed(2)}px, 0px)` : `translate3d(${along.toFixed(2)}px, ${y.toFixed(2)}px, 0px)`}${
-            rot ? ` rotate(${(cfg.vertical ? -rot : rot).toFixed(2)}deg)` : ''
+            rot ? ` rotate(${(cfg.vertical ? -rot : rot).toFixed(2)}deg)` : ""
           }`;
-      write(it, 't', 'transform', t, it.el);
-      write(it, 'o', 'opacity', hidden ? '0' : opacity > 0.999 ? '' : opacity.toFixed(3), it.el);
-      write(it, 'v', 'visibility', hidden ? 'hidden' : '', it.el);
-      write(it, 'z', 'zIndex', z, it.el);
+      write(it, "t", "transform", t, it.el);
+      write(
+        it,
+        "o",
+        "opacity",
+        hidden ? "0" : opacity > 0.999 ? "" : opacity.toFixed(3),
+        it.el,
+      );
+      write(it, "v", "visibility", hidden ? "hidden" : "", it.el);
+      write(it, "z", "zIndex", z, it.el);
       if (it.content)
-        write(it, 's', 'transform', Math.abs(scale - 1) < 0.0005 ? '' : `scale(${scale.toFixed(4)})`, it.content);
+        write(
+          it,
+          "s",
+          "transform",
+          Math.abs(scale - 1) < 0.0005 ? "" : `scale(${scale.toFixed(4)})`,
+          it.content,
+        );
       if (it.tip) {
         const lift = ((scale - 1) * it.cross) / 2;
         write(
           it,
-          'p',
-          'transform',
+          "p",
+          "transform",
           Math.abs(lift) < 0.05
-            ? ''
+            ? ""
             : cfg.vertical
               ? `translateX(${lift.toFixed(2)}px)`
               : `translateY(${lift.toFixed(2)}px)`,
-          it.tip
+          it.tip,
         );
       }
     }
-    const active = best && bestDist < Math.max(best.size, st.pitch) / 2 + 1 ? best : null;
+    const active =
+      best && bestDist < Math.max(best.size, st.pitch) / 2 + 1 ? best : null;
     if (active !== st.active) {
-      st.active?.el.removeAttribute('data-active');
-      active?.el.setAttribute('data-active', '');
+      st.active?.el.removeAttribute("data-active");
+      active?.el.setAttribute("data-active", "");
       st.active = active;
     }
   };
@@ -722,7 +828,7 @@ const createEngine = (
       } else {
         st.introDone = true;
       }
-      root.removeAttribute('data-intro');
+      root.removeAttribute("data-intro");
     }
     if (st.introStart >= 0) {
       if ((now - st.introStart) / 1000 >= INTRO_TIME + INTRO_STAGGER) {
@@ -735,11 +841,18 @@ const createEngine = (
     const travel = Math.sign(cfg.speed) || 1;
     const paused = st.focused || (st.hovered && cfg.hoverValue !== undefined);
     const pausedSpeed = st.focused ? 0 : (cfg.hoverValue ?? 0);
-    let target = st.reduced ? 0 : paused ? pausedSpeed * travel * cfg.dirSign : cfg.speed * cfg.dirSign;
+    let target = st.reduced
+      ? 0
+      : paused
+        ? pausedSpeed * travel * cfg.dirSign
+        : cfg.speed * cfg.dirSign;
     if (cfg.scrollBoost > 0 && !st.reduced) {
       st.scrollVel *= Math.exp(-dt / 0.18);
       if (Math.abs(st.scrollVel) > 1) busy = true;
-      target += clamp(st.scrollVel * cfg.scrollBoost, -3000, 3000) * travel * cfg.dirSign;
+      target +=
+        clamp(st.scrollVel * cfg.scrollBoost, -3000, 3000) *
+        travel *
+        cfg.dirSign;
     }
     if (st.drag?.active) {
       busy = true;
@@ -784,7 +897,8 @@ const createEngine = (
     }
     const wantMag = cfg.magnify > 0 && st.pointerInside && !st.reduced ? 1 : 0;
     if (st.mag !== wantMag) {
-      st.mag += (wantMag - st.mag) * (1 - Math.exp(-dt / (wantMag ? 0.12 : 0.25)));
+      st.mag +=
+        (wantMag - st.mag) * (1 - Math.exp(-dt / (wantMag ? 0.12 : 0.25)));
       if (Math.abs(wantMag - st.mag) < 0.002) st.mag = wantMag;
       busy = true;
     }
@@ -801,7 +915,8 @@ const createEngine = (
       st.magReady = false;
     }
     render(now);
-    if (busy && st.visible && !st.destroyed) st.raf = requestAnimationFrame(frame);
+    if (busy && st.visible && !st.destroyed)
+      st.raf = requestAnimationFrame(frame);
   };
 
   const wake = () => {
@@ -819,7 +934,7 @@ const createEngine = (
   const dragScale = () => {
     const geo = st.geo;
     if (!geo) return 1;
-    if (geo.mode === 'orbit') return geo.C / (2 * Math.PI * geo.R * geo.pf);
+    if (geo.mode === "orbit") return geo.C / (2 * Math.PI * geo.R * geo.pf);
     const pu = pointerU();
     if (pu === null || geo.focus <= 0) return 1;
     const kf = pu / geo.focusSigma;
@@ -828,7 +943,7 @@ const createEngine = (
 
   const onEnter = (e: PointerEvent) => {
     st.hovered = true;
-    if (e.pointerType !== 'touch') {
+    if (e.pointerType !== "touch") {
       st.pointerInside = true;
       st.pointer = local(e);
     }
@@ -843,15 +958,28 @@ const createEngine = (
 
   const onDown = (e: PointerEvent) => {
     st.pressedAt = performance.now();
-    if (!config.current.draggable || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (
+      !config.current.draggable ||
+      (e.pointerType === "mouse" && e.button !== 0)
+    )
+      return;
     const [x, y] = local(e);
-    if (e.pointerType !== 'touch') st.pointer = [x, y];
-    st.drag = { id: e.pointerId, x, y, active: false, samples: [], scale: dragScale(), anchor: 0, offset: 0 };
+    if (e.pointerType !== "touch") st.pointer = [x, y];
+    st.drag = {
+      id: e.pointerId,
+      x,
+      y,
+      active: false,
+      samples: [],
+      scale: dragScale(),
+      anchor: 0,
+      offset: 0,
+    };
   };
 
   const onMove = (e: PointerEvent) => {
     const cfg = config.current;
-    if (e.pointerType !== 'touch') {
+    if (e.pointerType !== "touch") {
       st.pointer = local(e);
       st.pointerInside = true;
     }
@@ -876,7 +1004,7 @@ const createEngine = (
         try {
           root.setPointerCapture(e.pointerId);
         } catch {}
-        root.setAttribute('data-dragging', '');
+        root.setAttribute("data-dragging", "");
       }
       const next = d.offset - (along - d.anchor) * d.scale;
       const P = st.period || 1;
@@ -884,7 +1012,8 @@ const createEngine = (
       d.offset += st.offset - next;
       const now = performance.now();
       d.samples.push([now, along]);
-      while (d.samples.length > 2 && now - d.samples[0][0] > 100) d.samples.shift();
+      while (d.samples.length > 2 && now - d.samples[0][0] > 100)
+        d.samples.shift();
     }
     wake();
   };
@@ -894,7 +1023,7 @@ const createEngine = (
     if (!d || e.pointerId !== d.id) return;
     st.drag = null;
     if (!d.active) return;
-    root.removeAttribute('data-dragging');
+    root.removeAttribute("data-dragging");
     try {
       root.releasePointerCapture(e.pointerId);
     } catch {}
@@ -906,11 +1035,19 @@ const createEngine = (
     if (!cancelled && s.length > 1) {
       const [t0, a0] = s[0];
       const [t1, a1] = s[s.length - 1];
-      if (t1 > t0 && now - t1 < 80) v = clamp((-(a1 - a0) / (t1 - t0)) * 1000 * d.scale, -MAX_FLING, MAX_FLING);
+      if (t1 > t0 && now - t1 < 80)
+        v = clamp(
+          (-(a1 - a0) / (t1 - t0)) * 1000 * d.scale,
+          -MAX_FLING,
+          MAX_FLING,
+        );
     }
     if (cfg.step && !st.reduced) {
       const target = nearestSnap(st.offset + v * 0.35);
-      startMove(target, clamp(0.3 + Math.abs(target - st.offset) / 1800, 0.3, 0.8));
+      startMove(
+        target,
+        clamp(0.3 + Math.abs(target - st.offset) / 1800, 0.3, 0.8),
+      );
       st.velocity = 0;
     } else {
       st.velocity = v;
@@ -938,13 +1075,19 @@ const createEngine = (
     const target = e.target as Node | null;
     if (performance.now() - st.pressedAt < 800) return;
     st.focused = true;
-    const it = st.items.find(item => item.el.contains(target));
+    const it = st.items.find((item) => item.el.contains(target));
     if (it && st.geo) {
       const u = -st.offset - st.geo.lead + it.center - st.length / 2;
-      const comfortable = st.geo.mode === 'orbit' ? 1 : Math.max(0, st.length / 2 - it.size);
+      const comfortable =
+        st.geo.mode === "orbit" ? 1 : Math.max(0, st.length / 2 - it.size);
       if (Math.abs(u) > comfortable) {
         st.move = null;
-        st.seek = { from: st.offset, delta: u, t: 0, dur: clamp(0.35 + Math.abs(u) / 2000, 0.35, 0.8) };
+        st.seek = {
+          from: st.offset,
+          delta: u,
+          t: 0,
+          dur: clamp(0.35 + Math.abs(u) / 2000, 0.35, 0.8),
+        };
       }
     }
     wake();
@@ -980,20 +1123,20 @@ const createEngine = (
     wake();
   };
 
-  root.addEventListener('pointerenter', onEnter);
-  root.addEventListener('pointerleave', onLeave);
-  root.addEventListener('pointerdown', onDown);
-  root.addEventListener('pointermove', onMove);
-  root.addEventListener('pointerup', onUp);
-  root.addEventListener('pointercancel', onCancel);
-  root.addEventListener('lostpointercapture', onCancel);
-  root.addEventListener('click', onClick, true);
-  root.addEventListener('dragstart', onDragStart);
-  root.addEventListener('focusin', onFocusIn);
-  root.addEventListener('focusout', onFocusOut);
-  root.addEventListener('scroll', onRootScroll);
-  window.addEventListener('scroll', onScroll, { passive: true });
-  query?.addEventListener?.('change', onMotion);
+  root.addEventListener("pointerenter", onEnter);
+  root.addEventListener("pointerleave", onLeave);
+  root.addEventListener("pointerdown", onDown);
+  root.addEventListener("pointermove", onMove);
+  root.addEventListener("pointerup", onUp);
+  root.addEventListener("pointercancel", onCancel);
+  root.addEventListener("lostpointercapture", onCancel);
+  root.addEventListener("click", onClick, true);
+  root.addEventListener("dragstart", onDragStart);
+  root.addEventListener("focusin", onFocusIn);
+  root.addEventListener("focusout", onFocusOut);
+  root.addEventListener("scroll", onRootScroll);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  query?.addEventListener?.("change", onMotion);
 
   let resizeObserver: ResizeObserver | null = null;
   const observed = new Set<Element>();
@@ -1015,25 +1158,25 @@ const createEngine = (
     if (st.geo && st.period > 0) frame(performance.now());
   };
 
-  if (typeof ResizeObserver !== 'undefined') {
+  if (typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(() => {
       measure();
       if (st.geo && st.period > 0) render(performance.now());
       wake();
     });
   } else {
-    window.addEventListener('resize', refresh);
+    window.addEventListener("resize", refresh);
   }
 
   let intersection: IntersectionObserver | null = null;
-  if (typeof IntersectionObserver !== 'undefined') {
+  if (typeof IntersectionObserver !== "undefined") {
     intersection = new IntersectionObserver(
-      entries => {
+      (entries) => {
         const entry = entries[entries.length - 1];
         st.visible = entry.isIntersecting;
         if (st.visible) wake();
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
     intersection.observe(root);
   }
@@ -1041,27 +1184,27 @@ const createEngine = (
   const onVisibility = () => {
     if (!document.hidden) wake();
   };
-  document.addEventListener('visibilitychange', onVisibility);
+  document.addEventListener("visibilitychange", onVisibility);
 
   const destroy = () => {
     st.destroyed = true;
     if (st.raf) cancelAnimationFrame(st.raf);
-    root.removeEventListener('pointerenter', onEnter);
-    root.removeEventListener('pointerleave', onLeave);
-    root.removeEventListener('pointerdown', onDown);
-    root.removeEventListener('pointermove', onMove);
-    root.removeEventListener('pointerup', onUp);
-    root.removeEventListener('pointercancel', onCancel);
-    root.removeEventListener('lostpointercapture', onCancel);
-    root.removeEventListener('click', onClick, true);
-    root.removeEventListener('dragstart', onDragStart);
-    root.removeEventListener('focusin', onFocusIn);
-    root.removeEventListener('focusout', onFocusOut);
-    root.removeEventListener('scroll', onRootScroll);
-    window.removeEventListener('scroll', onScroll);
-    window.removeEventListener('resize', refresh);
-    document.removeEventListener('visibilitychange', onVisibility);
-    query?.removeEventListener?.('change', onMotion);
+    root.removeEventListener("pointerenter", onEnter);
+    root.removeEventListener("pointerleave", onLeave);
+    root.removeEventListener("pointerdown", onDown);
+    root.removeEventListener("pointermove", onMove);
+    root.removeEventListener("pointerup", onUp);
+    root.removeEventListener("pointercancel", onCancel);
+    root.removeEventListener("lostpointercapture", onCancel);
+    root.removeEventListener("click", onClick, true);
+    root.removeEventListener("dragstart", onDragStart);
+    root.removeEventListener("focusin", onFocusIn);
+    root.removeEventListener("focusout", onFocusOut);
+    root.removeEventListener("scroll", onRootScroll);
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", refresh);
+    document.removeEventListener("visibilitychange", onVisibility);
+    query?.removeEventListener?.("change", onMotion);
     resizeObserver?.disconnect();
     intersection?.disconnect();
   };
@@ -1073,8 +1216,8 @@ export const LogoLoop = memo<LogoLoopProps>(
   ({
     logos,
     speed = 120,
-    direction = 'left',
-    width = '100%',
+    direction = "left",
+    width = "100%",
     logoHeight = 28,
     gap = 32,
     pauseOnHover,
@@ -1082,7 +1225,7 @@ export const LogoLoop = memo<LogoLoopProps>(
     fadeOut = true,
     fadeOutWidth = 0.12,
     scaleOnHover = false,
-    layout = 'line',
+    layout = "line",
     bend = 0.5,
     focus = 0,
     magnify = 0,
@@ -1090,27 +1233,35 @@ export const LogoLoop = memo<LogoLoopProps>(
     tiltY = 0,
     step = false,
     muted = 0,
-    labels = 'none',
+    labels = "none",
     draggable = true,
     scrollBoost = 0,
     intro = true,
     renderItem,
-    ariaLabel = 'Partner logos',
+    ariaLabel = "Partner logos",
     className,
-    style
+    style,
   }) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const trackRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<ReturnType<typeof createEngine> | null>(null);
-    const [{ copies, primary }, setLayout] = useState<LoopLayout>({ copies: 3, primary: 1 });
+    const [{ copies, primary }, setLayout] = useState<LoopLayout>({
+      copies: 3,
+      primary: 1,
+    });
     const [introPending] = useState(intro);
 
-    const vertical = direction === 'up' || direction === 'down';
+    const vertical = direction === "up" || direction === "down";
     const config = useRef<LoopConfig>({} as LoopConfig);
     config.current = {
       speed,
-      dirSign: (vertical ? direction === 'up' : direction !== 'right') ? 1 : -1,
-      hoverValue: hoverSpeed !== undefined ? hoverSpeed : pauseOnHover === false ? undefined : 0,
+      dirSign: (vertical ? direction === "up" : direction !== "right") ? 1 : -1,
+      hoverValue:
+        hoverSpeed !== undefined
+          ? hoverSpeed
+          : pauseOnHover === false
+            ? undefined
+            : 0,
       vertical,
       layout,
       bend,
@@ -1124,7 +1275,7 @@ export const LogoLoop = memo<LogoLoopProps>(
       intro,
       scaleOnHover,
       labels,
-      links: logos.some(item => item.href)
+      links: logos.some((item) => item.href),
     };
 
     useIsomorphicLayoutEffect(() => {
@@ -1132,7 +1283,7 @@ export const LogoLoop = memo<LogoLoopProps>(
         rootRef.current as HTMLDivElement,
         trackRef.current as HTMLDivElement,
         config,
-        setLayout
+        setLayout,
       );
       engineRef.current = engine;
       return () => {
@@ -1157,7 +1308,7 @@ export const LogoLoop = memo<LogoLoopProps>(
       magnify,
       tiltX,
       tiltY,
-      scaleOnHover
+      scaleOnHover,
     ]);
 
     useEffect(() => {
@@ -1169,14 +1320,22 @@ export const LogoLoop = memo<LogoLoopProps>(
         Array.from({ length: copies }, (_, copyIndex) => {
           const isPrimary = copyIndex === primary;
           return (
-            <ul className="logoloop__list" key={copyIndex} role="list" aria-hidden={isPrimary ? undefined : true}>
+            <ul
+              className="logoloop__list"
+              key={copyIndex}
+              role="list"
+              aria-hidden={isPrimary ? undefined : true}
+            >
               {logos.map((item, itemIndex) => {
                 const key = `${copyIndex}-${itemIndex}`;
-                const isNode = 'node' in item;
+                const isNode = "node" in item;
                 const visual = renderItem ? (
                   renderItem(item, key)
                 ) : isNode ? (
-                  <span className="logoloop__node" aria-hidden={!!item.href && !item.ariaLabel}>
+                  <span
+                    className="logoloop__node"
+                    aria-hidden={!!item.href && !item.ariaLabel}
+                  >
                     {item.node}
                   </span>
                 ) : (
@@ -1186,34 +1345,44 @@ export const LogoLoop = memo<LogoLoopProps>(
                     sizes={item.sizes}
                     width={item.width}
                     height={item.height}
-                    alt={item.alt ?? ''}
+                    alt={item.alt ?? ""}
                     title={item.title}
                     loading="lazy"
                     decoding="async"
                     draggable={false}
                   />
                 );
-                const text = (labels === 'inline' || labels === 'below') && item.title ? item.title : null;
+                const text =
+                  (labels === "inline" || labels === "below") && item.title
+                    ? item.title
+                    : null;
                 const inner = (
                   <>
                     {visual}
                     {text && (
-                      <span className="logoloop__label" aria-hidden={!isNode && !!item.alt}>
+                      <span
+                        className="logoloop__label"
+                        aria-hidden={!isNode && !!item.alt}
+                      >
                         {text}
                       </span>
                     )}
                   </>
                 );
-                const name = isNode ? (item.ariaLabel ?? item.title) : (item.alt ?? item.title);
+                const name = isNode
+                  ? (item.ariaLabel ?? item.title)
+                  : (item.alt ?? item.title);
                 return (
                   <li
                     className="logoloop__item"
                     key={key}
                     role="listitem"
-                    data-color={item.hoverColor ? '' : undefined}
+                    data-color={item.hoverColor ? "" : undefined}
                     style={
                       item.hoverColor
-                        ? ({ '--logoloop-item-color': item.hoverColor } as React.CSSProperties)
+                        ? ({
+                            "--logoloop-item-color": item.hoverColor,
+                          } as React.CSSProperties)
                         : undefined
                     }
                   >
@@ -1221,7 +1390,7 @@ export const LogoLoop = memo<LogoLoopProps>(
                       <a
                         className="logoloop__content"
                         href={item.href}
-                        aria-label={name || 'logo link'}
+                        aria-label={name || "logo link"}
                         target="_blank"
                         rel="noreferrer noopener"
                         draggable={false}
@@ -1232,7 +1401,7 @@ export const LogoLoop = memo<LogoLoopProps>(
                     ) : (
                       <div className="logoloop__content">{inner}</div>
                     )}
-                    {labels === 'hover' && item.title && (
+                    {labels === "hover" && item.title && (
                       <span className="logoloop__tip" aria-hidden="true">
                         {item.title}
                       </span>
@@ -1243,7 +1412,7 @@ export const LogoLoop = memo<LogoLoopProps>(
             </ul>
           );
         }),
-      [copies, primary, logos, renderItem, labels]
+      [copies, primary, logos, renderItem, labels],
     );
 
     const mask = fadeOut ? fadeMask(fadeOutWidth, vertical) : undefined;
@@ -1251,28 +1420,28 @@ export const LogoLoop = memo<LogoLoopProps>(
 
     const containerStyle = {
       width: vertical
-        ? toCssLength(width) === '100%'
+        ? toCssLength(width) === "100%"
           ? undefined
           : toCssLength(width)
-        : (toCssLength(width) ?? '100%'),
-      '--logoloop-gap': `${gap}px`,
-      '--logoloop-logoHeight': `${logoHeight}px`,
+        : (toCssLength(width) ?? "100%"),
+      "--logoloop-gap": `${gap}px`,
+      "--logoloop-logoHeight": `${logoHeight}px`,
       ...(amount > 0 && {
-        '--logoloop-gray': Math.min(1, amount * 2).toFixed(3),
-        '--logoloop-dim': (1 - amount * 0.6).toFixed(3)
+        "--logoloop-gray": Math.min(1, amount * 2).toFixed(3),
+        "--logoloop-dim": (1 - amount * 0.6).toFixed(3),
       }),
       ...(mask && { WebkitMaskImage: mask, maskImage: mask }),
-      ...style
+      ...style,
     } as React.CSSProperties;
 
     const rootClassName = [
-      'logoloop',
-      vertical ? 'logoloop--vertical' : 'logoloop--horizontal',
-      scaleOnHover && 'logoloop--scale-hover',
-      className
+      "logoloop",
+      vertical ? "logoloop--vertical" : "logoloop--horizontal",
+      scaleOnHover && "logoloop--scale-hover",
+      className,
     ]
       .filter(Boolean)
-      .join(' ');
+      .join(" ");
 
     return (
       <div
@@ -1281,19 +1450,19 @@ export const LogoLoop = memo<LogoLoopProps>(
         style={containerStyle}
         role="region"
         aria-label={ariaLabel}
-        data-intro={introPending ? '' : undefined}
-        data-draggable={draggable ? '' : undefined}
-        data-muted={amount > 0 ? '' : undefined}
-        data-labels={labels !== 'none' ? labels : undefined}
+        data-intro={introPending ? "" : undefined}
+        data-draggable={draggable ? "" : undefined}
+        data-muted={amount > 0 ? "" : undefined}
+        data-labels={labels !== "none" ? labels : undefined}
       >
         <div className="logoloop__track" ref={trackRef}>
           {lists}
         </div>
       </div>
     );
-  }
+  },
 );
 
-LogoLoop.displayName = 'LogoLoop';
+LogoLoop.displayName = "LogoLoop";
 
 export default LogoLoop;

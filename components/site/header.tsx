@@ -9,7 +9,7 @@ export const PRODUCT_LINKS = [
     href: "#production",
     icon: "production",
     title: "Finding mistakes",
-    text: "Forge flags the answers your agent got wrong.",
+    text: "Forge flags the answers your agent missed.",
   },
   {
     href: "#agents",
