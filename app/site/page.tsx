@@ -17,8 +17,16 @@ import {
 } from "@/components/site/drawings";
 import s from "@/components/site/site.module.css";
 
-// Every number on this page comes from campaign forge-e84925eb (NVIDIA H100 80GB HBM3):
+// Every number on this page comes from campaign forge-e84925eb 
 // artifacts/forge-e84925eb/report.json, events.jsonl and data/chaos/incidents.json.
+
+// GSM8K test-885, verbatim from artifacts/forge-e84925eb/final-evaluation.json.
+const EXAMPLE = {
+  question: "The Ben and Aggie Burrito Shop makes 125 chimichangas on Tuesdays, 125 chimichangas on Wednesdays and twice as many on Friday. How many chimichangas do they make on those three days?",
+  before: "To determine how many chimichangas the Ben and Aggie Burrito Shop makes on each of the three days (Tuesday, Wednesday, and Friday), we can follow these steps:\n\n1. Identify the number of chimichangas made on Tuesday.\n   - The shop makes 125 chimichangas on Tuesday.\n\n2. Identify the number of chimichangas made on Wednesday.\n   - The shop makes twice as many chimichangas on Wednesday as it does on Tuesday.\n   - Therefore, the number of chimichangas made on Wednesday is \\(2 \\times 125 = 250\\).\n\n3. Identify the number of chimichangas made on Friday.\n   - The shop makes 125 chimichangas on Friday.\n\n4. Sum up the total number of chimichangas made over the three days.\n   - Total chimichangas = Chimbachamas on Tuesday + Chimbachamas on Wednesday + Chimbachamas on Friday\n   - Total chimichangas = 125 + 250 + 125\n\nNow, let's perform the addition:\n\\[125 + 250 = 375\\]\n\\[",
+  after: "On Tuesday, they make 125.\nOn Wednesday, they make 125.\nOn Friday, they make twice as many as on Tuesday, which is 2*125 = <<125*2=250>>250.\nIn total, they make 125+125+250 = <<125+125+250=500>>500 chimichangas.\n#### 500",
+};
+
 const SIDE = [
   { id: "production", label: "Production", icon: "production" },
   { id: "agents", label: "Agents", icon: "chat" },
@@ -28,7 +36,6 @@ const SIDE = [
 
 const BUILT_WITH = [
   "Qwen2.5-0.5B-Instruct",
-  "NVIDIA H100 80GB HBM3",
   "Agent Relay",
   "Terse durable actors",
   "LoRA fine-tuning",
@@ -180,15 +187,15 @@ export default function SitePage() {
             </div>
             <figure className={s.heroShot}>
               <div className={s.frame}>
-                <LoopVideo
-                  name="hero-chat"
-                  width={1600}
-                  height={900}
-                  label="Forge Agent chat filling in as five agents run a training campaign"
+                <img
+                  src="/site/hero-chat.webp"
+                  width={2000}
+                  height={1250}
+                  alt="Forge Agent chat: the research room full of messages between the five agents"
                 />
               </div>
               <figcaption className={s.caption}>
-                Agent chat during campaign forge-e84925eb, shown 48 times faster.
+                Agent chat after campaign forge-e84925eb: every handoff between the five agents.
               </figcaption>
             </figure>
             <div className={s.strip}>
@@ -198,6 +205,41 @@ export default function SitePage() {
                 <BuiltWith items={BUILT_WITH} />
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* One question, before and after */}
+        <section className={`${s.section} ${s.ruleTop}`} id="example">
+          <div className={s.container}>
+            <div className={s.sectionHead}>
+              <Eyebrow icon="target">One question</Eyebrow>
+              <h2 className={s.h2}>The same question, before and after Forge</h2>
+            </div>
+            <figure className={s.example}>
+              <div className={s.exampleQ}>
+                <span className={s.exampleLabel}>Sealed test question · GSM8K test-885</span>
+                <p>{EXAMPLE.question}</p>
+              </div>
+              <div className={s.exampleCols}>
+                <div className={s.exampleCol}>
+                  <div className={s.exampleHead}>
+                    <strong>Before Forge</strong>
+                    <span>Qwen2.5-0.5B-Instruct</span>
+                  </div>
+                  <pre className={s.transcript}>{EXAMPLE.before}</pre>
+                </div>
+                <div className={s.exampleCol}>
+                  <div className={s.exampleHead}>
+                    <strong>After Forge</strong>
+                    <span>Checkpoint exp-001</span>
+                  </div>
+                  <pre className={s.transcript}>{EXAMPLE.after}</pre>
+                </div>
+              </div>
+              <figcaption className={s.caption}>
+                Both answers are shown exactly as the models wrote them, from campaign forge-e84925eb.
+              </figcaption>
+            </figure>
           </div>
         </section>
 
@@ -299,7 +341,7 @@ export default function SitePage() {
 
                 <article className={s.block} id="durable">
                   <div className={s.blockText}>
-                    <h3 className={s.h3}>A record that survives anything</h3>
+                    <h3 className={s.h3}>A record you can always resume from</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
                       Every budget, lease, review and checkpoint lives in signed, journaled
                       Terse durable actors.
@@ -343,8 +385,8 @@ export default function SitePage() {
                   <div className={s.blockText}>
                     <h3 className={s.h3}>Train, test, approve, download</h3>
                     <p className={`${s.lead} ${s.blockLead}`}>
-                      Forge trains on an NVIDIA H100 GPU, tests on questions held back for the
-                      purpose, and hands you the weights.
+                      Forge trains your model, tests it on questions held back for the purpose,
+                      and hands you the weights.
                     </p>
                     <div className={s.features}>
                       <Feature icon="production" title="Held-out failures">
@@ -498,8 +540,7 @@ export default function SitePage() {
               </div>
             </div>
             <p className={s.resultsMeta}>
-              Campaign forge-e84925eb · Qwen2.5-0.5B-Instruct · NVIDIA H100 80GB HBM3 · about 12
-              minutes · paired bootstrap 95% intervals
+              Campaign forge-e84925eb · Qwen2.5-0.5B-Instruct · about 12 minutes · paired bootstrap 95% intervals
             </p>
             <div className={s.cols4}>
               <div className={s.col4}>
@@ -674,7 +715,7 @@ export default function SitePage() {
                   See the results
                 </a>
               </div>
-              <p className={s.ctaNote}>One recorded campaign: about 12 minutes on one H100.</p>
+              <p className={s.ctaNote}>One recorded campaign took about 12 minutes from click to weights.</p>
             </div>
           </div>
         </section>

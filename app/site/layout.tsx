@@ -11,7 +11,7 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "Forge · Post-training that runs itself",
   description:
-    "Bring your agent's production traffic. Forge trains on its failures on an H100, proves the fix on questions it never saw, and hands you the weights.",
+    "Bring your agent's production traffic. Forge turns its failures into a private model fine-tuned for your tasks, and you own the weights.",
 };
 
 export const viewport: Viewport = { themeColor: "#ffffff" };

@@ -26,7 +26,7 @@ export const PRODUCT_LINKS = [
     href: "#training",
     icon: "chip",
     title: "Training and evaluation",
-    text: "Training on an H100 GPU, measured on questions held back for testing.",
+    text: "Training measured on questions held back for testing.",
   },
 ];
 
@@ -136,12 +136,7 @@ export function SiteHeader() {
   return (
     <>
       <div className={s.announce}>
-        <span>
-          <span className={s.announceLong}>
-            Recorded on an H100 GPU:{" "}
-          </span>
-          the sealed test score went from 1 in 24 to 6 in 24.
-        </span>
+        <span>The sealed test score went from 1 in 24 to 6 in 24.</span>
         <a href="#results">
           See the results <Icon name="arrow" size={14} />
         </a>
@@ -251,7 +246,7 @@ export function SiteHeader() {
                   className={s.dropFeatureImg}
                   loading="lazy"
                 />
-                <span className={s.dropItemTitle}>A recorded H100 campaign</span>
+                <span className={s.dropItemTitle}>A recorded campaign</span>
                 <span className={s.dropItemText}>
                   Sealed test: 1 in 24 became 6 in 24. Held-out production
                   failures: 0 in 33 became 9 in 33.
