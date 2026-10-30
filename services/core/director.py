@@ -6,14 +6,16 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+FOCUS = ("arithmetic", "multi_step", "formatting", "general", "production_failures")
+
 
 class Proposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    strategy: Literal["broad_sft", "targeted_sft", "grpo"]
+    strategy: Literal["broad_sft", "targeted_sft", "distill_sft", "grpo", "dpo"]
     learning_rate: float = Field(ge=0.00001, le=0.001)
     lora_rank: Literal[8, 16]
     hypothesis: str = Field(min_length=10, max_length=1000)
-    focus: Literal["arithmetic", "multi_step", "formatting", "general"]
+    focus: Literal[FOCUS]
 
 
 def build_input(config, development, previous, production=None, production_train=()):
@@ -39,6 +41,29 @@ def build_input(config, development, previous, production=None, production_train
             ],
         }
     return context
+
+
+GSM8K_INSTRUCTIONS = "You are Forge's research director. Choose ONE bounded LoRA experiment based on measured development evidence. You cannot change the objective, reward or benchmark. Never ask for final test data. Use only allowed strategies. broad_sft trains the permitted corpus; targeted_sft reweights its longer multi-step examples. If grpo is allowed, it uses 8 TRL steps with deterministic Terse rewards. Begin with SFT to learn answer format, then compare GRPO after a valid SFT candidate. GRPO warm-starts the best approved SFT adapter, so its lora_rank MUST match that candidate's recorded rank. Return a concrete hypothesis. If production_failures is present, those are failures found in deployment traffic: targeted_sft trains their labeled examples first, and their held-out half measures the fix, so name the failure kinds your experiment addresses. Prefer a different strategy when prior experiments fail. Learning rate 1e-5 to 1e-3, rank 8 or 16."
+
+
+def instructions(config):
+    """The original math instructions, unchanged, unless the campaign uses a new method or task."""
+    from services.core import packs, strategies
+
+    pack = packs.get(config.get("task_pack"))
+    if pack.id == packs.DEFAULT and set(config["strategies"]) <= {"broad_sft", "targeted_sft", "grpo"}:
+        return GSM8K_INSTRUCTIONS
+    methods = " ".join(strategies.STRATEGIES[name]["director"] for name in config["strategies"])
+    return (
+        "You are Forge's research director. Choose ONE bounded LoRA experiment based on measured "
+        "development evidence. You cannot change the objective, reward or benchmark. Never ask for "
+        f"final test data. Task: {pack.display.name}. Objective: {pack.display.objective} Answers are "
+        f"scored by {pack.display.scoring_label}. Allowed methods: {methods} Return a concrete "
+        "hypothesis. If production_failures is present, those are failures found in deployment "
+        "traffic: targeted_sft trains their labeled examples first, and their held-out half measures "
+        "the fix, so name the failure kinds your experiment addresses. Prefer a different strategy "
+        "when prior experiments fail. Learning rate 1e-5 to 1e-3, rank 8 or 16."
+    )
 
 
 def propose(config, development, previous, context=None):
@@ -71,7 +96,7 @@ def propose(config, development, previous, context=None):
             "learning_rate": {"type": "number"},
             "lora_rank": {"type": "integer", "enum": [8, 16]},
             "hypothesis": {"type": "string"},
-            "focus": {"type": "string", "enum": ["arithmetic", "multi_step", "formatting", "general"]},
+            "focus": {"type": "string", "enum": list(FOCUS)},
         },
         "required": ["strategy", "learning_rate", "lora_rank", "hypothesis", "focus"],
         "additionalProperties": False,
@@ -79,7 +104,7 @@ def propose(config, development, previous, context=None):
     payload = {
         "model": os.getenv("FORGE_DIRECTOR_MODEL", "gpt-5-mini"),
         "max_output_tokens": 2000,
-        "instructions": "You are Forge's research director. Choose ONE bounded LoRA experiment based on measured development evidence. You cannot change the objective, reward or benchmark. Never ask for final test data. Use only allowed strategies. broad_sft trains the permitted corpus; targeted_sft reweights its longer multi-step examples. If grpo is allowed, it uses 8 TRL steps with deterministic Terse rewards. Begin with SFT to learn answer format, then compare GRPO after a valid SFT candidate. GRPO warm-starts the best approved SFT adapter, so its lora_rank MUST match that candidate's recorded rank. Return a concrete hypothesis. If production_failures is present, those are failures found in deployment traffic: targeted_sft trains their labeled examples first, and their held-out half measures the fix, so name the failure kinds your experiment addresses. Prefer a different strategy when prior experiments fail. Learning rate 1e-5 to 1e-3, rank 8 or 16.",
+        "instructions": instructions(config),
         "input": json.dumps(context if context is not None else build_input(config, development, previous)),
         "text": {
             "format": {"type": "json_schema", "name": "experiment_proposal", "strict": True, "schema": schema}
