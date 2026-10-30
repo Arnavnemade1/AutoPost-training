@@ -175,9 +175,22 @@ def is_loopback(url: str) -> bool:
         return False
 
 
+class TeacherHTTPError(RuntimeError):
+    def __init__(self, code, detail):
+        super().__init__(f"Teacher returned HTTP {code}")
+        self.code = code
+        self.detail = detail
+
+
+# Reasoning models (OpenAI o-series, gpt-5 and later, also on Azure) refuse these sampling fields.
+UNSUPPORTED = re.compile(r"Unsupported (parameter|value): '(max_tokens|temperature|top_p)'")
+
+
 class TeacherClient:
     def __init__(self, teacher: Teacher):
         self.teacher = teacher
+        # Set after the endpoint refuses sampling fields; the model's own defaults are used.
+        self.model_defaults = False
         self.base = teacher.base_url.rstrip("/")
         self.root = self.base[: -len("/v1")]
         key = os.environ.get(teacher.api_key_env, "") if teacher.api_key_env else ""
@@ -198,7 +211,8 @@ class TeacherClient:
             except urllib.error.HTTPError as error:
                 retry = error.code == 429 or error.code >= 500
                 if not retry or attempt == self.teacher.max_retries:
-                    raise RuntimeError(f"Teacher returned HTTP {error.code}") from None
+                    detail = error.read()[:2000].decode("utf-8", "replace") if error.fp else ""
+                    raise TeacherHTTPError(error.code, detail) from None
             except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
                 if attempt == self.teacher.max_retries:
                     raise RuntimeError(f"Teacher unreachable: {type(error).__name__}") from None
@@ -226,7 +240,18 @@ class TeacherClient:
             "seed": seed,
             "stream": False,
         } | self.teacher.extra_body
-        reply = self._request(f"{self.base}/chat/completions", body)
+        if self.model_defaults:
+            body = self._model_defaults(body)
+        try:
+            reply = self._request(f"{self.base}/chat/completions", body)
+        except TeacherHTTPError as error:
+            if self.model_defaults or error.code != 400 or not UNSUPPORTED.search(error.detail):
+                raise
+            # The token cap still applies; temperature and top_p fall back to the model's defaults,
+            # and every result says so.
+            self.model_defaults = True
+            body = self._model_defaults(body)
+            reply = self._request(f"{self.base}/chat/completions", body)
         choice = reply["choices"][0]
         message = choice.get("message", {})
         content = message.get("content") or ""
@@ -243,7 +268,18 @@ class TeacherClient:
             "prompt_tokens": int(usage.get("prompt_tokens") or 0),
             "completion_tokens": int(usage.get("completion_tokens") or 0),
             "system_fingerprint": reply.get("system_fingerprint"),
+            **(
+                {"sampling": "model defaults (temperature, top_p refused)"}
+                if self.model_defaults
+                else {}
+            ),
         }
+
+    @staticmethod
+    def _model_defaults(body):
+        cap = body.get("max_tokens")
+        body = {k: v for k, v in body.items() if k not in ("temperature", "top_p", "max_tokens")}
+        return body | ({"max_completion_tokens": cap} if cap else {})
 
     def unload(self, wait_s=30):
         """Ask Ollama to drop the model from memory and wait until it has."""

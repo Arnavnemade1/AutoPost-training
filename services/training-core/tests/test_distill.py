@@ -223,3 +223,89 @@ def test_cli_round_trip(teacher, tmp_path):
     assert main(["run", str(path)]) == 0
     assert main(["verify", str(tmp_path / "out")]) == 0
     assert main(["verify", str(Path(tmp_path / "missing"))]) == 2
+
+
+class ReasoningEndpoint:
+    """Refuses sampling fields the way OpenAI reasoning models do; otherwise answers."""
+
+    def __init__(
+        self, refuse=r"Unsupported parameter: 'max_tokens' is not supported with this model."
+    ):
+        self.requests = []
+        endpoint = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                endpoint.requests.append(body)
+                if {"max_tokens", "temperature", "top_p"} & set(body):
+                    data, code = json.dumps({"error": {"message": refuse}}).encode(), 400
+                else:
+                    reply = {
+                        "choices": [{"message": {"content": "#### 4"}, "finish_reason": "stop"}]
+                    }
+                    data, code = json.dumps(reply).encode(), 200
+                self.send_response(code)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}/v1"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+
+def test_reasoning_models_fall_back_to_their_default_sampling_once():
+    from forge_training.distill import Sampling, Teacher, TeacherClient
+
+    endpoint = ReasoningEndpoint()
+    try:
+        client = TeacherClient(
+            Teacher(
+                kind="openai_compatible",
+                base_url=endpoint.url,
+                model="o-model",
+                max_retries=0,
+                teacher_terms="Test endpoint; outputs may train other models.",
+            )
+        )
+        first = client.complete(
+            [{"role": "user", "content": "2+2"}], Sampling(n=1, max_tokens=64), 0
+        )
+        second = client.complete(
+            [{"role": "user", "content": "2+2"}], Sampling(n=1, max_tokens=64), 1
+        )
+    finally:
+        endpoint.server.shutdown()
+    assert first["text"] == second["text"] == "#### 4"
+    assert first["sampling"] == "model defaults (temperature, top_p refused)"
+    # One refused request, then every request uses the model's defaults with the same token cap.
+    assert len(endpoint.requests) == 3
+    assert all(r["max_completion_tokens"] == 64 for r in endpoint.requests[1:])
+    assert not ({"temperature", "top_p", "max_tokens"} & set(endpoint.requests[2]))
+
+
+def test_other_bad_requests_still_fail():
+    import pytest
+
+    from forge_training.distill import Sampling, Teacher, TeacherClient, TeacherHTTPError
+
+    endpoint = ReasoningEndpoint(refuse="Invalid model name")
+    try:
+        client = TeacherClient(
+            Teacher(
+                kind="openai_compatible",
+                base_url=endpoint.url,
+                model="o-model",
+                max_retries=0,
+                teacher_terms="Test endpoint; outputs may train other models.",
+            )
+        )
+        with pytest.raises(TeacherHTTPError, match="HTTP 400"):
+            client.complete([{"role": "user", "content": "2+2"}], Sampling(n=1), 0)
+    finally:
+        endpoint.server.shutdown()
+    assert len(endpoint.requests) == 1
