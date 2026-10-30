@@ -20,27 +20,27 @@ export const FLAGGED = [
   {
     question:
       "Willie came back from Europe with 70 euros. Normally 5 euros is worth 1\u2026",
-    tags: ["No final answer", "Cut off"],
+    tags: ["Missing answer", "Cut off"],
   },
   {
     question:
       "The balance of Pam's bank account tripled during the year. At the end of the\u2026",
-    tags: ["Wrong math", "No final answer", "Cut off"],
+    tags: ["Math slip", "Missing answer", "Cut off"],
   },
   {
     question:
       "Fred was having a party and was responsible for buying canned soda.  He\u2026",
-    tags: ["No final answer", "Cut off"],
+    tags: ["Missing answer", "Cut off"],
   },
   {
     question:
       "A math teacher had $100 to buy three different types of calculators. A basic\u2026",
-    tags: ["No final answer"],
+    tags: ["Missing answer"],
   },
   {
     question:
       "Robbie weighs 100 pounds. Patty was 4.5 times as heavy as Robbie, but she has\u2026",
-    tags: ["No final answer", "Cut off"],
+    tags: ["Missing answer", "Cut off"],
   },
 ];
 
