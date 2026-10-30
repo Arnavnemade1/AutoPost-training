@@ -13,6 +13,14 @@ import {
 } from "@/lib/types";
 import { Icon } from "./icon";
 import { Dialog } from "./dialog";
+
+const ALGORITHMS: Record<string, string> = {
+  broad_sft: "Supervised fine-tuning with LoRA",
+  targeted_sft: "Supervised fine-tuning with LoRA, production failures first",
+  distill_sft: "Supervised fine-tuning with LoRA on verified teacher solutions",
+  grpo: "TRL GRPO with Terse world rewards",
+  dpo: "TRL DPO preference alignment with LoRA",
+};
 import { LossChart } from "./charts";
 
 export function Status({ value }: { value: string }) {
@@ -309,7 +317,7 @@ export function ExperimentDetail({
         <>
           <div className="config-list">
             {Object.entries({
-              Algorithm: "Supervised fine-tuning with LoRA",
+              Algorithm: ALGORITHMS[e.strategy] ?? ALGORITHMS.broad_sft,
               "Base model":
                 campaign?.config.model_id ?? "Qwen/Qwen2.5-0.5B-Instruct",
               "Learning rate": e.proposal.learning_rate,
@@ -319,8 +327,14 @@ export function ExperimentDetail({
               ).join(", "),
               "Maximum sequence length": e.training?.max_sequence_length ?? 768,
               Seed: campaign?.config.seed,
-              Dataset: "openai/gsm8k, disjoint train slice",
-              "Reward version": "exact-answer-v1",
+              Dataset:
+                !campaign?.config.task_pack ||
+                campaign.config.task_pack === "gsm8k"
+                  ? "openai/gsm8k, disjoint train slice"
+                  : `Task pack ${campaign.config.task_pack}, training split`,
+              "Reward version":
+                (e.review?.evidence as { reward_version?: string } | undefined)
+                  ?.reward_version ?? "exact-answer-v1",
               Precision: `${e.training?.dtype ?? "float16"} on ${e.training?.device?.name ?? "Metal or CUDA"}`,
             }).map(([k, v]) => (
               <div key={k}>

@@ -23,6 +23,7 @@ import { Results } from "./results";
 import { Briefing } from "./briefing";
 import { AgentChat } from "./agent-chat";
 import { ProductionView } from "./production";
+import { OverseerView } from "./overseer";
 import { TerseView } from "./terse-view";
 import {
   ArtifactDetail,
@@ -43,6 +44,7 @@ const navigation: { id: View; label: string; group: string }[] = [
   { id: "briefing", label: "Training briefing", group: "Workspace" },
   { id: "chat", label: "Agent chat", group: "Workspace" },
   { id: "production", label: "Production failures", group: "Workspace" },
+  { id: "overseer", label: "Production overseer", group: "Workspace" },
   { id: "terse", label: "Durable actors", group: "Workspace" },
   { id: "overview", label: "Overview", group: "Workspace" },
   { id: "experiments", label: "Experiments", group: "Workspace" },
@@ -57,6 +59,8 @@ const descriptions: Record<View, string> = {
   chat: "The research team's real assignments, decisions and handoffs.",
   production:
     "Failures found in real traffic without an answer key, audited against reviewer labels.",
+  overseer:
+    "Live deployed traffic: free checks on every answer, a budgeted judge on a sample, and a review queue that sends failures back to the lab.",
   terse:
     "Read the persisted coordination state and replay versioned training worlds.",
   overview: "Your autonomous research organization, at a glance.",
@@ -430,7 +434,7 @@ export function Lab() {
         </header>
         <main
           id="main-content"
-          className={`main-content ${["briefing", "chat", "production", "terse"].includes(view) ? "briefing-mode" : ""}`}
+          className={`main-content ${["briefing", "chat", "production", "overseer", "terse"].includes(view) ? "briefing-mode" : ""}`}
         >
           <div className="page-heading">
             <div>
@@ -499,61 +503,64 @@ export function Lab() {
             </div>
           ) : (
             <>
-              {campaign && !["connections", "production"].includes(view) && (
-                <section
-                  className="campaign-bar"
-                  aria-label="Current research campaign"
-                >
-                  <div className="campaign-identity">
-                    <div className="campaign-glyph">
-                      <Icon name="experiments" size={18} />
+              {campaign &&
+                !["connections", "production", "overseer"].includes(view) && (
+                  <section
+                    className="campaign-bar"
+                    aria-label="Current research campaign"
+                  >
+                    <div className="campaign-identity">
+                      <div className="campaign-glyph">
+                        <Icon name="experiments" size={18} />
+                      </div>
+                      <div>
+                        <label htmlFor="campaign-select">
+                          RESEARCH CAMPAIGN
+                        </label>
+                        <select
+                          id="campaign-select"
+                          value={selected}
+                          onChange={(e) => void selectCampaign(e.target.value)}
+                        >
+                          {campaigns.map((c) => (
+                            <option value={c.id} key={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label htmlFor="campaign-select">RESEARCH CAMPAIGN</label>
-                      <select
-                        id="campaign-select"
-                        value={selected}
-                        onChange={(e) => void selectCampaign(e.target.value)}
-                      >
-                        {campaigns.map((c) => (
-                          <option value={c.id} key={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="campaign-meta">
+                      <span>
+                        <Icon name="chip" size={14} />
+                        {modelLabel(campaign.config.model_id)}
+                      </span>
+                      <span className="meta-divider" />
+                      <span>GSM8K subset</span>
+                      {hardwareLabel(campaign.hardware) && (
+                        <>
+                          <span className="meta-divider" />
+                          <span title="Hardware that runs this campaign's training and evaluation">
+                            {hardwareLabel(campaign.hardware)}
+                          </span>
+                        </>
+                      )}
                     </div>
-                  </div>
-                  <div className="campaign-meta">
-                    <span>
-                      <Icon name="chip" size={14} />
-                      {modelLabel(campaign.config.model_id)}
-                    </span>
-                    <span className="meta-divider" />
-                    <span>GSM8K subset</span>
-                    {hardwareLabel(campaign.hardware) && (
-                      <>
-                        <span className="meta-divider" />
-                        <span title="Hardware that runs this campaign's training and evaluation">
-                          {hardwareLabel(campaign.hardware)}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <div className="campaign-status">
-                    <Status value={campaign.status} />
-                    {live && (
-                      <button
-                        className="icon-button stop-button"
-                        onClick={() => setDialog("stop")}
-                        aria-label="Stop campaign"
-                        title="Stop campaign"
-                      >
-                        <Icon name="stop" size={15} />
-                      </button>
-                    )}
-                  </div>
-                </section>
-              )}
+                    <div className="campaign-status">
+                      <Status value={campaign.status} />
+                      {live && (
+                        <button
+                          className="icon-button stop-button"
+                          onClick={() => setDialog("stop")}
+                          aria-label="Stop campaign"
+                          title="Stop campaign"
+                        >
+                          <Icon name="stop" size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </section>
+                )}
               {campaign?.error && ["overview", "briefing"].includes(view) && (
                 <div className="error-banner" role="status">
                   <Icon name="alert" />
@@ -855,6 +862,8 @@ export function Lab() {
                   campaignRunning={live}
                   onCampaign={openCampaign}
                 />
+              ) : view === "overseer" ? (
+                <OverseerView onSent={() => setView("production")} />
               ) : view === "chat" ? (
                 <AgentChat
                   key={campaign?.id}

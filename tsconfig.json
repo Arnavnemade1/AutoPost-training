@@ -32,6 +32,7 @@
     "packages",
     "apps",
     "data",
-    "artifacts"
+    "artifacts",
+    "supabase"
   ]
 }

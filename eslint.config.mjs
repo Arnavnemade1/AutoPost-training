@@ -13,6 +13,7 @@ export default defineConfig([
     "data/**",
     "artifacts/**",
     ".venv/**",
+    "supabase/**",
     "next-env.d.ts",
   ]),
 ]);

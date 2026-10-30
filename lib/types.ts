@@ -9,7 +9,8 @@ export type View =
   | "governance"
   | "results"
   | "artifacts"
-  | "connections";
+  | "connections"
+  | "overseer";
 export type ResultFilter = "all" | "improved" | "regressed";
 export type Agent =
   | "director"
@@ -136,6 +137,8 @@ export type Config = {
   final_samples: number;
   seed: number;
   strategies: string[];
+  task_pack?: string;
+  synthetic_dataset?: string | null;
 };
 export type Campaign = {
   briefing?: {
@@ -287,8 +290,14 @@ export const agentNames: Record<Agent, string> = {
   evaluator: "Experiment evaluator",
   governance: "Governance council",
 };
-export const strategyName = (s: string) =>
-  s === "grpo" ? "GRPO" : s === "targeted_sft" ? "Targeted SFT" : "Broad SFT";
+const STRATEGY_NAMES: Record<string, string> = {
+  broad_sft: "Broad SFT",
+  targeted_sft: "Targeted SFT",
+  distill_sft: "Teacher distillation",
+  grpo: "GRPO",
+  dpo: "DPO alignment",
+};
+export const strategyName = (s: string) => STRATEGY_NAMES[s] ?? s;
 export const percent = (n?: number) =>
   n === undefined ? "—" : `${(n * 100).toFixed(1)}%`;
 export const duration = (s: number) =>

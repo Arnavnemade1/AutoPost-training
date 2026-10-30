@@ -20,6 +20,12 @@ export function Icon({
         <path d="M18 17.5l3 3" />
       </>
     ),
+    overseer: (
+      <>
+        <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    ),
     terse: (
       <>
         <path d="M12 3l9 5v8l-9 5-9-5V8l9-5zm0 10v8M3 8l9 5 9-5" />

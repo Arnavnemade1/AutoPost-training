@@ -6303,3 +6303,128 @@ td:last-child {
     padding: 0 18px 10px;
   }
 }
+
+/* Task setup, teacher data and the production overseer */
+.field-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.field-row > select,
+.field-row > input {
+  flex: 1;
+  min-width: 0;
+}
+.campaign-form .method-list {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+.campaign-form .method-list legend {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 0 6px;
+}
+.campaign-form .method-option {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.method-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wizard-steps {
+  display: flex;
+  gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  color: var(--faint);
+  flex-wrap: wrap;
+}
+.wizard-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wizard-steps li span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 10px;
+}
+.wizard-steps li.current {
+  color: var(--fg);
+}
+.wizard-steps li.current span,
+.wizard-steps li.done span {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.wizard-samples {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.overseer-alerts,
+.overseer-signals {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+.overseer-alerts li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--warning);
+}
+.overseer-signals li {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(80px, 3fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+.overseer-bar {
+  height: 6px;
+  background: var(--surface-hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.overseer-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.overseer-queue-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .overseer-signals li {
+    grid-template-columns: 1fr auto;
+  }
+  .overseer-bar {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
