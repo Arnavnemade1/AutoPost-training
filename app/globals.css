@@ -318,10 +318,10 @@
   margin-bottom: 6px;
 }
 .convo-cluster .imsg-avatar {
-  box-shadow: 0 0 0 2px var(--surface);
+  box-shadow: 0 0 0 3px var(--surface);
 }
 .convo-cluster .imsg-avatar + .imsg-avatar {
-  margin-left: -4px;
+  margin-left: -6px;
 }
 .convo-cluster .imsg-avatar:nth-child(2),
 .convo-cluster .imsg-avatar:nth-child(4) {
@@ -1055,7 +1055,7 @@
   --accent-bg: #20382a;
   --accent-ink: #14291c;
   /* iMessage, dark appearance. Used only by the Agent Relay messenger. */
-  --imsg-blue: #0a84ff;
+  --imsg-blue: #0a6fd8;
   --imsg-in: #26252a;
   --imsg-in-ink: #ffffff;
   --imsg-tapback-ink: #e5e5ea;
@@ -1089,7 +1089,8 @@
   --accent-bg: #f0f0f0;
   --accent-ink: #ffffff;
   /* iMessage, light appearance. */
-  --imsg-blue: #0a84ff;
+  /* Apple's #0071e3: white text holds 4.7:1, where iMessage's #0a84ff gives 3.6:1. */
+  --imsg-blue: #0071e3;
   --imsg-in: #e9e9eb;
   --imsg-in-ink: #000000;
   --imsg-tapback-ink: #3a3a3c;

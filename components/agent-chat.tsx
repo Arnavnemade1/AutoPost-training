@@ -26,11 +26,11 @@ const shortNames: Record<Agent, string> = {
 };
 /** The header cluster: the director in the middle, the team fanned out around it. */
 const cluster: { agent: Agent; size: number }[] = [
-  { agent: "evaluator", size: 30 },
-  { agent: "data", size: 38 },
-  { agent: "director", size: 48 },
-  { agent: "trainer", size: 38 },
-  { agent: "governance", size: 30 },
+  { agent: "evaluator", size: 38 },
+  { agent: "data", size: 44 },
+  { agent: "director", size: 54 },
+  { agent: "trainer", size: 44 },
+  { agent: "governance", size: 38 },
 ];
 /** iMessage starts a new timestamp after a quiet gap of five minutes. */
 const DIVIDER_MS = 5 * 60 * 1000;
