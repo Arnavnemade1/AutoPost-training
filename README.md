@@ -54,6 +54,7 @@ so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md
 - [Research command center and recorder](docs/command-center.md)
 - [Production failures into improvements](docs/production-failures.md)
 - [Training on a Modal H100](docs/remote-gpu.md)
+- [Durable workflow harness and SuperServe sandboxes](docs/workflow-harness.md)
 - [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
 - [Phase 8 verification](docs/verification/phase8-local.md)
 - [Phase 7 verification](docs/verification/phase7-local.md)

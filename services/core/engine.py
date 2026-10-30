@@ -200,7 +200,12 @@ def spawn(campaign_id):
     import shutil
 
     log = (store.ARTIFACTS / campaign_id / "worker.log").open("a")
-    command = [sys.executable, "-m", "services.core.runner", campaign_id]
+    harness_mode = os.environ.get("FORGE_WORKER_HARNESS", "classic")
+    if harness_mode not in {"classic", "durable"}:
+        log.close()
+        raise ValueError("FORGE_WORKER_HARNESS must be classic or durable")
+    module = "services.harness.campaign" if harness_mode == "durable" else "services.core.runner"
+    command = [sys.executable, "-m", module, campaign_id]
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         command = ["caffeinate", "-i", "-s", *command]
     process = subprocess.Popen(

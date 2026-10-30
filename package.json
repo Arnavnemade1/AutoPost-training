@@ -13,6 +13,7 @@
     "test:relay": "node scripts/check-relay.mjs",
     "test": ".venv/bin/python -m pytest tests -q",
     "lab": ".venv/bin/python scripts/lab.py",
+    "harness": ".venv/bin/python -m services.harness",
     "format:check": "prettier --check 'app/**/*.{ts,tsx,css}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' next.config.ts"
   },
   "dependencies": {

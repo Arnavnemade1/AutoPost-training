@@ -22,7 +22,9 @@ def process_alive(pid, command):
 
 
 def worker_alive(pid, campaign_id):
-    return process_alive(pid, f"services.core.runner {campaign_id}")
+    return process_alive(pid, f"services.core.runner {campaign_id}") or process_alive(
+        pid, f"services.harness.campaign {campaign_id}"
+    )
 
 
 def reconcile():
