@@ -87,13 +87,56 @@ The harness cap now matches the already verified Qwen campaign setting of 700 mi
 The larger-model comparison was not rerun during wrap-up. Both failed attempts and
 logs remain preserved. Neither emits a comparison or a benchmark score.
 
+## Campaign integration
+
+The harness, release and one-attempt evaluator above are the only scorer. A second pass
+connects them to the research campaign, its actors and its evidence:
+
+- `FinalEvaluationActor` (Terse) with a `final_evaluator` role. The owner freezes the
+  promoted, governance-approved checkpoint only after the campaign stopped, then binds
+  the hash of the one release packaged from it. Only the final evaluator records one
+  sealed result, for that release.
+- `research.ts --finalize` (`services/orchestrator/src/finalize.ts`): after the report is
+  written, freeze, `forge-harness development`, `forge-harness freeze`, release binding
+  and `forge-final rehearse`, with refusal probes recorded in `final/outcome.json`.
+- `scripts/final-evaluate.ts`: the evaluator's side. It checks the release on disk is the
+  bound one, then authorizes, runs `forge-final evaluate` and records the result.
+- Evidence bundle (`src/bundle.ts`): claims with artifact, JSON pointer and SHA-256; gate
+  checks; harness bundles re-verified with `forge-harness verify`; `checkpoint.tar.gz`;
+  `SHA256SUMS`; copy verification and clean-copy reproduction.
+- The recording manifest names the campaign and its final state hash. The dashboard has
+  a final-evaluation section and a headline tile, and shows `finalizing` live.
+
+Executed on the offline constant fixture (`fixture-final`, mechanics only):
+
+| Step | Observed |
+| --- | --- |
+| Campaign | baseline 0/2 development, three experiments at 2/2, `r1-explore-concise` approved and promoted, stopped |
+| Development harness (GSM8K task, strict / flexible) | 0/2 → 2/2 / 0/2 → 2/2 |
+| Release freeze and rehearsal | frozen; rehearsal 0/2 → 2/2 strict; `official_test_loaded: false` throughout |
+| Refusals | director freeze `FORBIDDEN`, second freeze `FREEZE_FINAL`, release swap `RELEASE_FINAL`, research final record `FORBIDDEN`, rehearsal overwrite `FileExistsError`, fixture authorization refused |
+| Final evaluator command | fixture release refused; nothing recorded |
+| Bundle | 13 claims verified; selection-independence, harness-evidence and run-once checks passed; sealed final `not-run`; recording `not-recorded`; event rules `unverified` |
+| Clean-copy reproduction | bundle copied to a new directory and verified; rehearsal rerun from the copy gave identical generations, scores and comparison (12 s, 0.54 GB peak); a one-byte change in the copied adapter was reported |
+| Cost | whole finalized campaign about 60 s, 1.4–1.6 GB peak resident memory |
+
+Tests: `packages/terse-actors` (the final-evaluation actor test plus the existing suite),
+`services/orchestrator/tests/phase8.test.ts` (6 tests) and
+`apps/web/tests/phase8.test.ts` (final section equals the harness files and gate checks,
+downloads byte for byte, live view fits 1440×900, axe-core clean in light and dark on
+desktop and mobile). The web test's recording check needs FFmpeg. It was skipped
+locally because the Playwright FFmpeg cache used in Phase 7 is no longer on this machine.
+CI installs FFmpeg and the harness extra, so that check runs there.
+
 ## Remaining gates
 
 The private registry enforces the one-attempt workflow, but same-user local execution
 is not an adversarial security boundary. Deploy the evaluator under a separate OS
-owner/container before calling it independent. Source/runtime hashes and task identity
-are pinned; clean-machine reproduction has not yet been executed. The complete sealed
-run, matching two-minute demo recording, and current event-rule acceptance remain pending.
+owner/container before calling it independent. Clean-copy reproduction of the rehearsal
+is executed on the fixture; reproduction on a different machine is not. The complete
+sealed run (a real model, the full 1,319-example test split, once), its matching
+two-minute recording, and current event-rule acceptance remain pending. See the
+[demo script](../demo.md).
 
 See the [harness runbook](../../services/training-core/HARNESS.md) and the upstream
 [pinned GSM8K task](https://github.com/EleutherAI/lm-evaluation-harness/blob/v0.4.9.2/lm_eval/tasks/gsm8k/gsm8k.yaml).

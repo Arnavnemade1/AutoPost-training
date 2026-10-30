@@ -1,5 +1,6 @@
 import { AgentRelay } from "@agent-relay/sdk";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -11,6 +12,7 @@ import { digest, document } from "../../../packages/terse-actors/src/core.js";
 import type { Document } from "../../../packages/terse-actors/src/contracts.js";
 import { POLICY_VERSION } from "../src/director.js";
 import { chooseEvaluationBatch } from "../src/evaluations.js";
+import { finalize, type HarnessSettings } from "../src/finalize.js";
 import { GovernanceReviewer, type RegressionSuite } from "../src/governance.js";
 import { reconcile } from "../src/reconcile.js";
 import { RelayDispatcher, registerParticipants } from "../src/relay.js";
@@ -55,7 +57,7 @@ async function exportLive(
   output: string,
   actors: ReturnType<typeof clients>,
   campaignId: string,
-  status: "running" | "finished" | "failed",
+  status: "running" | "finalizing" | "finished" | "failed",
   about: Document,
 ): Promise<void> {
   const read = (actor: "ResearchLedgerActor" | "ResearchCampaignActor" | "ResearchWorkflowActor") =>
@@ -65,6 +67,7 @@ async function exportLive(
     read("ResearchLedgerActor"),
     read("ResearchWorkflowActor"),
   ]);
+  const final = await actors.owner.read("FinalEvaluationActor", campaignId, "getSnapshot");
   const experiments: Document = {};
   for (const experimentId of Object.keys((campaign?.proposals as Document | undefined) ?? {}))
     experiments[experimentId] = await actors.owner.read(
@@ -86,6 +89,7 @@ async function exportLive(
       ledger,
       workflow,
       experiments,
+      final,
     }),
   );
   await rename(partial, join(directory, "state.json"));
@@ -186,6 +190,48 @@ async function provision(
     };
     return { profile, regression: { ...regression, ...regressionPolicy } };
   }
+  if (name === "fixture-final") {
+    // Offline tiny model on a task SFT reliably learns (every answer is 9), so a campaign
+    // promotes a checkpoint for the Phase 8 freeze, release and rehearsal. Mechanics only.
+    const fixture = join(output, "fixture");
+    await pythonJson(python, [
+      "-c",
+      "import sys,json; from pathlib import Path; from forge_training.fixtures import make_constant_fixture; print(json.dumps({'config':str(make_constant_fixture(Path(sys.argv[1])))}))",
+      fixture,
+    ]);
+    const config = await readJson(join(fixture, "experiment.json"));
+    const templatePath = join(fixture, "template.json");
+    await writeFile(
+      templatePath,
+      JSON.stringify({
+        ...config,
+        campaign_id: "research-fixture-final",
+        experiment_id: "baseline",
+      }),
+    );
+    const profile: ResearchProfile = {
+      name,
+      campaignId: "research-fixture-final",
+      templatePath,
+      source: {
+        records: join(fixture, "data/train.jsonl"),
+        manifest: join(fixture, "data/train.manifest.json"),
+      },
+      base: { data: "full", learningRate: 0.01, maxSteps: 48 },
+      limits: { ...limits, minLearningRate: 0.001, maxLearningRate: 0.01, maxSteps: 96 },
+      costMicroUsd: 100000,
+      maxExperiments: 3,
+      timeouts: { runMs: 420000, evaluationMs: 300000 },
+    };
+    return {
+      profile,
+      regression: {
+        records: join(fixture, "data/regression.jsonl"),
+        manifest: join(fixture, "data/regression.manifest.json"),
+        ...regressionPolicy,
+      },
+    };
+  }
   if (name === "fixture-grpo") {
     // Offline tiny model warm-started on the answer format, so world rewards vary within
     // groups (services/training-core fixtures.py). Mechanics only, never benchmark evidence.
@@ -258,7 +304,9 @@ async function provision(
     };
   }
   if (name !== "qwen" && name !== "qwen-grpo")
-    throw new Error("Profile must be 'fixture', 'fixture-grpo', 'qwen' or 'qwen-grpo'");
+    throw new Error(
+      "Profile must be 'fixture', 'fixture-grpo', 'fixture-final', 'qwen' or 'qwen-grpo'",
+    );
   const grpo = name === "qwen-grpo";
   // GRPO from the raw instruct model sees almost no reward (about 1 in 32 sampled answers
   // has a correct final line), so the profile continues an adapter that writes the format.
@@ -408,6 +456,31 @@ async function provision(
 }
 
 /**
+ * Release harness settings (services/training-core HARNESS.md): a tiny-model protocol for
+ * offline fixtures, and training-core's zero-shot chat protocol and local limits for Qwen.
+ */
+function harnessSettings(fixture: boolean): HarnessSettings {
+  if (fixture)
+    return {
+      protocol: {
+        num_fewshot: 0,
+        apply_chat_template: false,
+        max_new_tokens: 8,
+        max_prompt_tokens: 128,
+        device: "cpu",
+        precision: "float32",
+        seed: 42,
+      },
+      limits: { max_seconds_per_model: 120, min_available_gib: 1.0, min_disk_free_gib: 4.0 },
+    };
+  const examples = join(import.meta.dir, "../../training-core/examples");
+  return {
+    protocol: JSON.parse(readFileSync(join(examples, "harness-qwen-development.json"), "utf8")),
+    limits: JSON.parse(readFileSync(join(examples, "harness-local-limits.json"), "utf8")),
+  };
+}
+
+/**
  * Real Relaycast, Terse and Python optimization under the deterministic director policy.
  * No human selects experiments after start; all roles run in this one process.
  */
@@ -420,6 +493,8 @@ export async function runResearch(
     cacheDir?: string | null;
     startAdapter?: string;
     fromSft?: boolean;
+    /** Phase 8: freeze, package and rehearse the release with this harness Python. */
+    finalize?: { harnessPython: string };
   } = {},
 ): Promise<Document> {
   await mkdir(output, { recursive: true });
@@ -559,6 +634,7 @@ export async function runResearch(
       return results;
     };
     const about = {
+      startedAt: new Date().toISOString(),
       profile: name,
       method,
       campaignId: profile.campaignId,
@@ -589,7 +665,6 @@ export async function runResearch(
     }
     clearInterval(exporter);
     await exporting;
-    await exportLive(output, actors, profile.campaignId, "finished", about);
     const read = (
       actor: "ResearchLedgerActor" | "ResearchCampaignActor" | "ResearchWorkflowActor",
     ) => actors.owner.read(actor, profile.campaignId, "getSnapshot");
@@ -647,8 +722,8 @@ export async function runResearch(
     const entries = Object.values(ledger!.entries as Record<string, Document>).sort(
       (a, b) => Number(a.sequence) - Number(b.sequence),
     );
-    const report = document({
-      phase: method === "grpo" ? 6 : 5,
+    let report = document({
+      phase: options.finalize ? 8 : method === "grpo" ? 6 : 5,
       method,
       startingAdapter: start,
       profile: name,
@@ -682,6 +757,7 @@ export async function runResearch(
       governance: outcome.governance,
       promoted: outcome.promoted,
       faultsInjected: outcome.faultsInjected,
+      final: null,
       vetoEnforcement: await vetoProbe(),
       evaluation: {
         batchSizeRequested: batch.requested,
@@ -697,6 +773,30 @@ export async function runResearch(
     });
     await writeFile(join(output, "research-report.json"), JSON.stringify(report, null, 2));
     await writeFile(join(output, "ledger.json"), JSON.stringify(ledger, null, 2));
+    // Phase 8, after the report the release freeze verifies: freeze, package and rehearse.
+    if (options.finalize) {
+      const finalizing = setInterval(() => {
+        exporting = exporting
+          .then(() => exportLive(output, actors, profile.campaignId, "finalizing", about))
+          .catch(() => undefined);
+      }, 2000);
+      let final: Document;
+      try {
+        final = await finalize({
+          dispatcher,
+          output,
+          harnessPython: options.finalize.harnessPython,
+          harness: harnessSettings(model.model_status === "fixture"),
+          fixture: model.model_status === "fixture",
+        });
+      } finally {
+        clearInterval(finalizing);
+        await exporting;
+      }
+      report = document({ ...report, final });
+      await writeFile(join(output, "research-report.json"), JSON.stringify(report, null, 2));
+    }
+    await exportLive(output, actors, profile.campaignId, "finished", about);
     return report;
   } finally {
     await relayServer?.stop();
@@ -717,6 +817,10 @@ if (import.meta.main) {
     tamperFirstReviewedCheckpoint: process.argv.includes("--inject-tamper"),
     fromSft: process.argv.includes("--from-sft"),
     startAdapter: flag > 0 ? process.argv[flag + 1] : undefined,
+    // The harness extra may live in its own environment (FORGE_HARNESS_PYTHON).
+    finalize: process.argv.includes("--finalize")
+      ? { harnessPython: process.env.FORGE_HARNESS_PYTHON ?? python }
+      : undefined,
     cacheDir:
       process.env.FORGE_EVALUATION_CACHE ?? join(import.meta.dir, "../artifacts/cache/evaluations"),
   });

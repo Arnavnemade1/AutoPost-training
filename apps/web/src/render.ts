@@ -1,4 +1,4 @@
-import type { CampaignView, ExperimentView, Score } from "./campaign.js";
+import type { CampaignView, ExperimentView, HarnessPair, Score } from "./campaign.js";
 import { budgetMeter, esc, ledgerGraph, rewardChart, seriesSlot } from "./charts.js";
 
 /**
@@ -51,7 +51,7 @@ function header(c: CampaignView): string {
       ? "critical"
       : c.status === "finished"
         ? "good"
-        : c.status === "running"
+        : c.status === "running" || c.status === "finalizing"
           ? "active"
           : "neutral";
   return `<header class="top">
@@ -65,7 +65,7 @@ function alerts(c: CampaignView): string {
   const parts: string[] = [];
   if (c.recording.status === "failed")
     parts.push(
-      `<div class="alert critical" role="alert" data-testid="recording-failure"><strong>Recording failed before the campaign could start.</strong> ${esc(c.recording.error ?? "No error was recorded.")} The campaign was not started.</div>`,
+      `<div class="alert critical" role="alert" data-testid="recording-failure"><strong>Recording failed before the campaign could start.</strong> ${esc(c.recording.error ?? "No error was recorded.")} ${c.status === "waiting" ? "The campaign was not started." : "The campaign ran unrecorded (<code>--allow-unrecorded</code>)."}</div>`,
     );
   if (c.fixture)
     parts.push(
@@ -94,6 +94,7 @@ function kpis(c: CampaignView): string {
   <div class="tile"><h2>${c.startingAdapter ? "Starting policy" : "Baseline"}</h2><p class="value">${score(c.baseline, "baseline-score")}</p><p class="note">development${c.startingAdapter ? ` · adapter <code>${esc(c.startingAdapter.slice(0, 12))}</code>` : " · untrained model"}</p>${sourceNote(c.baseline)}</div>
   <div class="tile"><h2>Best development candidate</h2><p class="value">${best ? score(best.development, "best-score") : score(null, "best-score")}</p><p class="note">${best ? esc(best.label) : "none evaluated yet"}</p>${best ? sourceNote(best.development) : ""}</div>
   <div class="tile"><h2>Promoted</h2><p class="value" data-testid="promoted">${c.promoted ? esc(c.promoted) : "None"}</p><p class="note">${c.stop ? `stopped: ${esc(c.stop.rule)}` : "campaign open"}</p></div>
+${finalTile(c)}
   <div class="tile"><h2>Rollouts rewarded by worlds</h2><p class="value" data-testid="rollouts-total" data-rewarded="${rewarded}" data-rollouts="${rollouts}">${rewarded}/${rollouts}</p><p class="note">every reward is an RLWorldActor transition</p></div>
   <div class="tile"><h2>Budget used</h2>${
     budget && Number.isFinite(budget.maxMicroUsd)
@@ -221,6 +222,75 @@ function messagesPanel(c: CampaignView, limit: number): string {
   return `<div tabindex="0" role="region" aria-label="Agent messages table" class="scroll"><table><caption>${shown.length < c.messages.length ? `Latest ${shown.length} of ${c.messages.length}` : `All ${c.messages.length}`} Relay messages from the durable workflow outbox</caption><thead><tr><th scope="col">Seq</th><th scope="col">Kind</th><th scope="col">Route</th><th scope="col">Experiment</th><th scope="col">Delivery</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+const checkTone = (value: string): Parameters<typeof status>[1] =>
+  value === "passed" || value === "recorded"
+    ? "good"
+    : value === "failed"
+      ? "critical"
+      : value === "unverified" || value === "pending"
+        ? "warning"
+        : "neutral";
+const words = (name: string) => name.replace(/([A-Z])/g, " $1").toLowerCase();
+
+/** Headline tile: the sealed result once it exists, else the release rehearsal. */
+function finalTile(c: CampaignView): string {
+  const f = c.final;
+  const pair = f.sealed ?? f.rehearsal;
+  if (!pair) return "";
+  const kind = f.sealed ? "sealed" : "rehearsal";
+  return `<div class="tile"><h2>${f.sealed ? "Sealed GSM8K test" : "Release rehearsal"}</h2><p class="value">${score(pair.strict.baseline, `${kind}-baseline-kpi`)} <span class="of">→</span> ${score(pair.strict.candidate, `${kind}-candidate-kpi`)}</p><p class="note">${f.sealed ? "strict match · run once" : "strict match · development data, not a final claim"}</p></div>`;
+}
+
+function finalPanel(c: CampaignView): string {
+  const f = c.final;
+  if (f.status === "absent")
+    return `<p class="empty" data-testid="final-status" data-status="absent">No final evaluation. After the campaign stops, <code>--finalize</code> freezes the promoted checkpoint and packages a release; the sealed test runs once, in the separately owned evaluator.</p>`;
+  const head = f.frozen
+    ? `<p data-testid="final-status" data-status="${f.status}">${status(`Frozen ${f.frozen.label}`, "good")} checkpoint <code data-testid="frozen-checkpoint">${esc(f.frozen.checkpointSha256.slice(0, 16))}</code> after the campaign stopped · development ${f.frozen.developmentCorrect}/${f.frozen.developmentExamples} · ${esc(f.frozen.frozenAt)}</p>`
+    : `<p data-testid="final-status" data-status="${f.status}">${status("Not frozen", "critical")}</p>`;
+  const failure =
+    f.status === "failed"
+      ? `<p>${status("Finalization stopped", "critical")} ${esc(f.reason ?? "")}</p>`
+      : "";
+  const release = f.release
+    ? `<p class="note">Release <code data-testid="release-bundle">${esc(f.release.sha256.slice(0, 16))}</code> bound in the actor · EleutherAI lm-evaluation-harness <span data-testid="final-harness">${esc(f.release.harnessVersion ?? "—")}</span>, GSM8K task unmodified${f.release.protocol ? ` · ${f.release.protocol.fewshot}-shot, ${f.release.protocol.chat ? "chat template" : "plain prompt"}, ${f.release.protocol.maxNewTokens} new tokens, identical for both policies` : ""}.</p>`
+    : "";
+  const cell = (pair: { baseline: Score; candidate: Score }, id: string) =>
+    `${score(pair.baseline, `${id}-baseline`)} → ${score(pair.candidate, `${id}-candidate`)}`;
+  const row = (name: string, id: string, pair: HarnessPair | null, note: string) =>
+    `<tr><th scope="row">${esc(name)}<div class="note">${note}</div></th>${
+      pair
+        ? `<td class="num">${cell(pair.strict, `${id}-strict`)}</td><td class="num">${cell(pair.flexible, `${id}-flexible`)}</td>`
+        : `<td class="num">—</td><td class="num">—</td>`
+    }</tr>`;
+  const sealedNote = f.sealed
+    ? f.recordMismatch
+      ? status("actor record differs", "critical")
+      : `${status("recorded by the final evaluator", "good")}${f.improvementSupported === null ? "" : ` · improvement gate ${f.improvementSupported ? "met" : "not met"}`}`
+    : esc(f.sealedStatus?.reason ?? "not run");
+  const table = `<div tabindex="0" role="region" aria-label="Harness results table" class="scroll"><table><caption>Starting policy → frozen checkpoint, correct answers</caption>
+    <thead><tr><th scope="col">Evaluation</th><th scope="col" class="num">Strict match</th><th scope="col" class="num">Flexible extract</th></tr></thead><tbody>
+    ${row("Development harness", "development", f.development, "selection data, paired")}
+    ${row("Release rehearsal", "rehearsal", f.rehearsal, "the release path on development data; not a final claim")}
+    ${row("Sealed GSM8K test", "sealed", f.sealed, sealedNote)}
+    </tbody></table></div>`;
+  const sources = [f.development, f.rehearsal, f.sealed]
+    .filter((p): p is HarnessPair => !!p)
+    .map((p) => sourceNote(p.strict.candidate))
+    .join("");
+  const checks = f.checks.length
+    ? `<ul class="checks" data-testid="final-checks">${f.checks
+        .map(
+          (k) =>
+            `<li data-check="${esc(k.name)}" data-status="${esc(k.status)}">${status(`${words(k.name)}: ${k.status}`, checkTone(k.status))}</li>`,
+        )
+        .join(
+          "",
+        )}</ul><p class="note">Gate checks from ${fileLink(f.checksSource!.path, f.checksSource!.path)} <code>${f.checksSource!.sha256.slice(0, 12)}</code>.</p>`
+    : `<p class="note">No evidence bundle yet; gate checks are written with it.</p>`;
+  return `${head}${failure}${release}${f.development || f.rehearsal || f.sealed ? table + sources : ""}${checks}`;
+}
+
 function recordingPanel(c: CampaignView): string {
   const r = c.recording;
   const exports = r.exports
@@ -261,6 +331,7 @@ export function renderMain(c: CampaignView, view: View, inspect: string | null):
     ${section("training", "Training metrics", rewardChart(c.experiments))}
     ${section("environment", "Environment inspector", inspector(c, inspect, 16))}
     ${section("governance", "Governance", governancePanel(c))}
+    ${section("final", "Final evaluation", finalPanel(c))}
     ${section("examples", "Before and after", examplesPanel(c))}
     ${section("messages", "Agent messages", messagesPanel(c, 40))}
     ${section("recording", "Recording", recordingPanel(c))}
@@ -274,7 +345,10 @@ export function renderFragment(c: CampaignView, view: View, inspect: string | nu
 
 export function renderPage(c: CampaignView, view: View, inspect: string | null): string {
   const live =
-    c.status === "running" || c.status === "waiting" || c.recording.status === "recording";
+    c.status === "running" ||
+    c.status === "finalizing" ||
+    c.status === "waiting" ||
+    c.recording.status === "recording";
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forge command center</title><style>${CSS}</style></head>
@@ -306,14 +380,14 @@ main{max-width:1400px;margin:0 auto;display:grid;gap:16px}footer{max-width:1400p
 .alert{border-radius:8px;padding:10px 12px;border:1px solid var(--border)}.alert.critical{background:var(--alert-c)}.alert.warning{background:var(--alert-w)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .tile,.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:0}
-.tile h2{font-size:13px;font-weight:600;color:var(--ink-2);margin:0}.tile .value{font-size:28px;font-weight:600;margin:4px 0 0}.tile .of{font-size:14px;color:var(--ink-2);font-weight:400}
+.tile h2,.tile h3{font-size:13px;font-weight:600;color:var(--ink-2);margin:0}.kpis.final{margin:10px 0}.tile .value{font-size:28px;font-weight:600;margin:4px 0 0}.tile .of{font-size:14px;color:var(--ink-2);font-weight:400}
 .note,.source{color:var(--ink-2);font-size:12px;margin:4px 0 0}.source{display:block}
 .card h2{font-size:16px;margin:0 0 10px}.card h3{font-size:14px;margin:0 0 6px}
 .meter{display:flex;height:8px;border-radius:4px;background:var(--track);overflow:hidden;margin-top:8px}.meter .spent{background:var(--spent)}.meter .reserved{background:var(--reserved)}
 .scroll{overflow-x:auto;max-width:100%}.scroll:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}caption{text-align:left;color:var(--ink-2);font-size:12px;padding-bottom:6px}
 th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid);vertical-align:top}thead th{font-size:12px;color:var(--ink-2);font-weight:600}
-.num{text-align:right}.completion,.prediction{font:12px ui-monospace,Menlo,monospace;white-space:pre-wrap;max-width:420px;color:var(--ink-2)}
+.num{text-align:right}th .note{font-weight:400;margin:2px 0 0}.completion,.prediction{font:12px ui-monospace,Menlo,monospace;white-space:pre-wrap;max-width:420px;color:var(--ink-2)}
 .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
 .swatch.s1,.kind.s1{background:var(--s1);fill:var(--s1)}.swatch.s2,.kind.s2{background:var(--s2);fill:var(--s2)}.swatch.s3,.kind.s3{background:var(--s3);fill:var(--s3)}.swatch.s4,.kind.s4{background:var(--s4);fill:var(--s4)}
 .series{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.series.s1{stroke:var(--s1)}.series.s2{stroke:var(--s2)}.series.s3{stroke:var(--s3)}.series.s4{stroke:var(--s4)}.series.s5{stroke:var(--s5)}

@@ -328,6 +328,13 @@ export class Recorder {
       await record(`${speed}x`, `export-${speed}x.webm`, speed, fps, count);
     }
     const version = (await run(this.ffmpeg, ["-version"])).stderr.split("\n")[0];
+    // Ties the recording to the run: the campaign's state as it was when capture stopped.
+    const live = await readFile(join(this.options.directory, "live", "state.json")).catch(
+      () => null,
+    );
+    const campaign = live
+      ? { campaignId: JSON.parse(String(live)).campaignId ?? null, finalStateSha256: sha256(live) }
+      : null;
     await writeFile(
       join(this.dir, "manifest.json"),
       JSON.stringify(
@@ -343,6 +350,7 @@ export class Recorder {
           wallSeconds: (Date.parse(finishedAt) - Date.parse(this.startedAt)) / 1000,
           frames: { total: this.frames, repeated: this.repeats, log: "recording/frames.jsonl" },
           ffmpeg: { path: this.ffmpeg, version },
+          campaign,
           videos,
         },
         null,

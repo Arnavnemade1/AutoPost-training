@@ -62,7 +62,10 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   governance-checked release freeze, rehearsal, portable adapter/evidence bundles and a
   separate one-attempt final evaluator implemented. Fixture generation/reload and failure
   paths verified. The saved-output audit exposes a strict/flexible scoring disagreement;
-  no sealed final evaluation or model improvement is claimed.
+  no sealed final evaluation or model improvement is claimed. The campaign now drives
+  it: an actor freeze after the stop, release binding, rehearsal, a separately run final
+  evaluator that records once, an evidence bundle with claims and gate checks, a
+  clean-copy reproduction, and a dashboard section, all verified on a fixture.
   See [Phase 8 verification](verification/phase8-local.md).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.

@@ -55,6 +55,7 @@ const envelopeSchema = z.strictObject({
   version: z.literal(1),
   projectId: id,
   actorName: z.enum([
+    "FinalEvaluationActor",
     "ResearchLedgerActor",
     "ResearchWorkflowActor",
     "ResearchCampaignActor",
@@ -76,7 +77,16 @@ const envelopeSchema = z.strictObject({
 const trustSchema = z.record(
   id,
   z.strictObject({
-    role: z.enum(["owner", "director", "coordinator", "worker", "evaluator", "reviewer", "data"]),
+    role: z.enum([
+      "owner",
+      "director",
+      "coordinator",
+      "worker",
+      "evaluator",
+      "reviewer",
+      "data",
+      "final_evaluator",
+    ]),
     publicKeyPem: z.string().min(1),
     campaignIds: z.array(id).min(1),
   }),

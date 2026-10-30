@@ -5,9 +5,9 @@ propose and run post-training experiments, evaluate results, and select a checkp
 under independent governance and a bounded compute budget.
 
 **Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
-rewards are Terse math-world transitions, seven durable Terse actors (campaigns,
-experiments, governance, artifacts, math worlds, a message outbox and a research
-ledger), Agent Relay dispatch between research roles, a deterministic director that
+rewards are Terse math-world transitions, eight durable Terse actors (campaigns,
+experiments, governance, artifacts, math worlds, a message outbox, a research ledger
+and final evaluation), Agent Relay dispatch between research roles, a deterministic director that
 picks each next experiment from measured development results, and an independent
 reviewer that verifies artifacts, data, rewards, protocol and regressions from bytes
 and actor journals before any promotion. In a local Qwen2.5-0.5B SFT campaign the
@@ -20,7 +20,12 @@ vetoed. A research command center renders campaigns from stored files and record
 with 100x and 120x exports (verified on a fixture campaign). Sealed final evaluation
 is now implemented as a separate, one-attempt evaluator with a pinned EleutherAI
 harness, paired development diagnostics, resource guards, checkpoint freeze and
-release bundles. No sealed final evaluation or benchmark improvement is claimed.
+release bundles. A campaign drives it after it stops: the promoted checkpoint is frozen
+in an actor, its release is bound and rehearsed, and an evidence bundle maps every stated
+number to a hashed artifact and reproduces from a clean copy (verified on a fixture).
+No sealed final evaluation or benchmark improvement is claimed.
+
+- [Two-minute demo script](docs/demo.md)
 
 - [Implementation phases and acceptance gates](docs/implementation-phases.md)
 - [Architecture and trust boundaries](docs/architecture.md)
@@ -31,6 +36,7 @@ release bundles. No sealed final evaluation or benchmark improvement is claimed.
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Research dashboard and recorder](apps/web/README.md)
 - [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
+- [Phase 8 verification](docs/verification/phase8-local.md)
 - [Phase 7 verification](docs/verification/phase7-local.md)
 - [Phase 6 verification](docs/verification/phase6-local.md)
 - [Phase 5 verification](docs/verification/phase5-local.md)

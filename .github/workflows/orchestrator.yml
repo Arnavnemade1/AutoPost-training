@@ -20,7 +20,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       HF_HUB_OFFLINE: '1'
       TRANSFORMERS_OFFLINE: '1'
@@ -36,11 +36,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install pinned CPU training worker
+      - name: Install pinned CPU training worker and evaluation harness
         working-directory: services/training-core
         run: |
           python -m pip install torch==2.9.0 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install -e '.[train]'
+          python -m pip install -e '.[train,data,harness]'
           echo "FORGE_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
       - name: Install actor and orchestrator dependencies
         run: |

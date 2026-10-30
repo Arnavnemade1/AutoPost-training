@@ -9,6 +9,7 @@ const types: Record<string, string> = {
   webm: "video/webm",
   safetensors: "application/octet-stream",
   jpg: "image/jpeg",
+  gz: "application/gzip",
 };
 
 export interface Dashboard {

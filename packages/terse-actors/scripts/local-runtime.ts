@@ -24,6 +24,7 @@ export function localAuthority(campaignIds: string[]): LocalAuthority {
     "evaluator",
     "reviewer",
     "data",
+    "final_evaluator",
   ];
   for (const role of roles) {
     const keys = generateKeyPairSync("ed25519"),

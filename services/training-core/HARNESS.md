@@ -117,5 +117,10 @@ operator-owned workflow when ownership is actually separated. They cannot stop t
 from editing code, minting another authority, or accessing already downloaded data. Do not
 claim independent final evaluation until the separate execution boundary is deployed.
 
-A clean-machine reproduction, independently executed full final run, matching two-minute
-demo recording, and event-rule acceptance remain required before final readiness.
+The orchestrator drives these commands for a campaign (`research.ts --finalize`, then
+`scripts/final-evaluate.ts` for the evaluator) and binds the release and final result in
+its `FinalEvaluationActor`; see the [orchestrator README](../orchestrator/README.md).
+
+An independently executed full final run, reproduction on a different machine, a
+matching two-minute demo recording, and event-rule acceptance remain required before final
+readiness. Clean-copy reproduction of a fixture rehearsal is verified.

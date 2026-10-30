@@ -7,7 +7,10 @@ preflight-approved assignment that matches a local job allowlist. A deterministi
 research director chooses each experiment from measured development results and
 records its reasoning in the Terse research ledger (Phase 4). GRPO jobs score every
 completion through a world gateway whose rewards are `RLWorldActor` transitions, and
-every consumer re-checks those rewards against the worlds' journals (Phase 6).
+every consumer re-checks those rewards against the worlds' journals (Phase 6). After the
+campaign stops, `--finalize` freezes the promoted checkpoint and drives training-core's
+pinned harness to package and rehearse a release; the sealed test runs once, separately
+(Phase 8).
 
 ## Run
 
@@ -63,6 +66,56 @@ uses one completion per loss micro-batch and gradient checkpointing. Set
 `PYTORCH_MPS_HIGH_WATERMARK_RATIO` (with a lower `PYTORCH_MPS_LOW_WATERMARK_RATIO`) to
 cap Apple GPU memory so a job fails rather than swapping; both are passed to Python.
 
+## Final evaluation (Phase 8)
+
+```sh
+FORGE_PYTHON=... FORGE_HARNESS_PYTHON=/absolute/path/to/harness/python \
+  npm run research -- fixture-final --finalize
+FORGE_HARNESS_PYTHON=... bun scripts/bundle.ts artifacts/research-fixture-final-<timestamp>
+bun scripts/bundle.ts --verify <bundle>
+FORGE_HARNESS_PYTHON=... bun scripts/bundle.ts --reproduce <bundle> --output <new-dir>
+FORGE_HARNESS_PYTHON=... bun scripts/final-evaluate.ts <campaign-dir> --authority <evaluator-authority>
+```
+
+`FORGE_HARNESS_PYTHON` is an environment with training-core's `harness` extra
+(EleutherAI lm-evaluation-harness 0.4.9.2; [HARNESS.md](../training-core/HARNESS.md));
+it defaults to `FORGE_PYTHON`. After the research report is written, `--finalize`
+(`src/finalize.ts`):
+
+1. freezes the promoted checkpoint in `FinalEvaluationActor` (owner key; refused while the
+   campaign is open, for anything but the promoted, approved checkpoint, and twice);
+2. runs `forge-harness development`: starting policy and checkpoint, paired, in fresh
+   processes under one frozen protocol on the development set;
+3. runs `forge-harness freeze`, which re-verifies the training bundle, promotion,
+   governance evidence and held-out regressions and packages the release, whose bundle
+   hash the owner binds in the actor once;
+4. rehearses the release on development data (`forge-final rehearse`), never a final claim;
+5. records probes: a director freeze, a second freeze, a release swap, a research-role
+   final record and a rehearsal overwrite are each refused, and a fixture release cannot
+   obtain final test access.
+
+`final/outcome.json` records each step; the dashboard shows it while it runs. The
+fixture-final profile is an offline tiny model on a task SFT reliably learns (every answer
+is 9), so a checkpoint is always promoted; it takes about a minute and is mechanics only.
+For Qwen profiles the harness uses training-core's zero-shot chat protocol and local
+limits from `services/training-core/examples/`.
+
+`scripts/final-evaluate.ts` is the evaluator's side. It takes the evaluator's authority
+(`forge-final init-authority`), checks that the release on disk is the bound one, obtains
+the one-attempt grant, runs `forge-final evaluate` on the full pinned GSM8K test split,
+and records the result with the final evaluator's key. It refuses fixture releases.
+Locally it restarts the actor runtime on the campaign's journal with fresh keys, so it
+rehearses the separation rather than enforcing it.
+
+`scripts/bundle.ts` (`src/bundle.ts`) builds `final/bundle/` from stored files:
+`claims.json` (every stated number with its artifact, JSON pointer and SHA-256),
+`checks.json` (the Phase 8 gate checks and what each observed), the harness bundles and
+release, `checkpoint.tar.gz`, campaign evidence, recordings and `SHA256SUMS`. Harness
+bundles are re-verified with `forge-harness verify`. `--verify` checks a copy anywhere,
+and `--reproduce` rehearses the copied release again and requires identical generations,
+scores and comparison. `apps/web/scripts/record-campaign.ts` builds the bundle once the
+recording it cites is complete.
+
 ## Components
 
 | File | Responsibility |
@@ -78,6 +131,9 @@ cap Apple GPU memory so a job fails rather than swapping; both are passed to Pyt
 | `src/research.ts` | Message-driven campaign: each role reacts to Relay messages; director decides after a round's measurements are recorded; coordinator settles terminal reservations |
 | `scripts/scenario.ts` | The Phase 3 fault-injection lifecycle used by `test` and `demo` |
 | `scripts/research.ts` | Provisions a profile, freezes the baseline and runs a research campaign |
+| `src/finalize.ts` | Phase 8 research side: actor freeze, development harness, release freeze and binding, rehearsal, refusal probes |
+| `src/bundle.ts`, `scripts/bundle.ts` | Evidence bundle, claims, gate checks, copy verification and clean-copy reproduction |
+| `scripts/final-evaluate.ts` | Phase 8 evaluator side: the one-attempt sealed run, recorded against the bound release |
 
 ## Evaluation cost
 
@@ -189,11 +245,13 @@ not authorization. Recipients poll; Relay inbox acknowledgements and push subscr
 are not used. Only the local Relaycast engine has been exercised, not a hosted Relay
 workspace. Evaluator reproduction and governance review share host, code and process
 with the worker, but use separate keys and re-derive facts from bytes rather than
-messages; separate infrastructure and the sealed final evaluator are Phase 8. The
+messages. The final evaluator's authority, grant and sealed data belong to a separately
+owned account in deployment; locally the same user holds everything. The
 director's working state is in memory and is not resumed after a process crash; the
 ledger keeps its record. Selecting among candidates on a small development set can
 overfit it. See the
 [Phase 3](../../docs/verification/phase3-local.md),
 [Phase 4](../../docs/verification/phase4-local.md) and
-[Phase 5](../../docs/verification/phase5-local.md) and
-[Phase 6](../../docs/verification/phase6-local.md) verification records.
+[Phase 5](../../docs/verification/phase5-local.md),
+[Phase 6](../../docs/verification/phase6-local.md) and
+[Phase 8](../../docs/verification/phase8-local.md) verification records.

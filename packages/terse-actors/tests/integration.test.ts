@@ -299,6 +299,9 @@ test("evaluation and promotion require terminal work, settled cost, approval and
     "promote-first",
   );
   expect(promoted.candidateCorrect).toBe(4);
+  await expect(command("owner", "FinalEvaluationActor", campaign, "freeze", {})).rejects.toThrow(
+    "CAMPAIGN_OPEN",
+  );
   expect(
     await command("director", C, campaign, "promote", { experimentId: id }, "promote-first"),
   ).toEqual(promoted);
@@ -513,6 +516,72 @@ test("unused grants abort safely, terminal states cannot restart, stop prevents 
   expect(rows.map((row) => row.sequence)).toEqual(rows.map((_, i) => i + 1));
   expect(rows.filter((row) => row.type === "CHECKPOINT_PROMOTED")).toHaveLength(1);
   expect(document(await snapshot(C, campaign)).spentMicroUsd).toBe(60);
+});
+
+test("final evaluation freezes once after stop, binds one release and records once", async () => {
+  const F: ActorName = "FinalEvaluationActor";
+  const best = (await snapshot(C, campaign)).best as Document;
+  const release = {
+    releaseSha256: hash("release"),
+    checkpointSha256: best.checkpointSha256,
+    developmentHarnessSha256: hash("development-harness"),
+  };
+  const final = {
+    releaseSha256: release.releaseSha256,
+    checkpointSha256: best.checkpointSha256,
+    datasetSha256: hash("gsm8k-test"),
+    harness: { name: "lm-evaluation-harness", version: "0.4.9.2", task: "gsm8k" },
+    protocolSha256: hash("protocol"),
+    numExamples: 1319,
+    strict: { baselineCorrect: 400, candidateCorrect: 450 },
+    flexible: { baselineCorrect: 500, candidateCorrect: 510 },
+    finalImprovementSupported: true,
+    resultBundleSha256: hash("result"),
+  };
+  await expect(command("director", F, campaign, "freeze", {})).rejects.toThrow("FORBIDDEN");
+  await expect(command("owner", F, campaign, "bindRelease", release)).rejects.toThrow("NOT_FROZEN");
+  const frozen = await command("owner", F, campaign, "freeze", {}, "freeze");
+  expect(frozen.checkpointSha256).toBe(best.checkpointSha256);
+  expect(await command("owner", F, campaign, "freeze", {}, "freeze")).toEqual(frozen);
+  await expect(command("owner", F, campaign, "freeze", {})).rejects.toThrow("FREEZE_FINAL");
+  await expect(command("final_evaluator", F, campaign, "recordFinal", final)).rejects.toThrow(
+    "NOT_RELEASED",
+  );
+  await expect(
+    command("owner", F, campaign, "bindRelease", { ...release, checkpointSha256: hash("other") }),
+  ).rejects.toThrow("NOT_FROZEN_CHECKPOINT");
+  await expect(command("director", F, campaign, "bindRelease", release)).rejects.toThrow(
+    "FORBIDDEN",
+  );
+  await command("owner", F, campaign, "bindRelease", release);
+  await expect(
+    command("owner", F, campaign, "bindRelease", { ...release, releaseSha256: hash("swap") }),
+  ).rejects.toThrow("RELEASE_FINAL");
+  await expect(command("owner", F, campaign, "recordFinal", final)).rejects.toThrow("FORBIDDEN");
+  await expect(
+    command("final_evaluator", F, campaign, "recordFinal", {
+      ...final,
+      releaseSha256: hash("swap"),
+    }),
+  ).rejects.toThrow("NOT_FROZEN_RELEASE");
+  await expect(
+    command("final_evaluator", F, campaign, "recordFinal", { ...final, numExamples: 10 }),
+  ).rejects.toThrow();
+  const recorded = await command("final_evaluator", F, campaign, "recordFinal", final);
+  expect(recorded.evaluatorKeyId).toBe("final_evaluator-local");
+  await expect(
+    command("final_evaluator", F, campaign, "recordFinal", {
+      ...final,
+      strict: { baselineCorrect: 400, candidateCorrect: 0 },
+    }),
+  ).rejects.toThrow("FINAL_ONCE");
+  expect(((await snapshot(F, campaign)).final as Document).strict).toEqual(final.strict);
+  const events = (await c.owner.read(F, campaign, "getEvents", [0, 10]))!.events as Document[];
+  expect(events.map((event) => event.type)).toEqual([
+    "CHECKPOINT_FROZEN",
+    "RELEASE_BOUND",
+    "FINAL_RECORDED",
+  ]);
 });
 
 test("concurrency cap, bounded retries, protocol mismatch and strict RPC payloads", async () => {

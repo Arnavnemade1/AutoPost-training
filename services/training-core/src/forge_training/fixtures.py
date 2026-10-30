@@ -218,3 +218,71 @@ def make_grpo_fixture(output: Path) -> Path:
     config_path = output / "experiment.json"
     write_json(config_path, config)
     return config_path
+
+
+# Questions whose answers are all 9 ("What is a plus 9 - a?"), split so that train,
+# development and regression never share a question. The sealed final evaluator writes its
+# own two questions (a = 0 and a = 9) and checks they appear in none of these.
+CONSTANT_TRAIN, CONSTANT_DEVELOPMENT, CONSTANT_REGRESSION = (1, 2, 3, 4), (5, 6), (7, 8)
+
+
+def _nines(name: str, numbers) -> list[Example]:
+    return [
+        Example(id=f"{name}-{a}", question=f"What is {a} plus {9 - a}?", answer="#### 9")
+        for a in numbers
+    ]
+
+
+def make_constant_fixture(output: Path) -> Path:
+    """A random tiny model and a task supervised training reliably improves.
+
+    Every answer is 9, so a short SFT run lifts development accuracy from 0 to 1 on any
+    platform; campaigns on it promote a checkpoint, which the freeze and sealed final
+    evaluation need. Mechanics only: learning a constant is not evidence about useful models.
+    """
+    output.mkdir(parents=True, exist_ok=False)
+    model_dir = output / "base-model"
+    model_dir.mkdir()
+    # Without token type IDs, training, evaluation and the final harness see the same inputs.
+    model, tokenizer = _tiny_model(model_input_names=["input_ids", "attention_mask"])
+    tokenizer.save_pretrained(model_dir)
+    model.save_pretrained(model_dir, safe_serialization=True)
+    data_dir = output / "data"
+    data_dir.mkdir()
+    _write_synthetic(data_dir, "train", _nines("train", CONSTANT_TRAIN))
+    _write_synthetic(data_dir, "development", _nines("development", CONSTANT_DEVELOPMENT))
+    _write_synthetic(
+        data_dir, "regression", _nines("regression", CONSTANT_REGRESSION), "development"
+    )
+    config = {
+        "campaign_id": "constant-mechanics",
+        "experiment_id": "constant-sft",
+        "model": {
+            "source": "local",
+            "model_status": "fixture",
+            "model_id": "base-model",
+            "revision": directory_sha256(model_dir),
+        },
+        "train": {"records": "data/train.jsonl", "manifest": "data/train.manifest.json"},
+        "development": {
+            "records": "data/development.jsonl",
+            "manifest": "data/development.manifest.json",
+        },
+        "training": {
+            "learning_rate": 0.01,
+            "max_steps": 48,
+            "gradient_accumulation_steps": 1,
+            "max_sequence_length": 128,
+            "lora_rank": 4,
+            "lora_alpha": 8,
+            "target_modules": ["c_attn"],
+            "max_seconds": 120,
+        },
+        "evaluation": {"max_new_tokens": 8, "max_prompt_tokens": 128, "max_seconds": 120},
+        "device": "cpu",
+        "precision": "float32",
+        "output_dir": "run",
+    }
+    config_path = output / "experiment.json"
+    write_json(config_path, config)
+    return config_path

@@ -3,6 +3,7 @@ import { z } from "zod";
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Document = { [key: string]: Json };
 export type ActorName =
+  | "FinalEvaluationActor"
   | "ResearchLedgerActor"
   | "ResearchWorkflowActor"
   | "ResearchCampaignActor"
@@ -11,7 +12,14 @@ export type ActorName =
   | "ArtifactRegistryActor"
   | "RLWorldActor";
 export type Role =
-  "owner" | "director" | "coordinator" | "worker" | "evaluator" | "reviewer" | "data";
+  | "owner"
+  | "director"
+  | "coordinator"
+  | "worker"
+  | "evaluator"
+  | "reviewer"
+  | "data"
+  | "final_evaluator";
 
 export interface SignedRequest {
   version: 1;

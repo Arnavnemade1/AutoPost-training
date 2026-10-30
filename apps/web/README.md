@@ -22,6 +22,7 @@ npm run format:check
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm test
 npm run serve -- /path/to/campaign-directory
 FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run record -- fixture-grpo
+FORGE_PYTHON=... FORGE_HARNESS_PYTHON=... npm run record -- fixture-final -- --finalize
 ```
 
 `serve` prints a URL for the full dashboard and its one-screen live view (`?view=live`).
@@ -29,7 +30,11 @@ FORGE_PYTHON=/absolute/path/to/training-core/.venv/bin/python npm run record -- 
 starts the recorder, and only then starts the campaign (arguments after `--` go to
 `research.ts`, for example `-- --start-adapter <dir>`). A recorder that cannot start
 writes `recording/state.json` with the reason, the dashboard shows it as an alert, and
-the campaign is not started (exit 2) unless `--allow-unrecorded` is given.
+the campaign is not started (exit 2) unless `--allow-unrecorded` is given. After a
+finalized campaign (`-- --finalize`) and a complete recording, `record` builds the Phase 8
+evidence bundle (`final/bundle/`, see the orchestrator README); the recording manifest
+names the campaign and the hash of its final `live/state.json`, which the bundle's
+recording check compares.
 
 ## Dashboard
 
@@ -41,6 +46,7 @@ the campaign is not started (exit 2) unless `--allow-unrecorded` is given.
 | Training metrics | `training-metrics.jsonl` per run: share of rollouts the worlds rewarded, per update |
 | Environment inspector | `rollouts.jsonl`: completions, submitted answers, rewards, world episodes |
 | Governance | evidence bundles: checks, reasons, held-out suite, world-journal counts |
+| Final evaluation | `FinalEvaluationActor` snapshot (freeze, bound release), `final/outcome.json`, training-core harness comparisons (`final/development`, `final/rehearsal`, `final/evaluation`), `final/final-record.json`, bundle `checks.json` |
 | Before and after | baseline and development-selected candidate predictions per example |
 | Agent messages | the durable workflow outbox: kind, route, Relay delivery and acknowledgement |
 | Recording and downloads | recording state and verified exports; evidence files with sizes and hashes |

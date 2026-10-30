@@ -99,6 +99,38 @@ export interface RecordingView {
   updatedAt: string | null;
   exports: { name: string; path: string; durationSeconds: number; frames: number; speed: number }[];
 }
+/** One harness comparison: starting policy and frozen checkpoint, under both GSM8K filters. */
+export interface HarnessPair {
+  strict: { baseline: Score; candidate: Score };
+  flexible: { baseline: Score; candidate: Score };
+}
+export interface FinalView {
+  status: "absent" | "failed" | "frozen" | "rehearsed" | "evaluated";
+  reason: string | null;
+  frozen: {
+    label: string;
+    checkpointSha256: string;
+    developmentCorrect: number;
+    developmentExamples: number;
+    frozenAt: string;
+  } | null;
+  release: {
+    sha256: string;
+    harnessVersion: string | null;
+    protocol: { fewshot: number; chat: boolean; maxNewTokens: number } | null;
+  } | null;
+  development: HarnessPair | null;
+  rehearsal: HarnessPair | null;
+  sealed: HarnessPair | null;
+  /** Why the sealed test has or has not run (fixture refusal, awaiting the evaluator). */
+  sealedStatus: { status: string; reason: string | null } | null;
+  improvementSupported: boolean | null;
+  /** The final evaluator's actor record disagrees with the evaluation file. */
+  recordMismatch: boolean;
+  recordedAt: string | null;
+  checks: { name: string; status: string }[];
+  checksSource: Source | null;
+}
 export interface DownloadView {
   label: string;
   path: string;
@@ -130,6 +162,7 @@ export interface CampaignView {
   stop: { rule: string; summary: string } | null;
   promoted: string | null;
   recording: RecordingView;
+  final: FinalView;
   downloads: DownloadView[];
   warnings: string[];
 }
@@ -474,6 +507,92 @@ export async function loadCampaign(directory: string): Promise<CampaignView> {
       })),
   };
 
+  // Phase 8: the actor record (freeze, release binding) beside the harness bundles.
+  const finalRecord = asDoc(live?.final);
+  const frozenDoc = asDoc(finalRecord.frozen);
+  const releaseDoc = asDoc(finalRecord.release);
+  const outcome = await json(join(directory, "final/outcome.json"));
+  const releaseManifest = await json(join(directory, "final/release/release.json"));
+  const pairOf = async (name: string): Promise<HarnessPair | null> => {
+    const path = join(directory, "final", name, "comparison.json");
+    const metrics = asDoc((await json(path))?.metrics);
+    if (!metrics.strict) return null;
+    const from = await source(path);
+    const side = (metric: string, key: string): Score => ({
+      correct: Number(asDoc(metrics[metric])[`${key}_correct`]),
+      total: Number(asDoc(metrics[metric]).num_examples),
+      source: from,
+    });
+    const both = (metric: string) => ({
+      baseline: side(metric, "baseline"),
+      candidate: side(metric, "candidate"),
+    });
+    return { strict: both("strict"), flexible: both("flexible") };
+  };
+  const sealedPair = await pairOf("evaluation");
+  const sealedComparison = await json(join(directory, "final/evaluation/comparison.json"));
+  const finalFile = await json(join(directory, "final/final-record.json"));
+  const checksPath = join(directory, "final/bundle/checks.json");
+  const checksDoc = await json(checksPath);
+  const outcomeStatus = str(outcome?.status) ?? "";
+  const protocol = asDoc(releaseManifest?.protocol);
+  const final: FinalView = {
+    status: outcomeStatus.startsWith("failed")
+      ? "failed"
+      : outcomeStatus === "rehearsed" || outcomeStatus === "evaluated"
+        ? outcomeStatus
+        : str(frozenDoc.checkpointSha256)
+          ? "frozen"
+          : "absent",
+    reason: str(outcome?.reason),
+    frozen: str(frozenDoc.checkpointSha256)
+      ? {
+          label: String(frozenDoc.experimentId).replace(/^exp-[a-f0-9]{32}-/, ""),
+          checkpointSha256: String(frozenDoc.checkpointSha256),
+          developmentCorrect: Number(frozenDoc.developmentCorrect),
+          developmentExamples: Number(frozenDoc.developmentExamples),
+          frozenAt: new Date(Number(frozenDoc.frozenAtMs)).toISOString(),
+        }
+      : null,
+    release: str(releaseDoc.releaseSha256)
+      ? {
+          sha256: String(releaseDoc.releaseSha256),
+          harnessVersion: str(asDoc(asDoc(releaseManifest?.runtime).lm_eval).version),
+          protocol: releaseManifest
+            ? {
+                fewshot: Number(protocol.num_fewshot),
+                chat: protocol.apply_chat_template === true,
+                maxNewTokens: Number(protocol.max_new_tokens),
+              }
+            : null,
+        }
+      : null,
+    development: await pairOf("development"),
+    rehearsal: await pairOf("rehearsal"),
+    sealed: sealedPair,
+    sealedStatus: outcome?.sealed
+      ? { status: String(asDoc(outcome.sealed).status), reason: str(asDoc(outcome.sealed).reason) }
+      : null,
+    improvementSupported:
+      typeof sealedComparison?.final_improvement_supported === "boolean"
+        ? sealedComparison.final_improvement_supported
+        : null,
+    recordMismatch:
+      !!sealedPair &&
+      (asDoc(finalFile?.strict).candidateCorrect !== sealedPair.strict.candidate.correct ||
+        asDoc(finalFile?.strict).baselineCorrect !== sealedPair.strict.baseline.correct),
+    recordedAt: num(finalFile?.recordedAtMs)
+      ? new Date(Number(finalFile!.recordedAtMs)).toISOString()
+      : null,
+    checks: Object.entries(checksDoc ?? {}).map(([name, check]) => ({
+      name,
+      status: String(asDoc(check).status),
+    })),
+    checksSource: checksDoc ? await source(checksPath) : null,
+  };
+  if (final.recordMismatch)
+    warnings.push("The final evaluator's actor record differs from the sealed evaluation file");
+
   // Downloads: the evidence files a reviewer would ask for, with their hashes.
   const candidates: [string, string][] = [
     ["Final report", "research-report.json"],
@@ -491,6 +610,14 @@ export async function loadCampaign(directory: string): Promise<CampaignView> {
     ]),
     ["Recording manifest", "recording/manifest.json"],
     ...recording.exports.map((v): [string, string] => [`Recording ${v.name}`, v.path]),
+    ["Frozen checkpoint (archive)", "final/bundle/checkpoint.tar.gz"],
+    ["Release manifest", "final/release/release.json"],
+    ["Development harness comparison", "final/development/comparison.json"],
+    ["Release rehearsal comparison", "final/rehearsal/comparison.json"],
+    ["Sealed final comparison", "final/evaluation/comparison.json"],
+    ["Evidence claims", "final/bundle/claims.json"],
+    ["Phase 8 gate checks", "final/bundle/checks.json"],
+    ["Evidence bundle checksums", "final/bundle/SHA256SUMS"],
   ];
   const downloads: DownloadView[] = [];
   for (const [label, path] of candidates) {
@@ -530,6 +657,7 @@ export async function loadCampaign(directory: string): Promise<CampaignView> {
       : null,
     promoted: str(asDoc(stopEntry?.body).promoted) ?? str(report?.promoted),
     recording,
+    final,
     downloads,
     warnings,
   };

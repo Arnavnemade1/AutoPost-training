@@ -9,7 +9,7 @@ Actors do not opt into interleaved execution.
 
 ## Identity and request envelope
 
-Use campaign ID as the campaign, governance, registry, workflow and ledger actor ID. Create experiment
+Use campaign ID as the campaign, governance, registry, workflow, ledger and final-evaluation actor ID. Create experiment
 and world IDs using `scopedId("exp" | "world", campaignId, label)` from `src/core.ts`.
 This binds resource namespaces to campaigns even when labels are reused. IDs contain
 only letters, digits, dots, underscores and hyphens. Labels are at most 40 characters.
@@ -21,13 +21,14 @@ minute validity window. Key roles/scopes come from the server, never from the ca
 
 | Role | Commands |
 | --- | --- |
-| owner | Initialize immutable campaign and governance policy; stop campaign |
+| owner | Initialize immutable campaign and governance policy; stop campaign; freeze the promoted checkpoint and bind its release |
 | director | Propose allowed experiments; reserve; promote; stop; read worlds |
 | coordinator | Reserve; initialize/abort experiment; settle; promote |
 | worker | Acquire/renew lease; complete or report failure; register checkpoints/trajectories/reports; step/read worlds |
 | evaluator | Record development evaluation; register evaluations/reports |
 | reviewer | Record terminal governance decisions |
 | data | Register datasets; reset/snapshot/restore/read worlds |
+| final_evaluator | Record the one sealed final result for the bound release |
 
 Private keys stay in the issuing service. A fresh signature with the same request
 ID and operation returns the original successful receipt even after a restart.
@@ -180,6 +181,26 @@ Recording a decision authorizes nothing. Proposals, preflight review, reservatio
 and leases still apply; the orchestrator's reviewer requires a matching ledger launch
 before approving compute. Ledger reads campaign and experiment actors; neither reads
 the ledger. The ledger holds at most 1,000 entries.
+
+## Final evaluation (Phase 8)
+
+`FinalEvaluationActor` holds the campaign's final-evaluation authority:
+
+- `freeze` (owner) succeeds once, only after the campaign stopped (`CAMPAIGN_OPEN`
+  before), and only for the promoted checkpoint whose experiment record matches and
+  whose governance decision is `approved`. A second freeze fails with `FREEZE_FINAL`.
+- `bindRelease` (owner) records the hash of the release bundle packaged from exactly the
+  frozen checkpoint (`NOT_FROZEN_CHECKPOINT` otherwise), with the development harness
+  bundle hash. It binds once (`RELEASE_FINAL`).
+- `recordFinal` (final_evaluator only) records the sealed result for the bound release and
+  frozen checkpoint (`NOT_FROZEN_RELEASE` otherwise) once (`FINAL_ONCE`): dataset hash,
+  harness identity, protocol hash, strict and flexible counts for both policies, the
+  predeclared improvement gate and the result bundle hash.
+
+Selection is over before anything is frozen, and research roles can neither freeze, bind
+nor record. The one-attempt grant and the sealed data stay with training-core's evaluator
+([HARNESS.md](../services/training-core/HARNESS.md)); this actor binds its result to the
+campaign. Events: `CHECKPOINT_FROZEN`, `RELEASE_BOUND`, `FINAL_RECORDED`.
 
 ## Events and integration
 

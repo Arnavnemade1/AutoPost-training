@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Recorder } from "../src/recorder.js";
 import { serveDashboard } from "../src/server.js";
@@ -70,7 +70,34 @@ if (recorder) {
   }
 }
 await dashboard.stop();
+// A finalized campaign gets its evidence bundle once the recording it cites is complete.
+let bundle: unknown = null;
+const outcome = await readFile(join(output, "final", "outcome.json"), "utf8").catch(() => null);
+if (
+  code === 0 &&
+  !failure &&
+  outcome &&
+  ["rehearsed", "evaluated"].includes(JSON.parse(outcome).status)
+) {
+  const builder = spawn(
+    join(orchestrator, "node_modules/.bin/bun"),
+    ["scripts/bundle.ts", output],
+    {
+      cwd: orchestrator,
+      stdio: ["ignore", "pipe", "inherit"],
+    },
+  );
+  let printed = "";
+  builder.stdout!.on("data", (chunk) => (printed += chunk));
+  const built = await new Promise<number>((done) => builder.once("close", (c) => done(c ?? 1)));
+  bundle = built === 0 ? JSON.parse(printed) : { failed: built };
+}
 console.log(
-  JSON.stringify({ output, campaignExit: code, videos, recordingFailure: failure }, null, 2),
+  JSON.stringify(
+    { output, campaignExit: code, videos, recordingFailure: failure, bundle },
+    null,
+    2,
+  ),
 );
-process.exit(code !== 0 ? code : failure ? 3 : 0);
+const bundled = !bundle || !(bundle as { failed?: number }).failed;
+process.exit(code !== 0 ? code : failure ? 3 : bundled ? 0 : 4);

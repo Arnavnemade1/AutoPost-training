@@ -249,6 +249,9 @@ Model weights load directly onto the configured accelerator, so a model is not h
 the CPU and the GPU at once (Qwen2.5-0.5B float32 on MPS: about 1.9 GB instead of 3.5 GB
 at peak). `make_grpo_fixture` in `fixtures.py` builds an offline tiny model warm-started on the
 answer format so world rewards vary within groups. Its tests use a labeled stub gateway.
+`make_constant_fixture` builds one whose every answer is `#### 9`, so a short SFT run
+reliably learns it and a campaign always promotes a checkpoint. The orchestrator's
+`fixture-final` profile uses it to exercise the Phase 8 freeze, release and rehearsal.
 
 The example uses CUDA/bfloat16. Choose `cpu`/float32 or `mps`/float32 explicitly for
 local hardware and adjust the configured phase limits. The smoke fixture uses an
