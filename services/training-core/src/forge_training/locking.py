@@ -24,8 +24,11 @@ def lock_path() -> Path | None:
     return Path(configured) if configured else Path.home() / ".cache/forge/model-job.lock"
 
 
-def acquire_model_lock(command: str):
-    """Blocks until no other model job holds the lock; returns the handle to keep open."""
+def acquire_model_lock(command: str, wait: bool = True):
+    """Blocks until no other model job holds the lock; returns the handle to keep open.
+
+    With wait=False a held lock raises RuntimeError at once instead of queueing.
+    """
     path = lock_path()
     if path is None or os.environ.get(HELD) == "1":
         return None
@@ -38,6 +41,9 @@ def acquire_model_lock(command: str):
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             break
         except BlockingIOError:
+            if not wait:
+                handle.close()
+                raise RuntimeError("Another model job is running on this machine") from None
             if time.monotonic() >= deadline:
                 handle.close()
                 raise TimeoutError(f"Timed out waiting for the model-job lock {path}") from None
