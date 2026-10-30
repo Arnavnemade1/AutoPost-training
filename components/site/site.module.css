@@ -264,6 +264,7 @@
 }
 .logo {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   gap: 8px;
   justify-self: start;
@@ -1375,9 +1376,12 @@
 .footerCols ul {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 0;
+  margin-top: -9px;
 }
 .footerCols a {
+  display: inline-block;
+  padding: 9px 0;
   font-size: 15px;
   line-height: 22px;
   color: var(--muted);
@@ -1476,9 +1480,10 @@
     grid-column: 1 / 25;
     gap: 120px;
   }
-  .blockText,
-  .visual {
-    grid-column: 1 / 22;
+  .product,
+  .block,
+  .splitHead {
+    display: block;
   }
   .visual {
     margin-top: 40px;
@@ -1557,6 +1562,9 @@
   }
   .tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .footerTop {
+    display: block;
   }
   .footerBrand,
   .footerCols {
@@ -1661,6 +1669,9 @@
   .footerBottom {
     flex-direction: column;
     margin-top: 64px;
+  }
+  .footerCols a {
+    padding: 11px 0;
   }
 }
 
