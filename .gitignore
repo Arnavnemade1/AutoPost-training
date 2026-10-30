@@ -18,3 +18,4 @@ services/actors/.env
 .DS_Store
 supabase/.temp/
 supabase/.branches/
+.vercel

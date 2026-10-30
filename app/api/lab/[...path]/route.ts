@@ -11,6 +11,17 @@ async function proxy(
   // Check Host on every method: a DNS-rebound page reaches this server under
   // its own hostname with a matching Origin, so Origin === Host proves nothing.
   if (!trustedHosts.has(request.headers.get("host") ?? "")) {
+    // A hosted copy (Vercel) serves the lab's interface only: the research engine,
+    // Terse actors and training worker run on the operator's machine.
+    if (process.env.VERCEL) {
+      return Response.json(
+        {
+          detail:
+            "This hosted copy has no research engine attached. The lab runs on your own machine: clone Forge and run npm run lab.",
+        },
+        { status: 503 },
+      );
+    }
     return Response.json({ detail: "Untrusted host" }, { status: 403 });
   }
   const origin = request.headers.get("origin");
