@@ -211,6 +211,18 @@ Relay transports assignments/findings/notifications. Terse persists authorizatio
 and lifecycle state. A log event alone is not authorization to spend, evaluate sealed
 data, or promote. Reconcile artifact state after missed events or worker failures.
 
+## Tasks, checkers and teacher distillation
+
+`forge_training.tasks.TaskSpec` describes a task: the instruction placed before every question,
+the prompt version and a declarative `CheckerSpec` (extractor plus comparator) from
+`forge_training.checkers`. `GSM8K_TASK` reproduces `forge_numeric_v1` exactly. `prompt_for` and
+`encode_completion` take the task instruction, defaulting to the original math instruction. JSON
+Schema checkers need the `tasks` extra (`jsonschema`).
+
+`forge-distill probe|run|verify` builds a training dataset from checker-verified teacher
+solutions; see [teacher distillation](distillation.md). `acquire_model_lock(command,
+wait=False)` refuses at once when another model job holds the lock.
+
 ## Development scoring and final evaluation
 
 `forge_numeric_v1` requires a final `#### <number>` line and compares finite decimal

@@ -35,6 +35,14 @@ effect is measured on failures it never trained on.
    only when the 95% paired bootstrap interval is above zero, *uncertain* for a smaller
    gain, *none* otherwise.
 
+## Other tasks and live traffic
+
+Scans are task-aware. A scan for an uploaded [task pack](task-packs.md) uses that task's own
+checker: `format_failure` replaces the two math detectors, reviewer labels must pass the task's
+checker, and the audit and training rows compare answers with it. The GSM8K path above is
+unchanged. A campaign refuses a scan recorded for a different task. The [production
+overseer](overseer.md) watches live traffic and produces these scans from reviewer labels.
+
 ## Simulated traffic for the demo
 
 `.venv/bin/python scripts/simulate-production.py --count 64` runs the real base

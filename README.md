@@ -18,6 +18,16 @@ held-out production failures went from 0/33 to 8/33 and the sealed subset from 0
 6/24, both validated by paired interval, mostly by fixing answer completion and format.
 See [production failures](docs/production-failures.md).
 
+**Any task, more methods, live oversight:** the command center now takes a company's own
+data as a [task pack](docs/task-packs.md) (Q&A with references, structured JSON extraction or
+chat preferences), validates every row and seals a test split. Besides SFT and GRPO it offers
+[teacher distillation](docs/distillation.md) from any OpenAI-compatible teacher, with only
+checker-verified solutions kept, and [DPO preference alignment](docs/preference-alignment.md).
+A [production overseer](docs/overseer.md) runs free checks on every deployed answer, judges a
+sample under a hard daily budget and sends reviewer-labeled failures back to the lab. These are
+verified on fixtures and tiny models only; no model improvement from them is claimed yet
+([verification](docs/verification/any-task-local.md)).
+
 **Current implementation:** a tested worker for LoRA SFT and for GRPO whose only
 rewards are Terse math-world transitions, eight durable Terse actors (campaigns,
 experiments, governance, artifacts, math worlds, a message outbox, a research ledger
@@ -53,6 +63,11 @@ so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Research command center and recorder](docs/command-center.md)
 - [Production failures into improvements](docs/production-failures.md)
+- [Task packs: bring your own data](docs/task-packs.md)
+- [Teacher distillation](docs/distillation.md)
+- [Preference alignment (DPO)](docs/preference-alignment.md)
+- [Production overseer](docs/overseer.md)
+- [Any-task, distillation, DPO and overseer verification](docs/verification/any-task-local.md)
 - [Training on a Modal H100](docs/remote-gpu.md)
 - [Durable workflow harness and SuperServe sandboxes](docs/workflow-harness.md)
 - [Phase 8 harness, resource limits and release workflow](services/training-core/HARNESS.md)
