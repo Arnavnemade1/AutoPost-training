@@ -167,7 +167,13 @@ export type Quote = {
   text: string;
 };
 
-export function QuoteCarousel({ quotes }: { quotes: Quote[] }) {
+export function QuoteCarousel({
+  quotes,
+  title,
+}: {
+  quotes: Quote[];
+  title: React.ReactNode;
+}) {
   const [i, setI] = useState(0);
   const [prev, setPrev] = useState<number | null>(null);
   const go = (n: number) => {
@@ -177,24 +183,29 @@ export function QuoteCarousel({ quotes }: { quotes: Quote[] }) {
   return (
     <div>
       <div className={s.carouselTop}>
-        <button
-          type="button"
-          className={s.roundBtn}
-          aria-label="Previous message"
-          onClick={() => go(i - 1)}
-        >
-          <span style={{ display: "inline-flex", transform: "rotate(180deg)" }}>
+        {title}
+        <div className={s.carouselBtns}>
+          <button
+            type="button"
+            className={s.roundBtn}
+            aria-label="Previous message"
+            onClick={() => go(i - 1)}
+          >
+            <span
+              style={{ display: "inline-flex", transform: "rotate(180deg)" }}
+            >
+              <Icon name="chevron" size={18} />
+            </span>
+          </button>
+          <button
+            type="button"
+            className={s.roundBtn}
+            aria-label="Next message"
+            onClick={() => go(i + 1)}
+          >
             <Icon name="chevron" size={18} />
-          </span>
-        </button>
-        <button
-          type="button"
-          className={s.roundBtn}
-          aria-label="Next message"
-          onClick={() => go(i + 1)}
-        >
-          <Icon name="chevron" size={18} />
-        </button>
+          </button>
+        </div>
       </div>
       <div className={s.quoteCard}>
         <div className={s.quoteStage} aria-live="polite">

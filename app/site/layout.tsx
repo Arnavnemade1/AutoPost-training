@@ -19,7 +19,7 @@ const mono = DM_Mono({
 export const metadata: Metadata = {
   title: "Forge · Post-training that runs itself",
   description:
-    "Bring your agent's production traffic. Forge turns its failures into a private model fine-tuned for your tasks, and you own the weights.",
+    "Forge trains an AI you own to be the best at your business's work, from your real conversations. Fully automated, and the weights are yours.",
 };
 
 export const viewport: Viewport = { themeColor: "#ffffff" };

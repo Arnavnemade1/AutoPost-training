@@ -17,7 +17,7 @@ import {
   FlagList,
   RecoveryTimeline,
   ShipSteps,
-  TypedExample,
+  AnswerExample,
 } from "@/components/site/live";
 import {
   JournalDrawing,
@@ -86,12 +86,12 @@ const QUOTES: Quote[] = MESSAGES.map((m) => ({
 }));
 
 const KEEPS = [
-  ["Goal and budget", "What the run is for and what it may spend"],
-  ["Experiments", "Every setting and every result"],
-  ["Approvals", "A signed decision for each new version"],
-  ["Saved files", "Every file, with a fingerprint to check it"],
-  ["Practice problems", "The worlds that score each answer"],
-  ["Research notes", "Every idea and decision, in order"],
+  ["target", "Goal and budget", "What the run is for and what it may spend"],
+  ["experiments", "Experiments", "Every setting and every result"],
+  ["governance", "Approvals", "A signed decision for each new version"],
+  ["artifacts", "Saved files", "Every file, with a fingerprint to check it"],
+  ["environments", "Practice problems", "The worlds that score each answer"],
+  ["book", "Research notes", "Every idea and decision, in order"],
 ];
 
 function Eyebrow({
@@ -175,9 +175,10 @@ export default function SitePage() {
                 fully automated
               </h1>
               <p className={`${s.lead} ${s.heroSub}`}>
-                Forge reads your agent&apos;s real conversations, trains a
-                private model on the answers it missed, and shows you exactly
-                what improved. You keep the model.
+                Forge trains an AI you own to be the best at your
+                business&apos;s work. It learns from your real conversations,
+                keeps every model that does the job better, and the model is
+                yours to keep.
               </p>
               <div className={s.ctaRow}>
                 <Link href="/" className={s.btn}>
@@ -210,7 +211,7 @@ export default function SitePage() {
                 Questions it used to miss, it now gets right
               </h2>
             </div>
-            <TypedExample />
+            <AnswerExample />
           </div>
         </section>
 
@@ -219,7 +220,9 @@ export default function SitePage() {
           <div className={s.container}>
             <div className={s.sectionHead}>
               <Eyebrow icon="overview">How Forge works</Eyebrow>
-              <h2 className={s.h2}>From real mistakes to a model you own</h2>
+              <h2 className={s.h2}>
+                From your conversations to the best model for your work
+              </h2>
             </div>
             <div className={`${s.grid} ${s.product}`}>
               <ProductNav items={SIDE} />
@@ -394,7 +397,9 @@ export default function SitePage() {
           <div className={s.container}>
             <div className={`${s.sectionHead} ${s.narrow}`}>
               <Eyebrow icon="results">Results</Eyebrow>
-              <h2 className={s.h2}>It learns from its own mistakes</h2>
+              <h2 className={s.h2}>
+                Better at your work, and it keeps improving
+              </h2>
             </div>
             <div className={s.cols4}>
               <div className={s.col4}>
@@ -520,10 +525,28 @@ export default function SitePage() {
           id="voices"
         >
           <div className={s.container}>
-            <QuoteCarousel quotes={QUOTES} />
+            <QuoteCarousel
+              quotes={QUOTES}
+              title={
+                <div className={s.sectionHead}>
+                  <Eyebrow icon="message">Agent Relay</Eyebrow>
+                  <h2 className={s.h2}>The agents talk to each other</h2>
+                </div>
+              }
+            />
+            <div className={s.tilesHead}>
+              <h3 className={s.h3}>What the run remembers</h3>
+              <p className={s.body}>
+                Six records, each kept by its own durable actor and saved as the
+                run goes, so a crash picks up where it left off.
+              </p>
+            </div>
             <div className={s.tiles}>
-              {KEEPS.map(([name, text]) => (
+              {KEEPS.map(([icon, name, text]) => (
                 <div className={s.tile} key={name}>
+                  <span className={s.tileIcon}>
+                    <Icon name={icon} size={18} />
+                  </span>
                   <strong>{name}</strong>
                   <span>{text}</span>
                 </div>
@@ -565,7 +588,7 @@ export default function SitePage() {
           <div className={s.container}>
             <div className={s.ctaText}>
               <h2 className={s.h1}>
-                <span className={s.soft}>Your traffic.</span>
+                <span className={s.soft}>Your work.</span>
                 <br />
                 Your model.
               </h2>
