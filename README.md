@@ -51,8 +51,7 @@ harness, paired development diagnostics, resource guards, checkpoint freeze and
 release bundles. A campaign drives it after it stops: the promoted checkpoint is frozen
 in an actor, its release is bound and rehearsed, and an evidence bundle maps every stated
 number to a hashed artifact and reproduces from a clean copy (verified on a fixture).
-No sealed final evaluation or benchmark improvement is claimed for this profile, and it is
-not an eligible event submission ([event eligibility](docs/event-eligibility.md)). A
+No sealed final evaluation or benchmark improvement is claimed for this profile
 clean-machine Azure reproduction of the Qwen campaign, ablated under the official harness,
 showed the 6/16 gain is answer-format specific (zero-shot strict 0/16 for both policies),
 so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md)).
