@@ -337,7 +337,14 @@ def run(cid):
             input_file.write_text(json.dumps(context, indent=2))
             artifact(cid, input_file, "director_input", f"{expid} evidence sent to the director")
             publish(cid)
-            proposal = propose(config, measured, previous, context=context)
+            try:
+                proposal = propose(config, measured, previous, context=context)
+            except ValueError as error:
+                if "identical training" not in str(error):
+                    raise
+                # No new experiment left to try: stop researching and evaluate what we have.
+                send(cid, "director", "governance", "RESEARCH_STOPPED", f"{error}.", route="room")
+                break
             save_field(director=proposal["director"])
             expid = f"exp-{index + 1:03d}"
             if "agent_session" in proposal:

@@ -203,3 +203,40 @@ def test_evidence_helpers_never_include_correct_answers_as_failures():
     assert [r["id"] for r in diff["fixed"]] == ["b"]
     assert [r["id"] for r in diff["broke"]] == ["a"]
     assert diff["still_wrong"] == 0
+
+
+def test_director_is_asked_again_instead_of_repeating_identical_training(api):
+    requests, script = api
+    same = {
+        "strategy": "targeted_sft",
+        "learning_rate": 0.0001,
+        "lora_rank": 8,
+        "hypothesis": "Train the production failures again.",
+        "focus": "production_failures",
+    }
+    changed = same | {"learning_rate": 0.0002, "hypothesis": "A higher learning rate this time."}
+    script[lambda b, t: "rejected_proposal" in t] = lambda b, t: answer("r-2", changed)
+    script[lambda b, t: True] = lambda b, t: answer("r-1", same)
+    config = {"objective": "Improve math", "strategies": ["targeted_sft", "broad_sft"]}
+    previous = [{"strategy": "targeted_sft", "learning_rate": 0.0001, "lora_rank": 8, "score": 0.8}]
+    development = {"score": 0.8, "n": 2, "predictions": []}
+    result = director.propose(config, development, previous, {"objective": "Improve math"})
+    assert result["learning_rate"] == 0.0002
+    assert "would reproduce the same weights" in requests[-1]["input"]
+    assert result["agent_session"]["calls"] == 2
+
+
+def test_director_refuses_a_second_identical_proposal(api):
+    requests, script = api
+    same = {
+        "strategy": "targeted_sft",
+        "learning_rate": 0.0001,
+        "lora_rank": 8,
+        "hypothesis": "Train the production failures again.",
+        "focus": "production_failures",
+    }
+    script[lambda b, t: True] = lambda b, t: answer("r-1", same)
+    config = {"objective": "Improve math", "strategies": ["targeted_sft"]}
+    previous = [{"strategy": "targeted_sft", "learning_rate": 0.0001, "lora_rank": 8, "score": 0.8}]
+    with pytest.raises(ValueError, match="refusing to rerun identical training"):
+        director.propose(config, {"score": 0.8, "n": 2, "predictions": []}, previous, {"objective": "x"})

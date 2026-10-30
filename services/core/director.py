@@ -48,8 +48,24 @@ GSM8K_INSTRUCTIONS = "You are Forge's research director. Choose ONE bounded LoRA
 DELEGATION = (
     " Before choosing, you may spawn subagents to analyze separable parts of the evidence in "
     "parallel, for example one per failure pattern, one to weigh previous experiments, or one to "
-    "check the production failures. Use their findings in your hypothesis."
+    "check the production failures. Use their findings in your hypothesis. Training is "
+    "deterministic: repeating a previous experiment's strategy, learning rate and LoRA rank "
+    "reproduces the same weights, so never repeat one."
 )
+
+
+def repeats(proposal, previous):
+    """Names the earlier experiment this proposal would reproduce byte for byte, if any."""
+    for p in previous:
+        if (p.get("strategy"), p.get("learning_rate"), p.get("lora_rank")) == (
+            proposal["strategy"],
+            proposal["learning_rate"],
+            proposal["lora_rank"],
+        ):
+            return (
+                f"the earlier {p['strategy']} run (learning rate {p['learning_rate']}, rank {p['lora_rank']})"
+            )
+    return None
 
 
 def instructions(config):
@@ -107,13 +123,31 @@ def propose(config, development, previous, context=None):
         "required": ["strategy", "learning_rate", "lora_rank", "hypothesis", "focus"],
         "additionalProperties": False,
     }
-    answer, session = agents.consult(
-        "director",
-        instructions(config) + DELEGATION,
-        context if context is not None else build_input(config, development, previous),
-        schema,
-    )
+    evidence = context if context is not None else build_input(config, development, previous)
+    answer, session = agents.consult("director", instructions(config) + DELEGATION, evidence, schema)
     proposal = Proposal.model_validate(answer).model_dump()
+    repeated = repeats(proposal, previous)
+    if repeated:
+        # One chance to choose again, told why; a second repeat is refused rather than rerun.
+        answer, retry = agents.consult(
+            "director",
+            instructions(config) + DELEGATION,
+            evidence
+            | {
+                "rejected_proposal": proposal,
+                "rejection": f"Identical to {repeated}; it would reproduce the same weights. "
+                "Change the strategy, learning rate or rank.",
+            },
+            schema,
+        )
+        proposal = Proposal.model_validate(answer).model_dump()
+        if repeats(proposal, previous):
+            raise ValueError(f"Director repeated {repeated} twice; refusing to rerun identical training")
+        retry.nodes = session.nodes + retry.nodes
+        retry.calls += session.calls
+        for k in retry.usage:
+            retry.usage[k] += session.usage[k]
+        session = retry
     if proposal["strategy"] not in config["strategies"]:
         raise ValueError("Director selected an unauthorized strategy")
     return proposal | {
