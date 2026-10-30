@@ -419,6 +419,9 @@
   }
 }
 @media (max-width: 640px) {
+  .artCanvas {
+    height: 300px;
+  }
   .stepTab {
     padding: 0 8px;
     font-size: 13px;

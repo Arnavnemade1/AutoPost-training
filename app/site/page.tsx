@@ -144,8 +144,8 @@ function RecordList({
     <div className={s.recordCard}>
       <div className={s.recordHead}>{title}</div>
       <ul className={s.ledger}>
-        {items.map(([name, note]) => (
-          <li key={name}>
+        {items.map(([name, note], i) => (
+          <li key={`${i}-${name}`}>
             <span className={s.tick}>
               <Icon name={icon} size={14} />
             </span>
