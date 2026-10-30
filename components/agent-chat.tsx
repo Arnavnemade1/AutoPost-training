@@ -1,8 +1,7 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Agent, Campaign, Event, RelayReaction, agentNames } from "@/lib/types";
 import { Icon } from "./icon";
-import { Empty } from "./views";
 
 const members: Agent[] = [
   "director",
@@ -25,8 +24,16 @@ const shortNames: Record<Agent, string> = {
   evaluator: "Evaluator",
   governance: "Governance",
 };
-const BURST_MS = 3 * 60 * 1000;
-const DIVIDER_MS = 15 * 60 * 1000;
+/** The header cluster: the director in the middle, the team fanned out around it. */
+const cluster: { agent: Agent; size: number }[] = [
+  { agent: "evaluator", size: 30 },
+  { agent: "data", size: 38 },
+  { agent: "director", size: 48 },
+  { agent: "trainer", size: 38 },
+  { agent: "governance", size: 30 },
+];
+/** iMessage starts a new timestamp after a quiet gap of five minutes. */
+const DIVIDER_MS = 5 * 60 * 1000;
 
 type Route = "dm" | "room" | "thread";
 type ChatMessage = {
@@ -48,16 +55,19 @@ type Conversation = {
   kind: "room" | "dm";
   title: string;
   members: Agent[];
-  /** The side drawn on the right, in the accent color. */
-  self: Agent;
+  /** Whose phone this is by default: the director in the room, the first member in a DM. */
+  defaultViewer: Agent;
   messages: ChatMessage[];
 };
 
 const isAgent = (value: unknown): value is Agent =>
   typeof value === "string" && (members as string[]).includes(value);
 
+const byTeamOrder = (p: Agent, q: Agent) =>
+  members.indexOf(p) - members.indexOf(q);
+
 function pairId(a: Agent, b: Agent) {
-  const [x, y] = [a, b].sort((p, q) => members.indexOf(p) - members.indexOf(q));
+  const [x, y] = [a, b].sort(byTeamOrder);
   return `dm:${x}:${y}`;
 }
 
@@ -108,7 +118,7 @@ function conversations(events: Event[]) {
     kind: "room",
     title: "Research room",
     members,
-    self: "director",
+    defaultViewer: "director",
     messages: [],
   };
   const dms = new Map<string, Conversation>();
@@ -123,15 +133,13 @@ function conversations(events: Event[]) {
     }
     const id = pairId(m.sender, m.recipient);
     if (!dms.has(id)) {
-      const pair = [m.sender, m.recipient].sort(
-        (p, q) => members.indexOf(p) - members.indexOf(q),
-      );
+      const pair = [m.sender, m.recipient].sort(byTeamOrder);
       dms.set(id, {
         id,
         kind: "dm",
         title: `${shortNames[pair[0]]} and ${shortNames[pair[1]]}`,
         members: pair,
-        self: pair.includes("director") ? "director" : m.sender,
+        defaultViewer: pair[0],
         messages: [],
       });
     }
@@ -157,59 +165,85 @@ const last = (c: Conversation) =>
     sender: "director" as Agent,
   };
 
+/* Times follow the rest of Forge and read in UTC; the full instant is in each title. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+const utcDay = (date: Date) => Math.floor(date.getTime() / DAY_MS);
 function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
     minute: "2-digit",
     timeZone: "UTC",
   });
 }
-function dividerLabel(iso: string) {
+function dayLabel(iso: string) {
   const date = new Date(iso);
-  const day = date.toLocaleDateString("en-US", {
+  const ago = utcDay(new Date()) - utcDay(date);
+  if (ago === 0) return "Today";
+  if (ago === 1) return "Yesterday";
+  if (ago > 1 && ago < 7)
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "UTC",
+    });
+  return date.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
+    ...(date.getUTCFullYear() !== new Date().getUTCFullYear()
+      ? { year: "numeric" }
+      : {}),
     timeZone: "UTC",
   });
-  return `${day}, ${clock(iso)} UTC`;
 }
 function listTime(iso: string) {
   if (!iso) return "";
   const date = new Date(iso);
-  const sameDay =
-    date.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
-  return sameDay
-    ? clock(iso)
-    : date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      });
+  const ago = utcDay(new Date()) - utcDay(date);
+  if (ago === 0) return clock(iso);
+  if (ago === 1) return "Yesterday";
+  if (ago > 1 && ago < 7)
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "UTC",
+    });
+  return date.toLocaleDateString("en-US", {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+    timeZone: "UTC",
+  });
 }
+const utcTitle = (iso: string) =>
+  `${new Date(iso).toISOString().replace("T", " ").slice(0, 19)} UTC`;
 const humanize = (category?: string) =>
   category
     ? category.charAt(0) + category.slice(1).replaceAll("_", " ").toLowerCase()
     : "";
 
+/** The receipt under the newest outgoing bubble, from Relay's own read receipts. */
 function receiptLabel(m: ChatMessage, kind: Conversation["kind"]) {
-  if (m.pending) return "Sending";
-  const readers =
-    m.receipt?.read_by?.length ?? m.receipt?.room?.readers?.length;
-  if (kind === "dm" || m.route === "dm")
-    return m.receipt?.read_by?.length
-      ? `Read ${clock(m.receipt.read_by[0].read_at ?? m.timestamp)}`
-      : "Delivered";
-  return readers ? `Read by ${readers}` : "Delivered";
+  if (m.pending) return { strong: "Sending", rest: "" };
+  const readers = (m.receipt?.read_by ?? []).filter((r) => r.name !== m.sender);
+  if (kind === "dm" || m.route === "dm") {
+    const read = readers.find((r) => r.read_at) ?? readers[0];
+    return read
+      ? { strong: "Read", rest: clock(read.read_at ?? m.timestamp) }
+      : { strong: "Delivered", rest: "" };
+  }
+  const count = readers.length || m.receipt?.room?.readers?.length || 0;
+  return count
+    ? { strong: "Read by", rest: String(count) }
+    : { strong: "Delivered", rest: "" };
 }
 
-function Avatar({ agent, size = "md" }: { agent: Agent; size?: "sm" | "md" }) {
+function Avatar({ agent, size = 30 }: { agent: Agent; size?: number }) {
   return (
     <span
-      className={`chat-avatar chat-avatar-${size} ${agent === "director" ? "is-director" : ""}`}
+      className="imsg-avatar"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
       aria-hidden="true"
     >
-      {initials[agent]}
+      {size >= 18 ? initials[agent] : null}
     </span>
   );
 }
@@ -218,13 +252,70 @@ function ConversationAvatar({ c }: { c: Conversation }) {
   if (c.kind === "room")
     return (
       <span className="convo-avatar convo-avatar-group" aria-hidden="true">
-        <Icon name="message" size={18} />
+        <Avatar agent="director" size={24} />
+        <Avatar agent="data" size={21} />
+        <Avatar agent="trainer" size={21} />
       </span>
     );
   return (
     <span className="convo-avatar convo-avatar-pair" aria-hidden="true">
-      <Avatar agent={c.members[0]} size="sm" />
-      <Avatar agent={c.members[1]} size="sm" />
+      <Avatar agent={c.members[0]} size={27} />
+      <Avatar agent={c.members[1]} size={27} />
+    </span>
+  );
+}
+
+/** The iMessage tail: a curved hook that flows out of the bubble's bottom corner. */
+function Tail() {
+  return (
+    <svg
+      className="bubble-tail"
+      viewBox="0 0 16 20"
+      width="16"
+      height="20"
+      aria-hidden="true"
+    >
+      <path d="M0 0H6C6 8.4 8.6 14.6 15.2 18.9C15.9 19.4 15.7 20 14.9 20C9.6 20.2 5.2 18.7 1.8 15.6L0 15.2Z" />
+    </svg>
+  );
+}
+
+function Tapback({
+  reactions,
+  viewer,
+}: {
+  reactions: RelayReaction[];
+  viewer: Agent;
+}) {
+  const mine = reactions.some((r) => r.agents.includes(viewer));
+  const label = reactions
+    .map(
+      (r) =>
+        `${r.emoji === "white_check_mark" ? "Approved" : r.emoji === "x" ? "Rejected" : "Reacted"} by ${r.agents
+          .map((a) => (isAgent(a) ? agentNames[a] : a))
+          .join(", ")}`,
+    )
+    .join("; ");
+  return (
+    <span
+      className={`tapback ${mine ? "is-mine" : ""}`}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      {reactions.map((r) => (
+        <Icon
+          key={r.emoji}
+          name={
+            r.emoji === "white_check_mark"
+              ? "check"
+              : r.emoji === "x"
+                ? "close"
+                : "message"
+          }
+          size={15}
+        />
+      ))}
     </span>
   );
 }
@@ -244,9 +335,11 @@ type SearchRow = { message_id: string; sender: string; text: string };
 export function AgentChat({
   campaign,
   events,
+  loading = false,
 }: {
   campaign: Campaign | null;
   events: Event[];
+  loading?: boolean;
 }) {
   const roomName = campaign ? `research-${campaign.id}` : "research room";
   const { list, replies, reactions } = useMemo(
@@ -259,6 +352,8 @@ export function AgentChat({
   const [selected, setSelected] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [follow, setFollow] = useState(true);
+  const [details, setDetails] = useState(false);
+  const [viewers, setViewers] = useState<Record<string, Agent>>({});
   // The component remounts per campaign, so the stored read state loads once.
   const [stored, setStored] = useState<Record<string, number>>(() =>
     campaign && typeof window !== "undefined" ? readSeen(campaign.id) : {},
@@ -270,12 +365,22 @@ export function AgentChat({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const active = list.find((c) => c.id === activeId) ?? list[0];
+  const viewer =
+    viewers[active.id] && active.members.includes(viewers[active.id])
+      ? viewers[active.id]
+      : active.defaultViewer;
+  const other =
+    active.kind === "dm"
+      ? (active.members.find((a) => a !== viewer) ?? active.members[0])
+      : undefined;
   const threadParent = thread
     ? active.messages.find((m) => m.relayId === thread)
     : undefined;
   const shown = threadParent
     ? [threadParent, ...(replies.get(threadParent.relayId!) ?? [])]
     : active.messages;
+  const group = active.kind === "room";
+  const lastMine = shown.findLastIndex((m) => m.sender === viewer);
 
   // Whatever is on screen counts as read for this viewer.
   const seen =
@@ -301,12 +406,20 @@ export function AgentChat({
       return;
     }
     if (follow) el.scrollTop = el.scrollHeight;
-  }, [shown.length, follow, activeId, thread, highlight]);
+  }, [shown.length, follow, activeId, thread, highlight, viewer]);
+
+  useEffect(() => {
+    if (selected)
+      document
+        .querySelector(".bubble-evidence")
+        ?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
 
   const openConversation = (id: string, relayId?: string) => {
     setStored(seen);
     setActiveId(id);
     setThread(null);
+    setDetails(false);
     setSelected(relayId ?? null);
     setHighlight(relayId ?? null);
     setFollow(!relayId);
@@ -340,24 +453,22 @@ export function AgentChat({
 
   const unread = (c: Conversation) =>
     Math.max(0, c.messages.length - (seen[c.id] ?? 0));
-  const inFlight = (c: Conversation) =>
-    c.messages.filter((m) => m.pending).length;
+  const threadCount = thread ? (replies.get(thread)?.length ?? 0) : 0;
 
   return (
     <section
       className="messenger"
       data-pane={pane}
+      data-thread={thread ? "" : undefined}
       aria-label="Agent Relay conversations"
     >
       <aside className="convo-sidebar" aria-label="Conversations">
         <header className="convo-sidebar-head">
-          <div>
-            <h2>Messages</h2>
-            <p>
-              <Icon name="connections" size={13} />
-              Agent Relay
-            </p>
-          </div>
+          <h2>Messages</h2>
+          <p>
+            <Icon name="connections" size={13} />
+            Agent Relay
+          </p>
         </header>
         <form className="convo-search" role="search" onSubmit={search}>
           <Icon name="search" size={15} />
@@ -420,42 +531,44 @@ export function AgentChat({
             {list.map((c) => {
               const tail = last(c);
               const count = campaign ? unread(c) : 0;
-              const sending = inFlight(c);
+              const current = c.id === active.id;
               return (
                 <li key={c.id}>
                   <button
-                    className={`convo-row ${c.id === active.id ? "active" : ""}`}
-                    aria-current={c.id === active.id ? "true" : undefined}
+                    className={`convo-row ${current ? "active" : ""}`}
+                    aria-current={current ? "true" : undefined}
+                    aria-label={`${c.title}${count ? `, ${count} unread` : ""}`}
                     onClick={() => openConversation(c.id)}
                   >
+                    <span
+                      className={`convo-unread ${count ? "" : "is-read"}`}
+                      aria-hidden="true"
+                    />
                     <ConversationAvatar c={c} />
                     <span className="convo-row-body">
                       <span className="convo-row-top">
                         <strong>{c.title}</strong>
-                        <time dateTime={tail.timestamp || undefined}>
+                        <time
+                          dateTime={tail.timestamp || undefined}
+                          title={
+                            tail.timestamp
+                              ? utcTitle(tail.timestamp)
+                              : undefined
+                          }
+                        >
                           {listTime(tail.timestamp)}
                         </time>
                       </span>
                       <span className="convo-row-preview">
                         {c.messages.length
-                          ? `${shortNames[tail.sender]}: ${tail.text}`
+                          ? c.kind === "room"
+                            ? `${shortNames[tail.sender]}: ${tail.text}`
+                            : tail.text
                           : c.kind === "room"
-                            ? "Decisions, checkpoints and verdicts"
+                            ? "Decisions, checkpoints and verdicts land here."
                             : "No messages yet"}
                       </span>
-                      <span className="convo-row-meta">
-                        {c.kind === "room" ? `#${roomName}` : "Direct messages"}
-                        {sending > 0 && <em>{sending} sending</em>}
-                      </span>
                     </span>
-                    {count > 0 && (
-                      <span
-                        className="convo-unread"
-                        aria-label={`${count} unread`}
-                      >
-                        {count > 99 ? "99+" : count}
-                      </span>
-                    )}
                   </button>
                 </li>
               );
@@ -466,55 +579,105 @@ export function AgentChat({
 
       <div className="convo-pane">
         <header className="convo-head">
-          <button
-            className="convo-back"
-            aria-label={
-              thread ? "Back to the conversation" : "All conversations"
-            }
-            onClick={() => {
-              if (thread) return setThread(null);
-              setStored(seen);
-              setPane("list");
-            }}
-          >
-            <Icon name="down" size={18} />
-          </button>
-          {thread ? (
-            <div className="convo-head-title">
-              <h3>Thread</h3>
-              <p>
-                {replies.get(thread)?.length ?? 0}{" "}
-                {(replies.get(thread)?.length ?? 0) === 1 ? "reply" : "replies"}{" "}
-                in Research room
-              </p>
-            </div>
-          ) : (
-            <>
-              <ConversationAvatar c={active} />
-              <div className="convo-head-title">
-                <h3>{active.title}</h3>
-                <p>
-                  {active.kind === "room"
-                    ? `#${roomName} · ${members.length} agents`
-                    : `${agentNames[active.members[0]]} and ${agentNames[active.members[1]]}`}
-                </p>
-              </div>
-            </>
-          )}
-          {thread && (
-            <button className="text-button" onClick={() => setThread(null)}>
-              Back to room
+          <div className="convo-head-start">
+            <button
+              className="convo-back"
+              aria-label={
+                thread ? `Back to ${active.title}` : "All conversations"
+              }
+              onClick={() => {
+                if (thread) {
+                  setThread(null);
+                  setFollow(true);
+                  return;
+                }
+                setStored(seen);
+                setPane("list");
+              }}
+            >
+              <Icon name="chevron" size={22} />
+              {thread && <span className="convo-back-label">Back</span>}
             </button>
-          )}
+          </div>
+          <div className="convo-head-center">
+            {thread ? (
+              <>
+                <h3>Thread</h3>
+                <p className="convo-head-sub">
+                  {threadCount} {threadCount === 1 ? "reply" : "replies"} in{" "}
+                  {active.title}
+                </p>
+              </>
+            ) : (
+              <>
+                {group ? (
+                  <span className="convo-cluster" aria-hidden="true">
+                    {cluster.map(({ agent, size }) => (
+                      <Avatar key={agent} agent={agent} size={size} />
+                    ))}
+                  </span>
+                ) : (
+                  <span className="convo-cluster" aria-hidden="true">
+                    <Avatar agent={other!} size={48} />
+                  </span>
+                )}
+                <h3>{group ? active.title : agentNames[other!]}</h3>
+                <button
+                  className="convo-head-sub convo-details-toggle"
+                  aria-expanded={details}
+                  aria-controls="convo-details"
+                  onClick={() => setDetails(!details)}
+                >
+                  {group ? `${members.length} agents` : "Direct message"}
+                  <Icon name="chevron" size={12} />
+                </button>
+              </>
+            )}
+          </div>
+          <div className="convo-head-end">
+            <label className="viewer-select">
+              <span>Viewing as</span>
+              <select
+                value={viewer}
+                onChange={(e) => {
+                  const next = e.target.value as Agent;
+                  setViewers((v) => ({ ...v, [active.id]: next }));
+                  setFollow(true);
+                }}
+              >
+                {active.members.map((a) => (
+                  <option key={a} value={a}>
+                    {agentNames[a]}
+                  </option>
+                ))}
+              </select>
+              <Icon name="down" size={14} />
+            </label>
+          </div>
         </header>
-        {!thread && active.kind === "room" && (
-          <div className="convo-members" aria-label="Room members">
-            {members.map((m) => (
-              <span key={m}>
-                <Avatar agent={m} size="sm" />
-                {agentNames[m]}
-              </span>
-            ))}
+        {details && !thread && (
+          <div
+            className="convo-details"
+            id="convo-details"
+            aria-label="Conversation details"
+          >
+            <ul>
+              {active.members.map((a) => (
+                <li key={a}>
+                  <Avatar agent={a} size={32} />
+                  <span>
+                    <strong>{agentNames[a]}</strong>
+                    {a === viewer && <em>Viewing as</em>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mono">
+              {group
+                ? `#${roomName}`
+                : (active.messages.find((m) => m.receipt?.conversation_id)
+                    ?.receipt?.conversation_id ?? "Relay direct message")}
+            </p>
           </div>
         )}
         <div
@@ -522,6 +685,7 @@ export function AgentChat({
           ref={scroller}
           tabIndex={0}
           aria-label={thread ? "Thread messages" : `${active.title} messages`}
+          aria-busy={loading && !shown.length ? true : undefined}
           onScroll={() => {
             const el = scroller.current;
             if (el) {
@@ -539,24 +703,34 @@ export function AgentChat({
                   a && b
                     ? Date.parse(b.timestamp) - Date.parse(a.timestamp)
                     : Infinity;
-                const divider = gap(prev, m) > DIVIDER_MS;
+                const divider = !prev || gap(prev, m) >= DIVIDER_MS;
+                // In a thread the original stands alone above its replies.
                 const start =
-                  divider ||
-                  prev?.sender !== m.sender ||
-                  gap(prev, m) > BURST_MS;
+                  divider || prev?.sender !== m.sender || (!!thread && i === 1);
                 const end =
                   !next ||
                   next.sender !== m.sender ||
-                  gap(m, next) > BURST_MS ||
-                  gap(m, next) > DIVIDER_MS;
-                const mine = m.sender === active.self;
-                const isLast = i === shown.length - 1;
+                  gap(m, next) >= DIVIDER_MS ||
+                  (!!thread && i === 0);
+                const mine = m.sender === viewer;
                 const expanded = selected === m.key;
                 const threadReplies =
                   !thread && m.relayId ? (replies.get(m.relayId) ?? []) : [];
                 const tapbacks = m.relayId
                   ? reactions.get(m.relayId)
                   : undefined;
+                const receipt =
+                  (mine && i === lastMine) || m.pending
+                    ? receiptLabel(m, active.kind)
+                    : null;
+                const meta = [
+                  humanize(m.category),
+                  group && m.recipient && m.recipient !== viewer
+                    ? `to ${shortNames[m.recipient]}`
+                    : group && m.recipient === viewer
+                      ? "to you"
+                      : "",
+                ].filter(Boolean);
                 return (
                   <li
                     key={m.key}
@@ -565,79 +739,77 @@ export function AgentChat({
                   >
                     {divider && (
                       <p className="bubble-divider">
-                        <time dateTime={m.timestamp}>
-                          {dividerLabel(m.timestamp)}
+                        <time
+                          dateTime={m.timestamp}
+                          title={utcTitle(m.timestamp)}
+                        >
+                          <strong>{dayLabel(m.timestamp)}</strong>{" "}
+                          {clock(m.timestamp)}
                         </time>
                       </p>
                     )}
                     {thread && i === 1 && (
-                      <p className="bubble-divider thread-divider">Replies</p>
+                      <p className="bubble-divider thread-divider">
+                        {threadCount} {threadCount === 1 ? "Reply" : "Replies"}
+                      </p>
                     )}
                     <div
-                      className={`bubble-row ${mine ? "mine" : "theirs"} ${start ? "start" : ""} ${end ? "end" : ""} ${highlight === m.relayId ? "found" : ""}`}
+                      className={`bubble-row ${mine ? "mine" : "theirs"} ${start ? "start" : ""} ${end ? "end" : ""} ${group ? "in-group" : ""} ${highlight === m.relayId ? "found" : ""}`}
                     >
-                      {!mine && (
+                      {!mine && group && (
                         <span className="bubble-gutter">
-                          {end && <Avatar agent={m.sender} />}
+                          {end && <Avatar agent={m.sender} size={30} />}
                         </span>
                       )}
                       <div className="bubble-col">
-                        {start && (!mine || active.kind === "room") && (
+                        {start && !mine && group && (
                           <span className="bubble-sender">
                             {agentNames[m.sender]}
-                            {m.recipient && active.kind === "room" && (
-                              <span> to {shortNames[m.recipient]}</span>
-                            )}
                           </span>
                         )}
-                        <button
-                          className={`bubble ${m.pending ? "pending" : ""} ${tapbacks?.length ? "has-tapback" : ""}`}
-                          aria-expanded={expanded}
-                          onClick={() => setSelected(expanded ? null : m.key)}
+                        <div
+                          className={`bubble-wrap ${tapbacks?.length ? "has-tapback" : ""}`}
                         >
-                          {m.category && (
-                            <span className="bubble-category">
-                              {humanize(m.category)}
-                              {m.experimentId && (
-                                <span className="mono">{m.experimentId}</span>
-                              )}
+                          <button
+                            className={`bubble ${m.pending ? "pending" : ""}`}
+                            aria-expanded={expanded}
+                            aria-label={`${agentNames[m.sender]}${meta.length ? `, ${meta.join(", ")}` : ""}${m.experimentId ? `, ${m.experimentId}` : ""}: ${m.text}`}
+                            onClick={() => setSelected(expanded ? null : m.key)}
+                          >
+                            {meta.length > 0 || m.experimentId ? (
+                              <span className="bubble-meta" aria-hidden="true">
+                                {[
+                                  meta[0] && <span key="c">{meta[0]}</span>,
+                                  m.experimentId && (
+                                    <span key="e" className="mono">
+                                      {m.experimentId}
+                                    </span>
+                                  ),
+                                  meta[1] && <span key="r">{meta[1]}</span>,
+                                ]
+                                  .filter(Boolean)
+                                  .map((part, n) => (
+                                    <Fragment key={n}>
+                                      {n > 0 && "\u00a0· "}
+                                      {part}
+                                    </Fragment>
+                                  ))}
+                              </span>
+                            ) : null}
+                            <span className="bubble-text" aria-hidden="true">
+                              {m.text}
                             </span>
-                          )}
-                          <span className="bubble-text">{m.text}</span>
+                            {end && <Tail />}
+                          </button>
                           {tapbacks?.length ? (
-                            <span
-                              className={`tapback ${tapbacks.some((r) => r.emoji === "x") ? "is-rejected" : ""}`}
-                              aria-label={tapbacks
-                                .map(
-                                  (r) =>
-                                    `${r.emoji === "white_check_mark" ? "Approved" : r.emoji === "x" ? "Rejected" : "Seen"} by ${r.agents.map((a) => (isAgent(a) ? shortNames[a] : a)).join(", ")}`,
-                                )
-                                .join("; ")}
-                            >
-                              {tapbacks.map((r) => (
-                                <Icon
-                                  key={r.emoji}
-                                  name={
-                                    r.emoji === "white_check_mark"
-                                      ? "check"
-                                      : r.emoji === "x"
-                                        ? "close"
-                                        : "search"
-                                  }
-                                  size={12}
-                                />
-                              ))}
-                            </span>
+                            <Tapback reactions={tapbacks} viewer={viewer} />
                           ) : null}
-                        </button>
+                        </div>
                       </div>
                     </div>
-                    {(threadReplies.length > 0 ||
-                      isLast ||
-                      expanded ||
-                      m.pending) && (
+                    {(threadReplies.length > 0 || receipt || expanded) && (
                       <div
-                        className={`bubble-after ${mine ? "mine" : "theirs"}`}
+                        className={`bubble-after ${mine ? "mine" : "theirs"} ${group ? "in-group" : ""}`}
                       >
                         {threadReplies.length > 0 && (
                           <button
@@ -645,30 +817,24 @@ export function AgentChat({
                             onClick={() => {
                               setThread(m.relayId!);
                               setSelected(null);
+                              setDetails(false);
                               setFollow(true);
                             }}
                           >
                             {threadReplies.length}{" "}
-                            {threadReplies.length === 1 ? "reply" : "replies"}
-                            <span aria-hidden="true">
-                              {threadReplies
-                                .slice(0, 3)
-                                .map((r) => initials[r.sender])
-                                .join(" ")}
-                            </span>
+                            {threadReplies.length === 1 ? "Reply" : "Replies"}
                           </button>
                         )}
-                        {(isLast || expanded || m.pending) && (
+                        {receipt && (
                           <span className="bubble-receipt">
-                            {!m.pending && <Icon name="check" size={11} />}
-                            {receiptLabel(m, active.kind)}
-                            {!isLast && !m.pending && (
-                              <> · {clock(m.timestamp)}</>
-                            )}
+                            <strong>{receipt.strong}</strong>
+                            {receipt.rest && <> {receipt.rest}</>}
                           </span>
                         )}
                         {expanded && (
                           <dl className="bubble-evidence">
+                            <dt>Sent</dt>
+                            <dd>{utcTitle(m.timestamp)}</dd>
                             <dt>Relay message</dt>
                             <dd>{m.relayId ?? "Awaiting Relay receipt"}</dd>
                             <dt>Route</dt>
@@ -707,42 +873,75 @@ export function AgentChat({
                 );
               })}
             </ol>
+          ) : loading ? (
+            <div className="chat-skeleton" aria-label="Loading messages">
+              {[
+                "w-64 theirs",
+                "w-48 theirs",
+                "w-56 mine",
+                "w-72 theirs",
+                "w-40 mine",
+              ].map((k) => (
+                <span key={k} className={`chat-skeleton-bubble ${k}`} />
+              ))}
+            </div>
           ) : (
-            <Empty
-              icon="message"
-              title={
-                !campaign
+            <div className="chat-empty">
+              <span className="convo-cluster" aria-hidden="true">
+                {(active.kind === "room" ? cluster : cluster.slice(1, 4)).map(
+                  ({ agent, size }) => (
+                    <Avatar key={agent} agent={agent} size={size} />
+                  ),
+                )}
+              </span>
+              <h3>
+                {!campaign
                   ? "No campaign selected"
                   : active.kind === "room"
                     ? "The research room is quiet"
-                    : "No direct messages yet"
-              }
-              description={
-                campaign
+                    : "No direct messages yet"}
+              </h3>
+              <p>
+                {campaign
                   ? "Messages appear here once Agent Relay confirms the recipient read them. Handoffs between two agents arrive as direct messages."
-                  : "Launch a campaign to bring the research team into the room."
-              }
-            />
+                  : "Launch a campaign to bring the research team into the room."}
+              </p>
+            </div>
           )}
         </div>
-        <footer className="convo-foot">
-          <span>
-            <Icon name="lock" size={14} />
-            Agents write here. You are reading the Relay transcript.
-          </span>
-          {!follow && !highlight && (
+        <footer className="composer">
+          {!follow && !highlight && shown.length > 0 && (
             <button
-              className="text-button"
+              className="composer-latest"
+              aria-label="Jump to the latest message"
               onClick={() => {
                 setFollow(true);
                 const el = scroller.current;
                 if (el) el.scrollTop = el.scrollHeight;
               }}
             >
-              Latest
-              <Icon name="down" size={14} />
+              <Icon name="down" size={18} />
             </button>
           )}
+          <div className="composer-field">
+            <span className="composer-placeholder">
+              Agents write here. You&rsquo;re reading the Relay transcript.
+            </span>
+            <button
+              className="composer-send"
+              disabled
+              aria-label="Send. Only agents can send in this transcript."
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                aria-hidden="true"
+              >
+                <path d="M12 19V5M6 11l6-6 6 6" />
+              </svg>
+            </button>
+          </div>
         </footer>
       </div>
     </section>

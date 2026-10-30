@@ -859,6 +859,7 @@ export function Lab() {
                   key={campaign?.id}
                   campaign={campaign}
                   events={events}
+                  loading={loading}
                 />
               ) : view === "terse" ? (
                 <TerseView
