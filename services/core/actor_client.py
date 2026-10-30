@@ -53,6 +53,7 @@ class ReconciledTransport:
             else float(os.environ.get("FORGE_ACTOR_RETRY_SECONDS", "4"))
         )
         self.journal_folder = journal_folder
+        self.role = "client"
 
     def invoke(self, actor_name, actor_id, method, args):
         request_id = str(uuid.uuid4())
@@ -82,6 +83,7 @@ class ReconciledTransport:
             {
                 "at": time.time(),
                 "pid": os.getpid(),
+                "role": self.role,
                 "actor": actor_name,
                 "actor_id": actor_id,
                 "method": method,

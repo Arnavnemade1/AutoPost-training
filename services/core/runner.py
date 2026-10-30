@@ -615,4 +615,5 @@ if __name__ == "__main__":
     # Outlast a Terse runtime restart, including its owner-lease fence (about 30 s after SIGKILL).
     # Retries reuse one request ID per call, so a call that already committed is not run again.
     transport.retry_seconds = 180
+    transport.role = "worker"
     run(sys.argv[1])

@@ -470,10 +470,15 @@ class Incidents:
         for incident in self.all()[:5]:
             item = {k: v for k, v in incident.items() if k != "before"}
             cid, killed_at = incident["campaign_id"], incident["kill"]["at"]
+            # The campaign's own calls: not this API process (its reads serve the UI), not the
+            # reads that gave up; each one is a call the worker blocked on and then completed.
             item["retries"] = [
                 r
                 for r in retries
-                if r.get("at", 0) >= killed_at and str(r.get("actor_id", "")).startswith(cid)
+                if r.get("at", 0) >= killed_at
+                and str(r.get("actor_id", "")).startswith(cid)
+                and (r["role"] == "worker" if "role" in r else r.get("pid") != os.getpid())
+                and r.get("outcome") == "completed"
             ][:12]
             if campaign_lookup:
                 campaign = campaign_lookup(cid) or {}
@@ -484,10 +489,10 @@ class Incidents:
                 marks = [
                     {
                         "at": r["at"],
-                        "text": f"{r['actor']}.{r['method']} completed after {r['attempts']} attempts",
+                        "text": f"Worker call {r['actor']}.{r['method']} completed after "
+                        f"{r['attempts']} attempts under one request ID",
                     }
                     for r in item["retries"]
-                    if r.get("outcome") == "completed"
                 ]
                 for e in events_lookup(cid) if events_lookup else []:
                     at = unix(e.get("timestamp"))
