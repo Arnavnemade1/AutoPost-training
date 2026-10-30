@@ -137,14 +137,14 @@
 .terminal {
   align-self: center;
   justify-self: center;
-  width: min(640px, 100%);
-  padding: 24px 28px;
+  width: min(760px, 100%);
+  padding: 28px 32px;
   border-radius: 10px;
   border: 1px solid var(--line-strong);
   background: #fafafa;
   font-family: var(--mono);
-  font-size: 15px;
-  line-height: 26px;
+  font-size: 16px;
+  line-height: 28px;
 }
 .termLine {
   display: flex;
