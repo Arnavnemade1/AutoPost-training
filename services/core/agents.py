@@ -166,8 +166,14 @@ class Session:
         }
         with self._lock:
             self.nodes.append(node)
-        # Delegating costs at least one subagent call plus this agent's answer after it.
-        spawn = depth < self.limits["depth"] and self._free() >= 3 + (0 if prepaid else 1)
+        # Offering the tool holds this agent's answer-after-delegation call at once, so siblings
+        # spending the budget can never leave it unable to answer. Released if it answers directly.
+        with self._lock:
+            free = self.limits["max_calls"] - self.calls - self.held
+            spawn = depth < self.limits["depth"] and free >= 3 + (0 if prepaid else 1)
+            if spawn:
+                self.held += 1
+                node["answer_held"] = True
         payload = {
             "model": node["model"],
             "max_output_tokens": 4000,
@@ -193,6 +199,9 @@ class Session:
             self._charge(raw)
             node["response_ids"].append(raw.get("id"))
             calls = [o for o in raw.get("output", []) if o.get("type") == "function_call"]
+            if not calls and node.pop("answer_held", False):
+                with self._lock:
+                    self.held -= 1  # Answered without delegating: the held call is not needed.
             if not calls:
                 text = "".join(
                     c["text"]
@@ -231,14 +240,14 @@ class Session:
             wanted = json.loads(call.get("arguments") or "{}").get("agents") or []
         except json.JSONDecodeError:
             return {"error": "Arguments were not valid JSON; answer with what you have."}
-        if node.get("answer_held"):
+        if node.get("spawned"):
             return {"error": "Only one spawn_subagents call per answer."}
+        node["spawned"] = True
         with self._lock:
-            room = self.limits["max_calls"] - self.calls - self.held - 1
+            # This agent's answer is already held; the subagents' first calls are held now.
+            room = self.limits["max_calls"] - self.calls - self.held
             wanted = wanted[: max(0, min(self.limits["max_subagents"], room))]
-            if wanted:
-                self.held += 1 + len(wanted)
-                node["answer_held"] = True
+            self.held += len(wanted)
         if not wanted:
             return {
                 "error": "No subagents started (none requested, or the call budget is spent). Answer now."

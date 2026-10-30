@@ -262,3 +262,34 @@ def test_director_refuses_a_second_identical_proposal(api):
     previous = [{"strategy": "targeted_sft", "learning_rate": 0.0001, "lora_rank": 8, "score": 0.8}]
     with pytest.raises(ValueError, match="refusing to rerun identical training"):
         director.propose(config, {"score": 0.8, "n": 2, "predictions": []}, previous, {"objective": "x"})
+
+
+@pytest.mark.parametrize("budget", ["7", "8", "9", "10", "11", "12"])
+def test_siblings_that_all_delegate_never_starve_one_another(api, monkeypatch, budget):
+    monkeypatch.setenv("FORGE_AGENT_MAX_CALLS", budget)
+    requests, script = api
+    script[lambda b, t: is_parent(b, t)] = lambda b, t: spawn("r-parent", ["a", "b", "c"])
+    import time
+
+    # "a" decides to delegate last, after its siblings have started their own subagents.
+    def late(n):
+        def reply(b, t):
+            time.sleep({"a": 0.3, "b": 0.0, "c": 0.1}[n])
+            return spawn(f"r-{n}", [f"{n}1", f"{n}2"])
+
+        return reply
+
+    for name in "abc":
+        script[lambda b, t, n=name: f"Look at {n}" in t and "tools" in b] = late(name)
+    script[lambda b, t: b.get("previous_response_id") == "r-parent"] = lambda b, t: answer(
+        "r-final", {"summary": "ok"}
+    )
+    script[lambda b, t: "previous_response_id" in b] = lambda b, t: answer("r-mid", {"finding": "combined"})
+    script[lambda b, t: "Look at" in t] = lambda b, t: answer("r-leaf", {"finding": "leaf"})
+    for _ in range(3):
+        result, session = agents.consult(
+            "data", agents.DATA, {}, agents._text({"summary": {"type": "string"}})
+        )
+        assert result == {"summary": "ok"}
+        assert session.held == 0 and session.calls <= int(budget)
+        assert not [h for h in session.subagents() if "error" in h], session.subagents()
