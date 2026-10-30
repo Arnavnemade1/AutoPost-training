@@ -282,7 +282,12 @@ export async function bundleCampaign(root: string, python: string): Promise<Docu
   const probeFailures = Object.entries(probes)
     .filter(([name, value]) => !expectedProbes[name]?.(value))
     .map(([name]) => name);
-  let recordingCheck: Document = { status: "not-recorded" };
+  // The orchestrator profile's recorder (apps/web) is retired; the command center records
+  // only its own profile. A manifest from that recorder is still checked if present.
+  let recordingCheck: Document = {
+    status: "not-recorded",
+    reason: "No recording of this campaign; the orchestrator profile has no recorder",
+  };
   if (recording) {
     const about = recording.campaign as Document | undefined;
     const ok =
@@ -298,6 +303,17 @@ export async function bundleCampaign(root: string, python: string): Promise<Docu
       recordingFinishedAt: recording.finishedAt,
     };
   }
+  // Event rules as last read by a person (docs/event-eligibility.md), with that record's hash.
+  const eligibility = join(import.meta.dir, "../../../docs/event-eligibility.md");
+  const eventRules: Document = (await exists(eligibility))
+    ? {
+        status: "failed",
+        reason:
+          "The event's published rules require code created during the event; this repository predates it and no organizer exception is recorded",
+        record: "event-eligibility.md",
+        sha256: await fileSha(eligibility),
+      }
+    : { status: "unverified", reason: "No record of the event's current rules" };
   const claimCheck = await verifyClaims(root, claims);
   const checks = {
     sealedResultsDidNotInfluenceSelection: {
@@ -332,11 +348,7 @@ export async function bundleCampaign(root: string, python: string): Promise<Docu
       ...claimCheck,
     },
     recordingsMatchTheRun: recordingCheck,
-    currentEventRules: {
-      status: "unverified",
-      reason:
-        "The event's rules page could not be read (Phase 0); confirm submission requirements by hand.",
-    },
+    currentEventRules: eventRules,
   };
 
   // The bundle: harness evidence, the release (frozen adapter, also as an archive) and the
@@ -368,6 +380,7 @@ export async function bundleCampaign(root: string, python: string): Promise<Docu
   ])
     await copy(path);
   await tar(join(bundle, "checkpoint.tar.gz"), join(bundle, "final/release"), "checkpoint");
+  if (eventRules.record) await cp(eligibility, join(bundle, "event-eligibility.md"));
   await writeFile(join(bundle, "claims.json"), JSON.stringify(claims, null, 2));
   await writeFile(join(bundle, "checks.json"), JSON.stringify(checks, null, 2));
   const counts = (file: string) =>
@@ -393,7 +406,9 @@ EleutherAI lm-evaluation-harness ${String(((releaseDoc.runtime as Document).lm_e
 | Sealed GSM8K test | ${evaluated ? await counts("final/evaluation/comparison.json") : "not run | not run"} |
 ${evaluated ? "" : `\nSealed test not run: ${String((outcome.sealed as Document).reason)}.\n`}${fixture ? "\n**Fixture model:** these numbers exercise the mechanics and are not evidence about a useful model.\n" : ""}
 - \`claims.json\`: every stated number with its artifact, JSON pointer and SHA-256.
-- \`checks.json\`: the Phase 8 gate checks and what each observed; event rules are unverified.
+- \`checks.json\`: the Phase 8 gate checks and what each observed. Event rules: see
+  \`event-eligibility.md\` (this build is not an eligible event submission without an
+  organizer exception).
 - \`final/release/\`: the frozen release (adapter, evidence, protocol); \`checkpoint.tar.gz\`
   holds its adapter alone.
 - \`SHA256SUMS\`: every file in this bundle.

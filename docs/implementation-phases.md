@@ -1,6 +1,6 @@
 # Forge implementation phases
 
-Source: user-supplied PRD v1.0, October 27, 2026. This is an implementation plan,
+Source: user-supplied PRD v1.0. This is an implementation plan,
 not a statement that the full product or model improvement has been demonstrated.
 
 ## Success measure
@@ -64,8 +64,9 @@ uncertainty, and limitations. A valid campaign can conclude **no improvement fou
   paths verified. The saved-output audit exposes a strict/flexible scoring disagreement;
   no sealed final evaluation or model improvement is claimed. The campaign now drives
   it: an actor freeze after the stop, release binding, rehearsal, a separately run final
-  evaluator that records once, an evidence bundle with claims and gate checks, a
-  clean-copy reproduction, and a dashboard section, all verified on a fixture.
+  evaluator that records once, an evidence bundle with claims and gate checks, and a
+  clean-copy reproduction, all verified on a fixture. The event-rules gate is not met
+  ([eligibility review](event-eligibility.md)).
   See [Phase 8 verification](verification/phase8-local.md).
 - Phase 1 is on GitHub main at `0e254b0`; its training-core CI passed. Phases 2 and 3
   CI passed on `3f03a63`, Phase 4 on `80eb305`; Phase 5 runs in the same workflows.
@@ -240,7 +241,8 @@ contracts settle, with fixtures visibly labeled as fixtures.
 
 Suggested owner: frontend/capture workstream. Depends on stable event contracts.
 
-Implemented in `apps/web/` (dashboard, recorder and launcher) with live actor snapshots
+First implemented in `apps/web/` (dashboard, recorder and launcher; retired in favor of the
+root command center, recoverable from git history at `6ab37db`) with live actor snapshots
 from `services/orchestrator/scripts/research.ts`. The [local verification](verification/phase7-local.md)
 records each gate check, the recorded fixture campaign and the limits: the recording is
 of the dashboard rendered headless, in VP8 WebM, and the real Qwen campaign is unrecorded.

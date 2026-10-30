@@ -1,6 +1,6 @@
 # Phase 4 local verification
 
-Verified October 28, 2026 on an Apple M4 (16 GB, macOS arm64). This record concerns
+Verified on an Apple M4 (16 GB, macOS arm64). This record concerns
 evidence-driven experiment selection. Development scores below use the custom
 `forge_numeric_v1` scorer on a 16-example partition of the official GSM8K **train**
 file; they are not GSM8K benchmark results, and no model-superiority claim is made.

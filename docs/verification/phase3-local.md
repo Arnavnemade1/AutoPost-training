@@ -1,6 +1,6 @@
 # Phase 3 local verification
 
-Verified October 28, 2026 on macOS arm64. This record concerns synchronized dispatch
+Verified on macOS arm64. This record concerns synchronized dispatch
 and recovery, not a trained model's accuracy. The tiny fixture model scored 0/2 before
 and after optimization; no improvement is claimed. Role decisions are scripted
 handlers, so this is not autonomous research (Phase 4).

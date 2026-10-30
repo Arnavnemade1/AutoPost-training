@@ -47,8 +47,8 @@ The tiny model is not expected to improve; its score has no benchmark significan
 `research` runs an autonomous campaign under the director policy and writes
 `research-report.json` and `ledger.json` under `artifacts/research-<profile>-<timestamp>/`.
 While it runs it also writes `live/state.json` every 2 seconds: campaign, ledger,
-workflow-outbox and experiment snapshots from public actor reads, which the research
-dashboard (`apps/web/`) reads instead of connecting to actors.
+workflow-outbox and experiment snapshots from public actor reads, which a dashboard
+can read (the retired `apps/web` did, see git history at `6ab37db`) instead of connecting to actors.
 `fixture` uses the offline tiny model (about 25 seconds). `qwen` prepares a pinned
 GSM8K **train**-split partition (128 train, 16 development, 16 regression; the test
 split is never read), freezes a Qwen2.5-0.5B-Instruct baseline and trains on Apple MPS; it needs the
@@ -94,7 +94,7 @@ it defaults to `FORGE_PYTHON`. After the research report is written, `--finalize
    final record and a rehearsal overwrite are each refused, and a fixture release cannot
    obtain final test access.
 
-`final/outcome.json` records each step; the dashboard shows it while it runs. The
+`final/outcome.json` records each step, and `live/state.json` shows `finalizing`. The
 fixture-final profile is an offline tiny model on a task SFT reliably learns (every answer
 is 9), so a checkpoint is always promoted; it takes about a minute and is mechanics only.
 For Qwen profiles the harness uses training-core's zero-shot chat protocol and local
@@ -113,8 +113,9 @@ rehearses the separation rather than enforcing it.
 release, `checkpoint.tar.gz`, campaign evidence, recordings and `SHA256SUMS`. Harness
 bundles are re-verified with `forge-harness verify`. `--verify` checks a copy anywhere,
 and `--reproduce` rehearses the copied release again and requires identical generations,
-scores and comparison. `apps/web/scripts/record-campaign.ts` builds the bundle once the
-recording it cites is complete.
+scores and comparison. The event-rules check cites `docs/event-eligibility.md` and
+copies it into the bundle. With `apps/web` retired, this profile has no recorder, so the
+recording check reports `not-recorded`; the root command center records its own profile.
 
 ## Components
 

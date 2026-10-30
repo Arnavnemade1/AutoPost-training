@@ -1,6 +1,6 @@
 # Phase 2 local verification
 
-Verified October 28, 2026 on macOS arm64. This record concerns durable coordination,
+Verified on macOS arm64. This record concerns durable coordination,
 not a trained model's accuracy. Phase 1's separate real Qwen training result remains
 0/8 to 0/8 on its tiny development diagnostic.
 

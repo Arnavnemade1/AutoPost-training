@@ -1,6 +1,6 @@
 # Phase 6 local verification
 
-Verified October 28–29, 2026 on an Apple M4 (16 GB, macOS arm64). This record concerns
+Verified on an Apple M4 (16 GB, macOS arm64). This record concerns
 reward-driven training: TRL GRPO whose only rewards are Terse `RLWorldActor`
 transitions. The gate is verified on an offline tiny fixture. Two real campaigns on
 Qwen2.5-0.5B-Instruct followed. **Neither improved the model**: one from the raw

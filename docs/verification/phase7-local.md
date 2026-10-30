@@ -1,6 +1,10 @@
 # Phase 7 local verification
 
-Verified October 29, 2026 on an Apple M4 (16 GB, macOS arm64). This record concerns the
+> Historical record. `apps/web` was retired in favor of the root command center
+> ([command-center.md](../command-center.md)); its code is recoverable from git history
+> at `6ab37db`.
+
+Verified on an Apple M4 (16 GB, macOS arm64). This record concerns the
 research command center and its faithful recording. The recorded campaign used the
 offline tiny fixture model; its scores carry no benchmark meaning. The real Qwen GRPO
 campaign was viewed in the dashboard from its stored files but has not been recorded.

@@ -187,14 +187,14 @@ between phases or during evaluation. Use immutable worker images for deployments
   "experimentId": "sft-lora-001",
   "producer": "optimizer",
   "sequence": 2,
-  "timestamp": "2026-10-28T04:00:00+00:00",
+  "timestamp": "<ISO 8601 UTC>",
   "type": "TRAINING_PROGRESS",
   "payload": {
     "step": 1,
     "loss": 2.4,
     "training_tokens": 180,
     "elapsed_seconds": 1.5,
-    "timestamp": "2026-10-28T04:00:00+00:00"
+    "timestamp": "<ISO 8601 UTC>"
   }
 }
 ```

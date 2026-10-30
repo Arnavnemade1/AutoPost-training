@@ -1,6 +1,6 @@
 # Phase 8 local verification
 
-Implemented October 29, 2026 on the existing 16 GB Apple M4 checkout. This phase
+Implemented on the existing 16 GB Apple M4 checkout. This phase
 adds a pinned benchmark harness and a release workflow. **No sealed final score,
 new model improvement, independent production evaluator, or final readiness is claimed.**
 No real agent collaboration was added.
@@ -104,8 +104,16 @@ connects them to the research campaign, its actors and its evidence:
 - Evidence bundle (`src/bundle.ts`): claims with artifact, JSON pointer and SHA-256; gate
   checks; harness bundles re-verified with `forge-harness verify`; `checkpoint.tar.gz`;
   `SHA256SUMS`; copy verification and clean-copy reproduction.
-- The recording manifest names the campaign and its final state hash. The dashboard has
-  a final-evaluation section and a headline tile, and shows `finalizing` live.
+- The event-rules check cites [the recorded eligibility review](../event-eligibility.md)
+  and copies it into the bundle with its hash.
+
+A final-evaluation dashboard section and a recording link to the campaign state were
+built for `apps/web` and verified (axe-core clean, scores equal to files). That
+dashboard was then retired in favor of the root command center, which reads only its
+own profile's service ([command-center.md](../command-center.md)), so both were dropped
+in the merge. For orchestrator campaigns, the bundle's `README.md`, `claims.json` and
+`checks.json` are the human-readable view, and the recording check reports
+`not-recorded`.
 
 Executed on the offline constant fixture (`fixture-final`, mechanics only):
 
@@ -116,17 +124,13 @@ Executed on the offline constant fixture (`fixture-final`, mechanics only):
 | Release freeze and rehearsal | frozen; rehearsal 0/2 → 2/2 strict; `official_test_loaded: false` throughout |
 | Refusals | director freeze `FORBIDDEN`, second freeze `FREEZE_FINAL`, release swap `RELEASE_FINAL`, research final record `FORBIDDEN`, rehearsal overwrite `FileExistsError`, fixture authorization refused |
 | Final evaluator command | fixture release refused; nothing recorded |
-| Bundle | 13 claims verified; selection-independence, harness-evidence and run-once checks passed; sealed final `not-run`; recording `not-recorded`; event rules `unverified` |
+| Bundle | 13 claims verified; selection-independence, harness-evidence and run-once checks passed; sealed final `not-run`; recording `not-recorded`; event rules `failed` (see below) |
 | Clean-copy reproduction | bundle copied to a new directory and verified; rehearsal rerun from the copy gave identical generations, scores and comparison (12 s, 0.54 GB peak); a one-byte change in the copied adapter was reported |
 | Cost | whole finalized campaign about 60 s, 1.4–1.6 GB peak resident memory |
 
-Tests: `packages/terse-actors` (the final-evaluation actor test plus the existing suite),
-`services/orchestrator/tests/phase8.test.ts` (6 tests) and
-`apps/web/tests/phase8.test.ts` (final section equals the harness files and gate checks,
-downloads byte for byte, live view fits 1440×900, axe-core clean in light and dark on
-desktop and mobile). The web test's recording check needs FFmpeg. It was skipped
-locally because the Playwright FFmpeg cache used in Phase 7 is no longer on this machine.
-CI installs FFmpeg and the harness extra, so that check runs there.
+Tests: `packages/terse-actors` (the final-evaluation actor test plus the existing suite)
+and `services/orchestrator/tests/phase8.test.ts` (6 tests), inside the full orchestrator
+suite. CI installs the harness extra for the orchestrator workflow.
 
 ## Remaining gates
 
@@ -134,9 +138,11 @@ The private registry enforces the one-attempt workflow, but same-user local exec
 is not an adversarial security boundary. Deploy the evaluator under a separate OS
 owner/container before calling it independent. Clean-copy reproduction of the rehearsal
 is executed on the fixture; reproduction on a different machine is not. The complete
-sealed run (a real model, the full 1,319-example test split, once), its matching
-two-minute recording, and current event-rule acceptance remain pending. See the
-[demo script](../demo.md).
+sealed run (a real model, the full 1,319-example test split, once) and a recording
+of it remain pending. The event gate is not met: the published rules require code
+created during the event, so this build is not an eligible submission without an
+organizer exception ([eligibility review](../event-eligibility.md)). See the
+[demo notes](../demo.md).
 
 See the [harness runbook](../../services/training-core/HARNESS.md) and the upstream
 [pinned GSM8K task](https://github.com/EleutherAI/lm-evaluation-harness/blob/v0.4.9.2/lm_eval/tasks/gsm8k/gsm8k.yaml).

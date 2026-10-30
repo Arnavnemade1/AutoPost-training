@@ -1,6 +1,6 @@
 # Phase 5 local verification
 
-Verified October 28, 2026 on an Apple M4 (16 GB, macOS arm64). This record concerns
+Verified on an Apple M4 (16 GB, macOS arm64). This record concerns
 independent, enforceable checkpoint governance. Scores use the custom
 `forge_numeric_v1` scorer on partitions of the official GSM8K **train** file; they are
 not GSM8K benchmark results, and no model-superiority claim is made.

@@ -1,6 +1,6 @@
 # Initial training-core verification
 
-Observed locally on October 27, 2026 (America/Chicago). These are implementation
+Observed locally. These are implementation
 checks, not a successful autonomous research campaign or an official benchmark claim.
 
 Final local checks: **35 tests passed**, Ruff lint and formatting passed, and `pip check`

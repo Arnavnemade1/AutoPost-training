@@ -1,6 +1,6 @@
 # Infrastructure performance verification
 
-Measured October 28, 2026 on an Apple M4 (16 GB, macOS arm64), for commit `611fd6a`.
+Measured on an Apple M4 (16 GB, macOS arm64), for commit `611fd6a`.
 These are local timings of the same workloads before and after the change; they are
 not benchmark claims about any model.
 

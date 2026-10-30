@@ -92,8 +92,13 @@ test("bundle claims and gate checks hold, and a clean copy reproduces the rehear
     sealedFinalEvaluation: "not-run",
     allClaimsMapToArtifacts: "passed",
     recordingsMatchTheRun: "not-recorded",
-    currentEventRules: "unverified",
+    currentEventRules: "failed",
   });
+  // The event-rules check cites the recorded eligibility review, copied into the bundle.
+  expect(checks.currentEventRules.record).toBe("event-eligibility.md");
+  expect(await fileHash(join(output, "final/bundle/event-eligibility.md"))).toBe(
+    String(checks.currentEventRules.sha256),
+  );
   const copy = await mkdtemp(join(tmpdir(), "forge-phase8-copy-"));
   try {
     await cp(join(output, "final/bundle"), join(copy, "bundle"), { recursive: true });
