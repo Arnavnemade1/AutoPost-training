@@ -213,6 +213,19 @@ function setEnv(name, value) {
     : `${text.trimEnd()}\n${line}\n`;
   writeFileSync(envPath, text, { mode: 0o600 });
 }
+// Shared team credentials (.env.team, committed to this private repository) fill any value that is
+// missing or empty in your own .env. Your own value always wins.
+const teamPath = join(ROOT, ".env.team");
+if (existsSync(teamPath)) {
+  const mine = readFileSync(envPath, "utf8");
+  for (const line of readFileSync(teamPath, "utf8").split("\n")) {
+    const match = /^([A-Z0-9_]+)=(.+)$/.exec(line);
+    if (match && !new RegExp(`^${match[1]}=.+$`, "m").test(mine)) {
+      setEnv(match[1], match[2]);
+      say(`> Using the team's ${match[1]} from .env.team`);
+    }
+  }
+}
 const env = Object.fromEntries(
   readFileSync(envPath, "utf8")
     .split("\n")

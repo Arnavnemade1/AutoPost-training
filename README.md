@@ -45,6 +45,10 @@ in-lab wizard (**New campaign → Add your data**) does the same in the browser.
 | `npm run setup -- --keys` | Changes the OpenAI key or the Modal choice |
 | `npm run setup -- --force` | Reinstalls everything |
 
+The team's Azure OpenAI credentials are committed in `.env.team`; setup fills them into your `.env`
+when yours are empty, so the research agents use a model on any team member's machine. They are in
+the repository on purpose because it is private to the team. If that ever changes, rotate the key.
+
 
 The command-center workstream (repo root Next app) adds a live dashboard, GRPO, governance,
 independent final evaluation and recording. See [command-center setup and trust
