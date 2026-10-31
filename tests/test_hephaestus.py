@@ -11,8 +11,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from services.core import agents, store
-from services.core.hephaestus import brain, imessage, tools
+from services.core import agents, director, store
+from services.core.hephaestus import brain, desk, imessage, tools
 from services.core.hephaestus.service import LABEL, Service, role_of
 
 CHAT = "any;+;chat123"
@@ -739,3 +739,120 @@ def test_agent_conversations_only_reach_a_model_that_already_sees_them(
     rows = tools.run(context, "admin", "read_agent_chat", {"campaign_id": "forge-00000000"})
     assert [r["category"] for r in rows] == ["FAILURES"]
     assert ("PRIVATE training example" in json.dumps(rows)) is sees_text
+
+
+@pytest.fixture
+def real_lab(tmp_path, monkeypatch):
+    from services import api
+
+    monkeypatch.setattr(store, "DATA", tmp_path)
+    (tmp_path / "x").write_text("")
+    monkeypatch.setattr(tools, "free_memory_percent", lambda: 80)
+    for name in ("AZURE_OPENAI_API_KEY", "OPENAI_API_KEY", "FORGE_HEPHAESTUS_AZURE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    desk._service.clear()
+    return TestClient(api.app, base_url="http://127.0.0.1:8000"), api
+
+
+def test_the_private_conversation_answers_as_admin(real_lab, monkeypatch):
+    client, _ = real_lab
+    lab = TestClient(client.app, base_url="http://127.0.0.1:8000")
+    monkeypatch.setattr(desk, "service", lambda: _desk_service(lab))
+    assert client.get("/hephaestus/messages").json()["messages"] == []
+    assert client.post("/hephaestus/messages", json={"text": "tasks"}).status_code == 202
+    history = client.get("/hephaestus/messages").json()
+    assert [m["sender"] for m in history["messages"]] == ["you", "hephaestus"]
+    assert "gsm8k" in history["messages"][1]["text"]
+    assert history["thinking"] is False
+    assert not history["messages"][1]["text"].startswith("⚒️")
+    assert client.post("/hephaestus/messages", json={"text": ""}).status_code == 422
+
+
+def _desk_service(lab):
+    return Service(
+        "agent-chat",
+        lab=tools.Lab(lab),
+        messages=desk.Transport(),
+        path=store.DATA / "hephaestus-desk.json",
+        surface="agent-chat",
+    )
+
+
+def _running(cid="forge-dddddddd", **fields):
+    store.save(
+        {"id": cid, "name": "x", "config": {}, "status": "training", "created_at": store.now(), **fields}
+    )
+    return cid
+
+
+def test_a_directive_goes_through_relay_and_reaches_the_directors_evidence(real_lab, monkeypatch):
+    client, api = real_lab
+    sent = []
+
+    def send(*args, **options):
+        sent.append((args, options))
+        return {"message_id": "relay-1"}
+
+    monkeypatch.setattr(api, "send", send)
+    cid = _running()
+    reply = client.post(f"/campaigns/{cid}/directives", json={"text": "Focus on word problems"})
+    assert reply.status_code == 201
+    assert reply.json()["read_by_model"] is False
+    assert sent[0][0] == (cid, "hephaestus", "director", "OPERATOR_DIRECTIVE", "Focus on word problems")
+    assert sent[0][1] == {"route": "room"}
+    assert store.get(cid)["directives"] == ["Focus on word problems"]
+
+
+def test_nothing_is_recorded_when_relay_cant_deliver_a_directive(real_lab, monkeypatch):
+    client, api = real_lab
+
+    def down(*_, **__):
+        raise RuntimeError("Agent Relay delivery failed")
+
+    monkeypatch.setattr(api, "send", down)
+    cid = _running()
+    assert client.post(f"/campaigns/{cid}/directives", json={"text": "Focus please"}).status_code == 503
+    assert not store.get(cid).get("directives")
+
+
+def test_a_directive_is_refused_when_there_is_no_team_or_too_many(real_lab, monkeypatch):
+    client, api = real_lab
+    monkeypatch.setattr(api, "send", lambda *_, **__: {"message_id": "r"})
+    assert client.post("/campaigns/forge-eeeeeeee/directives", json={"text": "Focus"}).status_code == 404
+    ended = _running("forge-ffffffff", status="completed")
+    assert client.post(f"/campaigns/{ended}/directives", json={"text": "Focus"}).status_code == 409
+    full = _running("forge-abababab", directives=["a"] * api.MAX_DIRECTIVES)
+    assert client.post(f"/campaigns/{full}/directives", json={"text": "Focus"}).status_code == 409
+
+
+def test_the_director_sees_directive_rules_only_when_a_directive_exists(monkeypatch):
+    seen = []
+
+    def consult(role, instructions, evidence, schema):
+        seen.append((instructions, evidence))
+        raise RuntimeError("enough")
+
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    monkeypatch.setattr(agents, "consult", consult)
+    config = {"task_pack": "gsm8k", "strategies": ["broad_sft"], "objective": "Improve the maths task"}
+    development = {"score": 0.5, "predictions": [], "n": 10, "correct": 5}
+    for context in ({"objective": "x"}, {"objective": "x", "operator_directives": ["Focus"]}):
+        with pytest.raises(RuntimeError, match="enough"):
+            director.propose(config, development, [], context=context)
+    assert director.DIRECTIVES not in seen[0][0]
+    assert director.DIRECTIVES in seen[1][0]
+    assert seen[1][1]["operator_directives"] == ["Focus"]
+
+
+def test_hephaestus_is_a_valid_relay_participant():
+    from services.core.contracts import Message
+
+    Message(
+        id="m",
+        campaign_id="c",
+        sender="hephaestus",
+        recipient="director",
+        category="OPERATOR_DIRECTIVE",
+        text="Focus",
+        route="room",
+    )

@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from services.core import agents, compute, distill, packs, production, store, strategies, uploads
 from services.core.packs import register as pack_register
+from services.core.hephaestus import desk as hephaestus_desk
 from services.core.overseer import (
     connections as overseer_connect,
     review as overseer_review,
@@ -49,7 +50,14 @@ async def lifespan(_app):
             with suppress(Exception):
                 await asyncio.to_thread(overseer_worker.cycle)
 
-    tasks = [asyncio.create_task(monitor())]
+    async def report():
+        # Campaigns started from the private Hephaestus conversation: report the end, guard memory.
+        while True:
+            await asyncio.sleep(30)
+            with suppress(Exception):
+                await asyncio.to_thread(hephaestus_desk.watch)
+
+    tasks = [asyncio.create_task(monitor()), asyncio.create_task(report())]
     if OVERSEER_SECONDS > 0:
         tasks.append(asyncio.create_task(oversee()))
     try:
@@ -489,6 +497,24 @@ def direct_campaign(cid: str, directive: Directive):
         raise HTTPException(503, "Agent Relay is unavailable, so nothing was posted.") from error
     store.patch(cid, lambda current: current.setdefault("directives", []).append(directive.text))
     return {"posted": True, "relay_id": receipt["message_id"], "read_by_model": agents.configured()}
+
+
+class HephaestusMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@app.get("/hephaestus/messages")
+def hephaestus_messages():
+    return hephaestus_desk.history()
+
+
+@app.post("/hephaestus/messages", status_code=202)
+def hephaestus_message(message: HephaestusMessage, background: BackgroundTasks):
+    """The reply can take a while, so it runs after this returns and the page picks it up."""
+    posted = hephaestus_desk.post(message.text)
+    background.add_task(hephaestus_desk.respond, message.text)
+    return posted
 
 
 @app.post("/campaigns/{cid}/probe")
