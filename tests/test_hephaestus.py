@@ -170,6 +170,19 @@ def test_messages_from_before_it_joined_are_never_acted_on(tmp_path, monkeypatch
     assert starts(lab) == []
 
 
+def test_a_group_found_only_by_its_guid_is_read(world):
+    # Newer groups use a UUID in their id, and the database's short name for them can differ.
+    _, messages, _ = world
+    db = sqlite3.connect(messages.path)
+    db.execute("insert into chat values (4, 'any;+;111111112222333344445555', 'different-name')")
+    db.commit()
+    db.close()
+    messages.add("@hephaestus status", mine=True, chat=4)
+    found = messages.read("any;+;111111112222333344445555", 0)
+    assert [m["text"] for m in found] == ["@hephaestus status"]
+    assert imessage.count("any;+;111111112222333344445555", messages.path) == 1
+
+
 def test_it_reads_messages_stored_only_as_attributed_text(world):
     service, messages, _ = world
     messages.add(None, body=attributed("@hephaestus tasks"))
@@ -217,7 +230,10 @@ def test_posting_can_never_become_applescript(monkeypatch):
 
 
 def test_only_group_chats_are_listed(monkeypatch):
-    listed = "any;+;chat123\tThe lab\tA, B\nany;-;+15550001111\t\t\nany;+;chat999\tmissing value\tC, D\n"
+    listed = (
+        "any;+;chat123\tThe lab\tA, B\nany;-;+15550001111\t\t\nany;+;chat999\tmissing value\tC, D\n"
+        "any;+;11111111222233334444555566667777\t\tE, F\n"
+    )
     monkeypatch.setattr(
         imessage.subprocess,
         "run",
@@ -226,6 +242,7 @@ def test_only_group_chats_are_listed(monkeypatch):
     assert imessage.chats() == [
         {"id": CHAT, "name": "The lab", "people": "A, B"},
         {"id": "any;+;chat999", "name": "", "people": "C, D"},
+        {"id": "any;+;11111111222233334444555566667777", "name": "", "people": "E, F"},
     ]
 
 

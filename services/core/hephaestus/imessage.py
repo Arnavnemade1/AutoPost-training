@@ -2,7 +2,7 @@
 
 Reading needs Full Disk Access for the process, and posting needs permission to control Messages.
 macOS asks for or controls both, and only the Mac's owner can grant them. Only the configured chat is
-ever queried, and no message text is stored.
+ever queried, and this file stores nothing.
 """
 
 import sqlite3
@@ -39,8 +39,9 @@ from message m
 join chat_message_join j on j.message_id = m.ROWID
 join chat c on c.ROWID = j.chat_id
 left join handle h on h.ROWID = m.handle_id
-where c.chat_identifier = ? and m.ROWID > ? and coalesce(m.associated_message_type, 0) = 0
-order by m.ROWID limit ?
+where (c.chat_identifier = :chat or c.guid like '%;' || :chat) and m.ROWID > :after
+  and coalesce(m.associated_message_type, 0) = 0
+order by m.ROWID limit :limit
 """
 
 
@@ -49,7 +50,7 @@ class MessagesError(RuntimeError):
 
 
 def identifier(chat_id):
-    """The database's name for a chat, from the id Messages uses: any;+;chat123 is chat123."""
+    """The last part of the id Messages uses: any;+;chat123 is chat123, and groups may use a UUID there."""
     return chat_id.rsplit(";", 1)[-1]
 
 
@@ -99,7 +100,7 @@ def read(chat_id, after, path=DATABASE, limit=50):
     db = _connect(path)
     db.row_factory = sqlite3.Row
     try:
-        rows = db.execute(READ, (identifier(chat_id), after, limit)).fetchall()
+        rows = db.execute(READ, {"chat": identifier(chat_id), "after": after, "limit": limit}).fetchall()
     except sqlite3.Error as error:
         raise MessagesError(_denied()) from error
     finally:
@@ -121,8 +122,8 @@ def count(chat_id, path=DATABASE):
     try:
         return db.execute(
             "select count(*) from chat_message_join j join chat c on c.ROWID = j.chat_id"
-            " where c.chat_identifier = ?",
-            (identifier(chat_id),),
+            " where c.chat_identifier = :chat or c.guid like '%;' || :chat",
+            {"chat": identifier(chat_id)},
         ).fetchone()[0]
     except sqlite3.Error as error:
         raise MessagesError(_denied()) from error
@@ -144,6 +145,6 @@ def chats():
     found = []
     for line in done.stdout.splitlines():
         chat_id, name, people = (line.split("\t") + ["", ""])[:3]
-        if identifier(chat_id).startswith("chat"):
+        if ";+;" in chat_id:
             found.append({"id": chat_id, "name": "" if name == "missing value" else name, "people": people})
     return found
