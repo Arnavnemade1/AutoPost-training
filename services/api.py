@@ -21,7 +21,7 @@ from services.core.overseer import (
     worker as overseer_worker,
 )
 from services.core.contracts import DEFAULT_MODEL_ID, MODEL_ID, MODELS, CampaignConfig, model_spec
-from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, spawn
+from services.core.engine import actor, bridge_headers, bridge_url, governance, probe, send, spawn
 from services.core.actor_client import get_actor
 from services.core.lifecycle import reconcile, TERMINAL
 from services.chaos_routes import router as chaos_router
@@ -30,6 +30,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 OVERSEER_SECONDS = float(os.environ.get("FORGE_OVERSEER_SECONDS", "60"))
+MAX_DIRECTIVES = 5
 
 
 @asynccontextmanager
@@ -465,6 +466,29 @@ def cancel(cid: str):
             cid, "cancel_requested", "Stop requested. Worker will release compute at the next safe boundary."
         )
     return {"ok": True}
+
+
+class Directive(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=3, max_length=500)
+
+
+@app.post("/campaigns/{cid}/directives", status_code=201)
+def direct_campaign(cid: str, directive: Directive):
+    """Hephaestus posts in the research room, and the director reads it before its next experiment."""
+    s = store.get(cid)
+    if not s:
+        raise HTTPException(404, "Campaign not found")
+    if s["status"] in TERMINAL:
+        raise HTTPException(409, "That campaign has ended, so there is no team to direct.")
+    if len(s.get("directives") or []) >= MAX_DIRECTIVES:
+        raise HTTPException(409, f"That campaign already has {MAX_DIRECTIVES} instructions.")
+    try:
+        receipt = send(cid, "hephaestus", "director", "OPERATOR_DIRECTIVE", directive.text, route="room")
+    except RuntimeError as error:
+        raise HTTPException(503, "Agent Relay is unavailable, so nothing was posted.") from error
+    store.patch(cid, lambda current: current.setdefault("directives", []).append(directive.text))
+    return {"posted": True, "relay_id": receipt["message_id"], "read_by_model": agents.configured()}
 
 
 @app.post("/campaigns/{cid}/probe")
