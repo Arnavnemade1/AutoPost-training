@@ -115,6 +115,21 @@ def read(chat_id, after, path=DATABASE, limit=50):
     ]
 
 
+def count(chat_id, path=DATABASE):
+    """How many messages a chat has. Touches no message text: it proves access and nothing more."""
+    db = _connect(path)
+    try:
+        return db.execute(
+            "select count(*) from chat_message_join j join chat c on c.ROWID = j.chat_id"
+            " where c.chat_identifier = ?",
+            (identifier(chat_id),),
+        ).fetchone()[0]
+    except sqlite3.Error as error:
+        raise MessagesError(_denied()) from error
+    finally:
+        db.close()
+
+
 def send(chat_id, text):
     done = subprocess.run(["osascript", "-e", SEND, chat_id, text], capture_output=True, timeout=30)
     if done.returncode:

@@ -856,3 +856,56 @@ def test_hephaestus_is_a_valid_relay_participant():
         text="Focus",
         route="room",
     )
+
+
+# Handling a real Messages database with care.
+
+
+def test_the_access_check_proves_access_without_touching_message_text(tmp_path, monkeypatch, capsys):
+    from services.core.hephaestus.__main__ import check_access
+
+    monkeypatch.setenv("FORGE_HEPHAESTUS_CHAT", CHAT)
+    messages = Messages(tmp_path / "chat.db")
+    messages.add("PRIVATE message text")
+    statements = []
+    connect = sqlite3.connect
+
+    def watched(*args, **options):
+        db = connect(*args, **options)
+        db.set_trace_callback(statements.append)
+        return db
+
+    monkeypatch.setattr(imessage.sqlite3, "connect", watched)
+    assert check_access(messages.path) == 0
+    output = capsys.readouterr().out
+    assert "1 messages" in output
+    assert "PRIVATE" not in output
+    assert statements
+    assert not any("text" in s or "attributedBody" in s for s in statements)
+
+
+def test_the_access_check_explains_a_missing_chat_and_refused_access(tmp_path, monkeypatch, capsys):
+    from services.core.hephaestus.__main__ import check_access
+
+    monkeypatch.setenv("FORGE_HEPHAESTUS_CHAT", "any;-;+15550009999")
+    messages = Messages(tmp_path / "chat.db")
+    assert check_access(messages.path) == 1
+    assert "Send yourself one message" in capsys.readouterr().out
+    assert check_access(tmp_path / "missing.db") == 2
+    assert "Full Disk Access" in capsys.readouterr().out
+
+
+def test_the_database_is_opened_read_only(tmp_path):
+    messages = Messages(tmp_path / "chat.db")
+    db = imessage._connect(messages.path)
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        db.execute("delete from message")
+    db.close()
+
+
+def test_nothing_anyone_said_is_written_to_disk(world):
+    service, messages, _ = world
+    messages.add("PRIVATE chatter nobody addressed to the bot")
+    messages.add("@hephaestus PRIVATE question for the bot")
+    service.read_new()
+    assert "PRIVATE" not in service.path.read_text()
