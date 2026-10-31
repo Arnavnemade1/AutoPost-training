@@ -294,6 +294,9 @@ def test_restarting_resumes_from_the_cursor_and_never_loses_or_duplicates(tmp_pa
     sink = servers(collecting_sink(received))
     process = run_agent(tmp_path, config_for(source, sink))
     wait_for(lambda: len(received) == 4)
+    # The cursor is saved just after the sink accepts a page. A kill in between repeats that page,
+    # which the sink ignores, and is covered below; this checks a resume from a saved cursor.
+    wait_for(lambda: state_of(tmp_path).get("cursor") == 4)
     process.kill()
     process.wait()
     before = len(source.requests)
@@ -304,6 +307,24 @@ def test_restarting_resumes_from_the_cursor_and_never_loses_or_duplicates(tmp_pa
     finally:
         stop_agent(tmp_path, process)
     assert len(received) == 4
+
+
+def test_a_kill_before_the_cursor_is_saved_repeats_a_page_without_duplicates(tmp_path, servers):
+    received = []
+    source = servers(cursor_source(rows(4)))
+    sink = servers(collecting_sink(received))
+    (tmp_path).mkdir(parents=True, exist_ok=True)
+    # As if the agent died after the sink took everything, with its cursor still at the first page.
+    (tmp_path / "state.json").write_text(json.dumps({"cursor": 2, "mapping": None}))
+    received.extend({"id": str(i)} for i in range(1, 5))
+    process = run_agent(tmp_path, config_for(source, sink))
+    try:
+        wait_for(lambda: state_of(tmp_path).get("cursor") == 4)
+    finally:
+        stop_agent(tmp_path, process)
+    assert "since=2" in source.requests[0]["path"]
+    assert sorted(int(t["id"]) for t in received) == [1, 2, 3, 4]
+    assert state_of(tmp_path)["duplicates"] >= 2
 
 
 def test_a_second_copy_exits_rather_than_competing(tmp_path, servers):
