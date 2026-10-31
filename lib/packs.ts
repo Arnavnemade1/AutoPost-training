@@ -96,6 +96,32 @@ export type OverseerSummary = {
     detail: string;
   }[];
 };
+export type Connection = {
+  id: string;
+  name: string;
+  task_pack: string;
+  kind: string;
+  provider: string;
+  host: string;
+  status: string;
+  detail: string;
+  has_vm: boolean;
+  restarts: number;
+  mapping: Record<string, string>;
+  fields_seen: string[];
+  counts: Record<
+    "fetched" | "accepted" | "duplicates" | "rejected" | "skipped",
+    number
+  >;
+  last_success_at: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+};
+export type ConnectionList = {
+  connections: Connection[];
+  default: string;
+  providers: Record<string, { ready: boolean; reason: string | null }>;
+};
 export type QueueItem = {
   key: string;
   received_at: string;

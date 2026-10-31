@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "./icon";
+import { ConnectionsPanel } from "./overseer-connections";
 import { api, OverseerSummary, Pack, QueueItem } from "@/lib/packs";
 import { percent } from "@/lib/types";
 
@@ -95,6 +96,7 @@ export function OverseerView({ onSent }: { onSent: () => void }) {
         </button>
       </div>
       {error && <p className="error-banner">{error}</p>}
+      <ConnectionsPanel packId={packId} />
       {summary && (
         <>
           <section
@@ -157,11 +159,13 @@ export function OverseerView({ onSent }: { onSent: () => void }) {
                       <Icon name="alert" size={14} />
                       <strong>{a.kind.replace(/_/g, " ")}</strong>
                       <span className="muted small">
-                        {"today" in d
-                          ? `${percent(d.today)} today vs ${percent(d.baseline)} over the previous week (${d.n} traces)`
-                          : "model_version" in d
-                            ? `first traffic from ${d.model_version}`
-                            : `p95 ${ms(d.today_ms)} vs ${ms(d.baseline_ms)}`}
+                        {"connection" in d
+                          ? `${d.connection}: ${d.reason}`
+                          : "today" in d
+                            ? `${percent(d.today)} today vs ${percent(d.baseline)} over the previous week (${d.n} traces)`
+                            : "model_version" in d
+                              ? `first traffic from ${d.model_version}`
+                              : `p95 ${ms(d.today_ms)} vs ${ms(d.baseline_ms)}`}
                       </span>
                     </li>
                   );

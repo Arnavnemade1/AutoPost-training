@@ -6,17 +6,96 @@ failures](production-failures.md) loop trains on half and measures the other hal
 the command center under **Production overseer**.
 
 ```
-deployment ──▶ Supabase edge function `ingest` ──▶ private table ──pull──▶ lab
-                                                                          │
-   free checks on every trace ◀───────────────────────────────────────────┘
+your traffic logs ◀──reads── overseer agent (its own VM) ──┐
+deployment ──posts─────────────────────────────────────────┤
+                                                           ▼
+                        Supabase edge function `ingest` ──▶ private table ──pull──▶ lab
+                                                                                    │
+   free checks on every trace ◀─────────────────────────────────────────────────────┘
    small judge on suspicious traces + a random sample (daily budget)
    statistics, drift alerts, review queue
    reviewer labels ──▶ production scan ──▶ "Train on these failures"
 ```
 
-## Getting traces in
+## Connecting traffic
 
-**Remote deployments** post to the Supabase edge function `supabase/functions/ingest`:
+The customer connects a source once, under **Connected traffic**, and the overseer's agent keeps
+reading from it, with no uploads and no code change in the deployed app.
+
+Sources:
+
+- **Langfuse:** the public and secret keys. Reads generations through the v2 observations API.
+- **Any JSON API or log endpoint:** a URL and a read-only credential (bearer, API-key header or
+  Basic). Replies may be JSON or JSON lines.
+
+To read only what is new, give the filter parameter (`since`) and a value to start from, or put
+`{cursor}` in the URL (`...?id=gt.{cursor}&order=id`). The endpoint must return oldest first, unless
+it also pages with an opaque cursor (`page_cursor_param`, `page_cursor_path`). With no filter, the
+whole endpoint is read on each poll and repeats are dropped.
+
+What the agent does:
+
+- Finds the records in the reply and works out which fields hold the prompt, answer, model, latency,
+  tokens and feedback. It reads the common shapes: OpenAI-style requests and responses, tracer
+  messages held as JSON text, and plain fields.
+- If it can't tell, it reports **Needs your input** with the field names it saw, never their values.
+  Naming the two fields once is enough.
+- Moves its cursor only after a page has been accepted. Ingest ignores duplicates, so a crash repeats
+  work but loses nothing.
+- Backs off when the source or the buffer fails, and holds the cursor at the daily cap.
+
+The agent is `services/core/overseer/agent.py`: one standard-library file, and deliberately not a
+model. It holds credentials while reading untrusted production text, so no text it reads can change
+what it does.
+
+### Its own VM
+
+With `SUPERSERVE_API_KEY` and the Supabase buffer configured, each connection gets a
+[SuperServe](workflow-harness.md#superserve) sandbox VM (`uv sync --extra superserve`):
+
+| Protection | How |
+| --- | --- |
+| No real credential in the VM | Credentials are stored as SuperServe secrets. The VM sees stand-in tokens, swapped for the real values only on requests to the one allowed host |
+| Network | Deny-all outbound, except the source host, the ingest host and the DNS resolvers |
+| Scoped delivery | A dedicated ingest token per connection, with its own daily cap. The VM has no lab access and no service key |
+| Spend | `FORGE_OVERSEER_MAX_VMS` caps the VMs. After 5 failed recoveries the VM is stopped and an alert raised, rather than retried forever |
+| Dead-man switch | VMs auto-pause after `FORGE_OVERSEER_VM_ACTIVE_SECONDS`. The lab resumes them on each cycle, so if the lab goes away, the VM pauses and billing stops |
+| Removal | **Disconnect** deletes the VM and the secrets and revokes the token. If any step fails, the connection stays listed so it can be retried |
+
+The lab supervises on every overseer cycle: it restarts a stalled agent, replaces a lost VM from the
+last reported cursor, and raises a `connector_down` alert for what needs a person (a refused
+credential, an unknown shape, the daily cap, or a source down for an hour).
+
+Limits to plan around:
+
+- **Unattended coverage:** while the lab is off, a VM collects only until its auto-pause window ends
+  (an hour by default), then catches up on resume from its cursor. Traffic the source no longer
+  retains by then is missed. A longer window means more billing.
+- **DNS:** the allowed resolvers are needed for names to resolve, and DNS can carry data out, so the
+  allowlist is strong but not absolute.
+- **Late records:** a filter on an ever-increasing field misses records that appear behind the
+  cursor. The Langfuse preset reads five minutes behind for this reason.
+- **Not verified on a live account yet:** tests use a double of the SuperServe SDK. Connect one source
+  with a real key to establish the credential swap (Basic auth especially), the allowlist and the
+  background process on your template.
+
+### Without a VM, or inside a private network
+
+SuperServe always blocks private addresses, so a VM can't reach a private network. Without an API key
+the agent runs as a process on the lab's machine, which is not a security boundary, and the local
+intake receives its traces.
+
+For a source only reachable privately, run the same file inside that network. Issue a token with
+`token create` (below), then write a `config.json` with `source`, `task_pack`, `url`, `auth`,
+`sink_url` and any cursor settings:
+
+```sh
+FORGE_SOURCE_SECRET=<read-only credential> FORGE_INGEST_TOKEN=<token> python3 agent.py <directory with config.json>
+```
+
+## Getting traces in by other routes
+
+**Remote deployments** can post to the Supabase edge function `supabase/functions/ingest` themselves:
 
 - Batches of up to 500 traces and 4 MB.
 - `Authorization: Bearer <ingest token>`.

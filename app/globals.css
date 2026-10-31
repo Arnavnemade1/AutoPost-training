@@ -6434,6 +6434,42 @@ td:last-child {
   align-items: flex-start;
   flex-wrap: wrap;
 }
+.connections-panel {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.connections-panel h3,
+.connections-panel header p {
+  margin: 0 0 4px;
+}
+.connection-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.connection {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.connection p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.connection-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 @media (max-width: 760px) {
   .overseer-signals li {
     grid-template-columns: 1fr auto;

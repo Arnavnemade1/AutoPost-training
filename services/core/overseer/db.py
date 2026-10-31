@@ -42,6 +42,27 @@ create table if not exists alerts (
   id text primary key, day text not null, pack_id text not null, kind text not null,
   detail text not null, created_at text not null
 );
+create table if not exists connections (
+  id text primary key,
+  name text not null,
+  pack_id text not null,
+  kind text not null,
+  provider text not null,
+  config text not null,
+  status text not null,
+  detail text not null default '',
+  vm_id text,
+  token_id text,
+  secret_names text,
+  cursor text,
+  agent text,
+  restarts integer not null default 0,
+  daily_cap integer not null,
+  data_terms text not null,
+  last_seen_at text,
+  created_at text not null,
+  updated_at text not null
+);
 """
 
 

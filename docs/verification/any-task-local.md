@@ -50,3 +50,20 @@ the overseer page, at desktop and phone widths with no console errors.
 - The Supabase migration and edge function were not deployed or run, locally or hosted.
 - DPO, teacher distillation and uploaded packs have not run in a real campaign.
 - Registering a pack and labeling traces were exercised in tests only, not in the live lab data.
+
+## Connected traffic
+
+Verified with the real agent process, the real lab API and command center, and a local source that
+served OpenAI-shaped logs behind a bearer token. No SuperServe account was used.
+
+- Connecting through the form was the only step. The agent worked out the field mapping and delivered
+  61 traces; the free checks flagged them; **Disconnect** stopped the agent and kept those traces.
+- After `kill -9` and an expired heartbeat, the supervisor restarted the agent, which resumed from
+  its cursor with no loss and no duplicates.
+- The credential was found only in the `0600` secrets file, not in the database, API replies, the
+  configuration, the state file or the log.
+
+**Not established:** the behavior of a live SuperServe VM. `tests/test_overseer_connections.py` checks
+what is sent to a double of its SDK (allowlist, secret bindings, auto-pause, clean-up), but not that
+the credential swap, the allowlist or the background process work on a real sandbox. The Langfuse
+preset was checked against Langfuse's published API specification, not a live project.

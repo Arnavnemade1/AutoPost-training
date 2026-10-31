@@ -163,12 +163,19 @@ def alerts(now=None):
 
 
 def cycle():
-    from services.core.overseer import pull
+    from services.core.overseer import connections, pull
 
+    supervised = connections.supervise()
     pulled = pull.pull() if pull.configured() else {"pulled": 0, "skipped": "Supabase buffer not configured"}
     checked = check_new()
     judged = judge_eligible()
-    return {"pulled": pulled, "checked": checked, "judged": judged, "alerts": alerts()}
+    return {
+        "connections": supervised,
+        "pulled": pulled,
+        "checked": checked,
+        "judged": judged,
+        "alerts": alerts(),
+    }
 
 
 def summary(pack_id=None):

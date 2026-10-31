@@ -23,7 +23,8 @@ data as a [task pack](docs/task-packs.md) (Q&A with references, structured JSON 
 chat preferences), validates every row and seals a test split. Besides SFT and GRPO it offers
 [teacher distillation](docs/distillation.md) from any OpenAI-compatible teacher, with only
 checker-verified solutions kept, and [DPO preference alignment](docs/preference-alignment.md).
-A [production overseer](docs/overseer.md) runs free checks on every deployed answer, judges a
+A [production overseer](docs/overseer.md) connects to your traffic logs through its own locked-down
+VM, so nothing needs uploading by hand. It runs free checks on every deployed answer, judges a
 sample under a hard daily budget and sends reviewer-labeled failures back to the lab. These are
 verified on fixtures and tiny models only; no model improvement from them is claimed yet
 ([verification](docs/verification/any-task-local.md)).

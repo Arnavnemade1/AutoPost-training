@@ -4,17 +4,20 @@ import uuid
 import asyncio
 from contextlib import suppress
 from pathlib import Path
+from typing import Literal
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from services.core import agents, compute, distill, packs, production, store, strategies, uploads
 from services.core.packs import register as pack_register
 from services.core.overseer import (
+    connections as overseer_connect,
     review as overseer_review,
     traces as overseer_traces,
+    vms as overseer_vms,
     worker as overseer_worker,
 )
 from services.core.contracts import DEFAULT_MODEL_ID, MODEL_ID, MODELS, CampaignConfig, model_spec
@@ -604,6 +607,85 @@ class OverseerExport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task_pack: str
     name: str = Field(min_length=1, max_length=80)
+
+
+class OverseerConnection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    task_pack: str
+    kind: Literal["http", "langfuse"]
+    provider: Literal["superserve", "local"] | None = None
+    url: str | None = Field(default=None, max_length=2000)
+    auth_type: Literal["none", "bearer", "api-key", "basic"] = "none"
+    username: str | None = Field(default=None, max_length=300)
+    header: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{1,64}$")
+    prefix: str | None = Field(default=None, max_length=32)
+    secret: str | None = Field(default=None, max_length=8000)
+    records_path: str | None = Field(default=None, max_length=200)
+    cursor_param: str | None = Field(default=None, max_length=64)
+    cursor_field: str | None = Field(default=None, max_length=200)
+    start_cursor: str | None = Field(default=None, max_length=200)
+    page_cursor_param: str | None = Field(default=None, max_length=64)
+    page_cursor_path: str | None = Field(default=None, max_length=200)
+    mapping: dict[str, str] | None = None
+    poll_seconds: int | None = Field(default=None, ge=15, le=3600)
+    daily_cap: int | None = Field(default=None, gt=0, le=1_000_000)
+    data_terms: str = Field(min_length=20, max_length=2000)
+
+
+class OverseerMapping(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mapping: dict[str, str] = Field(min_length=1, max_length=20)
+
+
+@app.get("/overseer/connections")
+def overseer_connections(task_pack: str | None = None):
+    return overseer_connect.listing(task_pack)
+
+
+@app.post("/overseer/connections", status_code=201)
+def overseer_connect_source(request: OverseerConnection, background: BackgroundTasks):
+    """Link a traffic source once. The VM boots in the background, and the agent takes it from there."""
+    fields = request.model_dump()
+    secret = fields.pop("secret")
+    try:
+        connection = overseer_connect.create({**fields, "secret": secret})
+    except KeyError as error:
+        raise HTTPException(404, "Task pack not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    background.add_task(overseer_connect.start, connection["id"], secret)
+    return connection
+
+
+@app.post("/overseer/connections/{connection_id}/mapping")
+def overseer_connection_mapping(connection_id: str, request: OverseerMapping):
+    try:
+        return overseer_connect.set_mapping(connection_id, request.mapping)
+    except KeyError as error:
+        raise HTTPException(404, "Connection not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/overseer/connections/{connection_id}/restart")
+def overseer_connection_restart(connection_id: str):
+    try:
+        return overseer_connect.restart(connection_id)
+    except KeyError as error:
+        raise HTTPException(404, "Connection not found") from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.post("/overseer/connections/{connection_id}/disconnect")
+def overseer_connection_disconnect(connection_id: str):
+    try:
+        return overseer_connect.disconnect(connection_id)
+    except KeyError as error:
+        raise HTTPException(404, "Connection not found") from error
+    except overseer_vms.VMError as error:
+        raise HTTPException(502, str(error)) from error
 
 
 @app.get("/overseer/summary")
