@@ -75,8 +75,8 @@ class Message(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     campaign_id: str
-    sender: Literal["director", "data", "trainer", "evaluator", "governance"]
-    recipient: Literal["director", "data", "trainer", "evaluator", "governance"]
+    sender: Literal["director", "data", "trainer", "evaluator", "governance", "hephaestus"]
+    recipient: Literal["director", "data", "trainer", "evaluator", "governance", "hephaestus"]
     category: str
     text: str
     experiment_id: str | None = None

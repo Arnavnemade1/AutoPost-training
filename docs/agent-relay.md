@@ -33,6 +33,7 @@ from memory.
 | `CHECKPOINT_APPROVED` / `STRATEGY_REVISED` | governance -> director | DM |
 | `CHECKPOINT_VERDICT` | governance, in the checkpoint's thread | thread reply, plus a reaction on the checkpoint post |
 | `CAMPAIGN_COMPLETED` | director -> room | research-room post |
+| `OPERATOR_DIRECTIVE` | hephaestus -> room | research-room post |
 
 ## Capability inventory
 

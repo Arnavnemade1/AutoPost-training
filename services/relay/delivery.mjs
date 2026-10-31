@@ -3,7 +3,14 @@
 // as thread replies under the checkpoint they judge. A message counts as delivered only
 // after each recipient drains it from its own Relay inbox, verifies sender, route and
 // exact bytes, acks the inbox delivery and marks it read.
-export const roles = ["director", "data", "trainer", "evaluator", "governance"];
+export const roles = [
+  "director",
+  "data",
+  "trainer",
+  "evaluator",
+  "governance",
+  "hephaestus",
+];
 export const reactions = ["white_check_mark", "x", "eyes"];
 
 const ID = /^[a-zA-Z0-9_-]{1,100}$/;
