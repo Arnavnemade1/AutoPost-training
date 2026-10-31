@@ -34,12 +34,28 @@ training speed. CPU works but is slower. The demonstrated training host is an Ap
 M3 with 16 GB memory. The independent evaluator uses a separate Linux CPU VM.
 
 ```sh
-npm ci
-uv sync --extra advanced
-cp .env.example .env
-chmod 600 .env
 npm run lab
 ```
+
+`npm run lab` runs `scripts/setup.mjs --check` first, which does only what is missing or
+out of date. Each step is skipped when its inputs are unchanged (recorded in
+`data/.setup.json`), so later starts add well under a second. The steps:
+
+1. Checks for Node 24 and finds uv. If uv is missing, it asks before installing it.
+2. Runs `npm ci`.
+3. Runs `uv sync --extra advanced --extra modal`, which installs Python 3.12 if needed and the
+   training core as an editable package, so `forge-distill` and the other training-core
+   commands work in a fresh clone.
+4. Generates the durable actors client.
+5. Creates `.env` (mode 600) from `.env.example`. On the first run it optionally asks for an
+   OpenAI key (the input is hidden) and whether to use Modal; if you choose Modal, it runs
+   `modal token new`.
+6. Imports every module the lab loads, so a broken install stops here with the fix rather than
+   inside a campaign.
+
+In a terminal, the lab opens in your browser when it is ready. Set `FORGE_NO_BROWSER=1` to
+turn that off. `npm run setup` runs the same steps with full output, `-- --keys` asks the
+questions again and `-- --force` redoes every step.
 
 Open the lab at <http://127.0.0.1:3000/lab> (the landing page is <http://127.0.0.1:3000/>). The launcher starts/reuses Terse (7100), Relaycast (7528),
 the recipient-verifying Relay bridge (7529), the API (8000), and Next.js (3000).

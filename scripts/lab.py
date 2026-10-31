@@ -155,6 +155,11 @@ try:
         f"\nForge is ready: lab {web}/lab, landing page {web}/\nCtrl+C stops only services started by this command.",
         flush=True,
     )
+    # Open the lab for someone at a terminal; scripted and headless runs are left alone.
+    if sys.stdout.isatty() and os.environ.get("FORGE_NO_BROWSER") != "1":
+        import webbrowser
+
+        webbrowser.open(f"{web}/lab")
     while True:
         restart = terse and terse.poll()
         if restart:

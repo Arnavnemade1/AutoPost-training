@@ -4,7 +4,17 @@ A task pack is everything Forge needs to improve a model on one task: the data, 
 instruction shown to the model, how an answer is checked, how data is split, a regression
 suite, the labels the command center shows and which training methods apply. GSM8K math is
 the built-in pack. A company adds its own by uploading a file in **New campaign → Add your
-data**, or through the API.
+data**, by running `npm run add-data -- path/to/file.csv` (or `.jsonl`), or through the API.
+
+`scripts/add_data.py` is the command-line form of the wizard:
+- It guesses the question, answer, id and preference columns, and the checker, with the
+  wizard's rules.
+- It shows the guesses on the first rows, then asks for a name, an objective and the
+  training-permission statement. In scripts, pass `--yes --terms "..."`.
+- It registers with the same `register.build` and `packs.save` as `POST /packs`, so the pack
+  appears in the lab at once.
+- When it refuses, it says why: most rows failing the checker means the wrong column or
+  checker; otherwise the file is too small (about 120 usable rows at the default split).
 
 The code is in `services/core/packs/` (packs and registration) and
 `services/training-core/src/forge_training/checkers.py` and `tasks.py` (the reusable checker and

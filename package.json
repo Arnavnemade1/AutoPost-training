@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "test:relay": "node scripts/check-relay.mjs",
     "test": ".venv/bin/python -m pytest tests -q",
-    "lab": ".venv/bin/python scripts/lab.py",
+    "setup": "node scripts/setup.mjs",
+    "lab": "node scripts/setup.mjs --check && .venv/bin/python scripts/lab.py",
+    "add-data": "node scripts/setup.mjs --check && .venv/bin/python scripts/add_data.py",
     "harness": ".venv/bin/python -m services.harness",
     "hephaestus": ".venv/bin/python -m services.core.hephaestus run",
     "format:check": "prettier --check 'app/**/*.{ts,tsx,css}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' next.config.ts"

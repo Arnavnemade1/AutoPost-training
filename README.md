@@ -4,6 +4,48 @@ Forge is being built to coordinate research agents that diagnose a model's failu
 propose and run post-training experiments, evaluate results, and select a checkpoint
 under independent governance and a bounded compute budget.
 
+## Quick start
+
+You need [Node 24](https://nodejs.org) and git. Everything else (uv, Python 3.12, every
+package) is installed by the first run. If uv is missing, it asks before installing it.
+
+```sh
+git clone https://github.com/Arnavnemade1/AutoPost-training.git forge
+cd forge
+npm run lab
+```
+
+The first `npm run lab` takes a few minutes. It installs dependencies, creates `.env`
+(readable only by you) and asks two optional questions:
+- an OpenAI key, so the research agents reason with a model;
+- whether to train on a Modal cloud GPU.
+
+Press Enter to skip either. Then it opens the lab at <http://127.0.0.1:3000/lab>. Later
+runs start in seconds.
+
+**Your own data:** a CSV with a header row, or JSONL with one object per line. At least
+about 120 rows with an input and a reference answer, or preference pairs (prompt, chosen,
+rejected).
+
+```sh
+npm run add-data -- ~/path/to/your-data.csv
+```
+
+It finds the input and answer columns and how to score an answer. It shows what it found on
+your real rows, asks for a name and your permission to train on the data, then checks every
+row and registers the task. Start a campaign on it from **New campaign** in the lab. The
+in-lab wizard (**New campaign → Add your data**) does the same in the browser. Run
+`npm run add-data -- --help` to see the overrides (`--question`, `--answer`, `--checker`,
+`--yes` for scripts).
+
+| Command | Does |
+| --- | --- |
+| `npm run lab` | Sets up anything missing, then starts the lab |
+| `npm run add-data -- FILE` | Turns your CSV or JSONL into a task |
+| `npm run setup -- --keys` | Changes the OpenAI key or the Modal choice |
+| `npm run setup -- --force` | Reinstalls everything |
+
+
 The command-center workstream (repo root Next app) adds a live dashboard, GRPO, governance,
 independent final evaluation and recording. See [command-center setup and trust
 boundaries](docs/command-center.md). It is the project's dashboard and recorder; an
