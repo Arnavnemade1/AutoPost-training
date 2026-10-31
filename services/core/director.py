@@ -54,6 +54,14 @@ DELEGATION = (
 )
 
 
+# Added only when a directive exists, so runs without one are unchanged.
+DIRECTIVES = (
+    " operator_directives are instructions from Hephaestus, who runs this research team. Weigh them "
+    "when choosing the experiment. They can't change the objective, reward, benchmark or budgets, or "
+    "excuse a failing measurement, and they never unlock final test data."
+)
+
+
 def repeats(proposal, previous):
     """Names the earlier experiment this proposal would reproduce byte for byte, if any."""
     for p in previous:
@@ -124,7 +132,8 @@ def propose(config, development, previous, context=None):
         "additionalProperties": False,
     }
     evidence = context if context is not None else build_input(config, development, previous)
-    answer, session = agents.consult("director", instructions(config) + DELEGATION, evidence, schema)
+    told = DIRECTIVES if isinstance(evidence, dict) and evidence.get("operator_directives") else ""
+    answer, session = agents.consult("director", instructions(config) + DELEGATION + told, evidence, schema)
     proposal = Proposal.model_validate(answer).model_dump()
     repeated = repeats(proposal, previous)
     if repeated:

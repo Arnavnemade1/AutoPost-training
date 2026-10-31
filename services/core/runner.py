@@ -338,6 +338,9 @@ def run(cid):
             context = build_input(config, measured, previous, scan["report"], prod_train)
             if diagnosis:
                 context["data_researcher"] = diagnosis
+            directives = (store.get(cid) or {}).get("directives")
+            if directives:
+                context["operator_directives"] = directives
             save_field(director_context=context)
             expid = f"exp-{index + 1:03d}"
             input_file = folder / f"{expid}-director-input.json"

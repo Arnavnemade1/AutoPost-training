@@ -38,6 +38,13 @@ start its own helpers until the depth limit.
 - A role whose model call fails records an error event, and the campaign continues
   without that role's opinion. The director still fails closed, as before.
 
+## Instructions from Hephaestus
+
+[Hephaestus](hephaestus.md) runs this team, and is a sixth participant in the research room. An instruction
+it posts reaches the director's evidence as `operator_directives`, before the next experiment. It can't
+change gates, budgets, the objective or sealed data. With no directive, the director's instructions and
+evidence are unchanged.
+
 ## Where to see it
 
 - **Agent chat:** a parent posts `SUBAGENTS_REPORTED` to the research room, and each
