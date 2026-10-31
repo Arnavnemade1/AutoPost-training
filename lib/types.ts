@@ -302,7 +302,7 @@ const STRATEGY_NAMES: Record<string, string> = {
 };
 export const strategyName = (s: string) => STRATEGY_NAMES[s] ?? s;
 export const percent = (n?: number) =>
-  n === undefined ? "—" : `${(n * 100).toFixed(1)}%`;
+  n === undefined ? "None" : `${(n * 100).toFixed(1)}%`;
 export const duration = (s: number) =>
   s < 60
     ? `${Math.round(s)}s`

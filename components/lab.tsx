@@ -65,16 +65,21 @@ const descriptions: Record<View, string> = {
     "Live deployed traffic: free checks on every answer, a budgeted judge on a sample, and a review queue that sends failures back to the lab.",
   terse:
     "Read the persisted coordination state and replay versioned training worlds.",
-  overview: "Your autonomous research organization, at a glance.",
-  experiments: "Every hypothesis, measured against the evidence.",
-  environments: "Inspect the worlds behind each model prediction.",
-  governance: "Independent oversight with the authority to say no.",
+  overview:
+    "The selected campaign: who is working, what it measured, and what it spent.",
+  experiments:
+    "Each experiment's hypothesis, training run and development score.",
+  environments:
+    "The episodes behind each prediction, with seed, actions and reward.",
+  governance:
+    "The rules every campaign runs under, and a probe that tests them on demand.",
   results:
-    "A frozen checkpoint. An independent measurement. The complete evidence.",
+    "The frozen checkpoint scored once against the sealed test, with every prediction.",
   artifacts: "The model, the measurements, and how to reproduce them.",
   evidence:
     "Every campaign's sealed result, the checks behind it, and what it cost to run. Read from saved records.",
-  connections: "The infrastructure behind the research.",
+  connections:
+    "The services this lab is connected to right now, and how each one runs.",
 };
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -352,7 +357,7 @@ export function Lab() {
         </nav>
         <div className="sidebar-bottom">
           <div className="infra-summary">
-            <span className="nav-group-label">RESEARCH INFRASTRUCTURE</span>
+            <span className="nav-group-label">Infrastructure</span>
             <button onClick={() => navigate("connections")}>
               <span
                 className={`static-dot ${health?.services.terse.connected ? "" : "muted-dot"}`}
@@ -442,12 +447,6 @@ export function Lab() {
         >
           <div className="page-heading">
             <div>
-              <div className="page-eyebrow">
-                <span className="mini-mark">
-                  <ForgeMark size={13} />
-                </span>{" "}
-                AUTONOMOUS POST-TRAINING
-              </div>
               <h1>
                 {view === "overview"
                   ? "Research overview"
@@ -520,9 +519,7 @@ export function Lab() {
                         <Icon name="experiments" size={18} />
                       </div>
                       <div>
-                        <label htmlFor="campaign-select">
-                          RESEARCH CAMPAIGN
-                        </label>
+                        <label htmlFor="campaign-select">Campaign</label>
                         <select
                           id="campaign-select"
                           value={selected}
@@ -590,7 +587,7 @@ export function Lab() {
                   {!campaign && (
                     <div className="welcome-strip">
                       <div>
-                        <strong>A model. A benchmark. A better result.</strong>
+                        <strong>No campaign yet</strong>
                         <p>
                           Set an objective. Forge runs the experiments and
                           preserves the evidence.
@@ -623,7 +620,7 @@ export function Lab() {
                         Elapsed time
                       </span>
                       <strong>
-                        {campaign ? duration(elapsed) : "—"}
+                        {campaign ? duration(elapsed) : "None"}
                         <small>
                           {live
                             ? "research in progress"
@@ -639,7 +636,7 @@ export function Lab() {
                         Compute used
                       </span>
                       <strong>
-                        {campaign ? duration(spent) : "—"}
+                        {campaign ? duration(spent) : "None"}
                         <small>
                           {campaign
                             ? `of ${duration(campaign.config.max_seconds)} reserved limit`
@@ -742,7 +739,8 @@ export function Lab() {
                         <div>
                           <span className="eyebrow">Training loss</span>
                           <strong>
-                            {activeExp?.metrics.at(-1)?.loss.toFixed(3) || "—"}
+                            {activeExp?.metrics.at(-1)?.loss.toFixed(3) ||
+                              "Not yet"}
                             <small>
                               {activeExp?.strategy === "grpo"
                                 ? "policy objective"
@@ -784,7 +782,7 @@ export function Lab() {
                         title="Research activity"
                         icon="clock"
                         right={
-                          <span className="mono muted small">UTC TRACE</span>
+                          <span className="mono muted small">UTC trace</span>
                         }
                       />
                       <Activity events={events} />

@@ -173,7 +173,7 @@ export function ProductionView({
             <Icon name="production" size={18} />
           </div>
           <div>
-            <label htmlFor="scan-select">PRODUCTION SCAN</label>
+            <label htmlFor="scan-select">Production scan</label>
             <select
               id="scan-select"
               value={active}

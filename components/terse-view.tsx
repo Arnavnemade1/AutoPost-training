@@ -110,7 +110,7 @@ export function TerseView({
     <div className="terse-view">
       <section className="terse-intro">
         <div>
-          <span className="eyebrow">TERSE · DURABLE ACTORS</span>
+          <span className="eyebrow">Terse durable actors</span>
           <h2>The memory behind the research.</h2>
           <p>
             Coordination lives in persisted actors. Optimization runs on the

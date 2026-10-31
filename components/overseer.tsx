@@ -7,7 +7,7 @@ import { percent } from "@/lib/types";
 
 const ms = (n: number | null) =>
   n === null
-    ? "—"
+    ? "None"
     : n >= 1000
       ? `${(n / 1000).toFixed(1)}s`
       : `${Math.round(n)}ms`;
@@ -127,7 +127,7 @@ export function OverseerView({ onSent }: { onSent: () => void }) {
               <span>Judged failure rate</span>
               <strong>
                 {judged?.sample_failure_rate === null || !judged
-                  ? "—"
+                  ? "Not judged"
                   : percent(judged.sample_failure_rate)}
               </strong>
               <p>

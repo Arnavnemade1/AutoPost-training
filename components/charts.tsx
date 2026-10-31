@@ -169,7 +169,7 @@ export function Benchmark({ campaign }: { campaign: Campaign | null }) {
             : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} percentage points`}
         </span>
         <span className="mono">
-          {campaign?.final ? "SEALED FINAL" : "DEVELOPMENT"}
+          {campaign?.final ? "Sealed final" : "Development"}
         </span>
       </div>
       <p className="chart-note">
@@ -294,7 +294,7 @@ export function ResearchGraph({
           transform="rotate(-90 653 275)"
           className="edge-label"
         >
-          INDEPENDENT REVIEW
+          Independent review
         </text>
       </svg>
       <div className="graph-node-layer">

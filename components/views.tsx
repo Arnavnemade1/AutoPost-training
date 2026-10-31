@@ -182,7 +182,7 @@ export function ExperimentTable({
                     <td className="numeric accent-text">
                       {e.evaluation && campaign?.baseline
                         ? `${(e.evaluation.score - campaign.baseline.score) * 100 > 0 ? "+" : ""}${((e.evaluation.score - campaign.baseline.score) * 100).toFixed(1)} pp`
-                        : "—"}
+                        : "Not measured"}
                     </td>
                   )}
                   <td>
@@ -253,7 +253,7 @@ export function ExperimentDetail({
             </div>
             <div>
               <span>Latest loss</span>
-              <strong>{e.metrics.at(-1)?.loss.toFixed(3) || "—"}</strong>
+              <strong>{e.metrics.at(-1)?.loss.toFixed(3) || "Not yet"}</strong>
             </div>
           </div>
           <div className="detail-section">
@@ -492,7 +492,7 @@ export function EnvironmentsView({
                 <i className="static-dot" />{" "}
                 {e.terminated ? "Terminated" : "Ready"}
               </span>
-              <span className="mono">reward {e.reward ?? "—"}</span>
+              <span className="mono">reward {e.reward ?? "none"}</span>
             </footer>
           </button>
         ))}
@@ -546,7 +546,7 @@ export function EnvironmentDetail({
         <div>
           <span>Reward</span>
           <strong className={e.reward === 1 ? "accent-text" : ""}>
-            {step ? e.reward : "—"}
+            {step ? e.reward : "Not yet"}
           </strong>
         </div>
         <div>
@@ -688,10 +688,7 @@ export function GovernanceView({
       <section className="panel">
         <PanelHeader title="Put the gate to the test" icon="target" />
         <div className="probe-panel">
-          <div className="probe-symbol">
-            <Icon name="governance" size={34} />
-          </div>
-          <h3>Trust an action, not a promise.</h3>
+          <h3>Watch the gate reject a bad proposal</h3>
           <p>
             Inject a clearly labeled proposal that changes the reward and
             requests sealed data. The real governance actor must reject it and

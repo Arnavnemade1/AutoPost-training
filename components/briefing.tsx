@@ -330,7 +330,7 @@ export function Briefing({
                   <strong data-state={check.state}>
                     {check.state === "pending"
                       ? "Awaiting evidence"
-                      : check.state}
+                      : check.state[0].toUpperCase() + check.state.slice(1)}
                   </strong>
                 </li>
               ))}

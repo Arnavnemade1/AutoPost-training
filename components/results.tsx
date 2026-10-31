@@ -11,7 +11,7 @@ export function Results({ campaign }: { campaign: Campaign | null }) {
       <section className="panel">
         <Empty
           icon="chart"
-          title="A result has to be earned"
+          title="No sealed result yet"
           description="Final results appear only after checkpoint selection freezes and independent evaluation finishes."
         />
       </section>

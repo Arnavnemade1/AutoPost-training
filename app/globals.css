@@ -1304,8 +1304,8 @@ small {
 }
 .brand-lab {
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 1.4px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   border: 1px solid var(--line-strong);
   padding: 4px 5px;
   border-radius: 3px;
@@ -1342,7 +1342,7 @@ small {
   display: block;
 }
 .workspace-selector div span {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   display: block;
   margin-top: 4px;
@@ -1358,7 +1358,7 @@ small {
   padding: 0 13px;
   margin-bottom: 11px;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.055em;
   font-weight: 500;
 }
@@ -1387,7 +1387,7 @@ small {
   color: var(--accent);
 }
 .nav-count {
-  font: 10px var(--font-mono);
+  font: 11px var(--font-mono);
   border: 1px solid var(--line-strong);
   padding: 2px 5px;
   border-radius: 3px;
@@ -1405,7 +1405,7 @@ small {
   border-top: 1px solid var(--line);
 }
 .infra-summary > .nav-group-label {
-  font-size: 8px;
+  font-size: 11px;
   padding: 0 10px;
   letter-spacing: 0.08em;
   margin-bottom: 12px;
@@ -1424,7 +1424,7 @@ small {
 }
 .infra-summary button small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 .infra-summary button:hover {
   background: var(--surface-hover);
@@ -1470,13 +1470,13 @@ small {
 }
 .sidebar-account strong {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 .sidebar-account div span {
   display: block;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   margin-top: 4px;
 }
 .sidebar-account .icon-button {
@@ -1523,11 +1523,11 @@ small {
   align-items: center;
   gap: 6px;
   color: var(--warning);
-  font-size: 10px;
+  font-size: 11px;
 }
 @media (max-width: 540px) {
   .capture-status {
-    font-size: 9px;
+    font-size: 11px;
   }
   .topbar-actions {
     gap: 10px;
@@ -1541,7 +1541,7 @@ small {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 .search-button {
   display: flex;
@@ -1551,7 +1551,7 @@ small {
 }
 kbd {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   background: var(--surface);
   border: 1px solid var(--line);
   padding: 3px 5px;
@@ -1559,7 +1559,7 @@ kbd {
 }
 .topbar-version {
   color: var(--faint);
-  font-size: 9px;
+  font-size: 11px;
   padding-left: 2px;
 }
 .main-content {
@@ -1573,20 +1573,6 @@ kbd {
   align-items: center;
   gap: 16px;
   margin-bottom: 30px;
-}
-.page-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 1.4px;
-  color: var(--accent);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 10px;
-}
-.mini-mark {
-  display: flex;
-  align-items: center;
 }
 h1 {
   font-size: 30px;
@@ -1634,7 +1620,7 @@ h1 {
 }
 .small-button {
   min-height: 32px;
-  font-size: 10px;
+  font-size: 11px;
   padding: 7px 10px;
 }
 .icon-button {
@@ -1656,7 +1642,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   padding: 5px 0;
 }
@@ -1667,7 +1653,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
   padding: 4px 6px;
   background: var(--surface-raised);
@@ -1718,8 +1704,8 @@ h1 {
   display: block;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.8px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   margin-bottom: 5px;
 }
 .campaign-identity select {
@@ -1743,7 +1729,7 @@ h1 {
   align-items: center;
   gap: 11px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 .campaign-meta > span {
@@ -1768,7 +1754,7 @@ h1 {
   padding: 4px 7px;
   border-radius: 4px;
   line-height: 1.4;
-  font-size: 9px;
+  font-size: 11px;
   text-transform: capitalize;
   white-space: nowrap;
   background: var(--surface-raised);
@@ -1843,7 +1829,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-bottom: 12px;
 }
@@ -1859,7 +1845,7 @@ h1 {
 }
 .stats-strip strong small {
   font-family: var(--font-sans);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 400;
   color: var(--faint);
   letter-spacing: 0;
@@ -1901,7 +1887,7 @@ h1 {
   color: var(--muted);
 }
 .panel-header h2 {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.05px;
 }
@@ -1915,7 +1901,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 .graph-stage .static-dot {
@@ -2006,7 +1992,7 @@ h1 {
   white-space: nowrap;
 }
 .graph-node small {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   display: block;
   margin-top: 5px;
@@ -2031,13 +2017,13 @@ h1 {
   color: var(--accent);
 }
 .edge-label {
-  font: 8px var(--font-mono);
+  font: 11px var(--font-mono);
   fill: var(--faint);
-  letter-spacing: 1px;
+  letter-spacing: 0.02em;
 }
 .graph-route {
   position: absolute;
-  font: 7px var(--font-mono);
+  font: 11px var(--font-mono);
   color: var(--faint);
   background: var(--surface);
   padding: 3px 6px;
@@ -2067,10 +2053,10 @@ h1 {
   align-items: center;
   gap: 7px;
   color: var(--faint);
-  font-size: 8px;
+  font-size: 11px;
 }
 .graph-bottom .text-button {
-  font-size: 8px;
+  font-size: 11px;
 }
 .benchmark-panel {
   display: flex;
@@ -2092,7 +2078,7 @@ h1 {
   flex: 1;
 }
 .benchmark-numbers .eyebrow {
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
 }
 .benchmark-numbers strong {
@@ -2107,7 +2093,7 @@ h1 {
 .benchmark-numbers small {
   display: block;
   color: var(--faint);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
   margin-top: 7px;
 }
@@ -2125,7 +2111,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 .comparison-bars > div > span {
@@ -2133,7 +2119,7 @@ h1 {
 }
 .comparison-bars b {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 400;
   min-width: 43px;
   text-align: right;
@@ -2163,16 +2149,16 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .benchmark-foot > .mono {
-  font-size: 7px;
+  font-size: 11px;
   color: var(--faint);
   letter-spacing: 0.25px;
 }
 .chart-note {
   color: var(--faint);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.8;
   margin-top: 13px;
 }
@@ -2181,7 +2167,7 @@ h1 {
   padding: 20px 24px;
 }
 .benchmark-objective .eyebrow {
-  font-size: 9px;
+  font-size: 11px;
 }
 .benchmark-objective p {
   font-size: 12px;
@@ -2193,7 +2179,7 @@ h1 {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.7;
   color: var(--muted);
 }
@@ -2205,7 +2191,7 @@ h1 {
   gap: 10px;
 }
 .training-readout .eyebrow {
-  font-size: 9px;
+  font-size: 11px;
 }
 .training-readout strong {
   display: flex;
@@ -2218,7 +2204,7 @@ h1 {
   letter-spacing: -0.8px;
 }
 .training-readout strong small {
-  font: 9px var(--font-sans);
+  font: 11px var(--font-sans);
   color: var(--muted);
   letter-spacing: 0;
 }
@@ -2232,7 +2218,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 .chart-key i {
@@ -2247,7 +2233,7 @@ h1 {
 }
 .loss-chart text {
   fill: var(--faint);
-  font: 9px var(--font-mono);
+  font: 11px var(--font-mono);
 }
 .chart-grid {
   stroke: var(--line);
@@ -2272,7 +2258,7 @@ h1 {
 }
 .chart-empty small {
   color: var(--faint);
-  font-size: 9px;
+  font-size: 11px;
 }
 .training-progress {
   padding: 13px 22px 18px;
@@ -2281,7 +2267,7 @@ h1 {
 .training-progress > div {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   margin-bottom: 10px;
 }
@@ -2329,7 +2315,7 @@ progress::-webkit-progress-value {
   flex-shrink: 0;
 }
 .activity-list p {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.65;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2337,7 +2323,7 @@ progress::-webkit-progress-value {
   overflow: hidden;
 }
 .activity-list time {
-  font-size: 8px;
+  font-size: 11px;
   color: var(--faint);
   display: block;
   margin-top: 7px;
@@ -2363,7 +2349,7 @@ table {
   font-size: 11px;
 }
 th {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--faint);
   text-align: left;
   font-weight: 450;
@@ -2376,7 +2362,7 @@ td {
 }
 td small {
   display: block;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--faint);
   margin-top: 6px;
 }
@@ -2415,7 +2401,7 @@ td:last-child {
   border-bottom: 1px solid var(--line);
 }
 .table-tools > .mono {
-  font-size: 9px;
+  font-size: 11px;
 }
 .search-field {
   display: flex;
@@ -2513,7 +2499,7 @@ td:last-child {
   border: 1px solid var(--line);
   border-radius: 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 .avatar-director,
 .avatar-governance {
@@ -2528,19 +2514,19 @@ td:last-child {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   line-height: 1.5;
 }
 .message-content header b {
   color: var(--fg);
   font-weight: 500;
-  font-size: 10px;
+  font-size: 11px;
 }
 .message-content time {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 .message-content p {
@@ -2556,7 +2542,7 @@ td:last-child {
   justify-content: space-between;
   gap: 8px;
   margin-top: 11px;
-  font-size: 8px;
+  font-size: 11px;
   color: var(--faint);
 }
 .full-comms {
@@ -2568,7 +2554,7 @@ td:last-child {
   align-items: center;
   gap: 20px;
   padding: 29px 0 23px;
-  font-size: 8px;
+  font-size: 11px;
   color: var(--faint);
 }
 .page-footer > span {
@@ -2611,8 +2597,8 @@ td:last-child {
   flex: 1;
 }
 .final-result .eyebrow {
-  font-size: 8px;
-  letter-spacing: 0.8px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 .final-result h2 {
   font-size: 18px;
@@ -2648,7 +2634,7 @@ td:last-child {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .environment-card p {
@@ -2666,7 +2652,7 @@ td:last-child {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   border-top: 1px solid var(--line);
   padding-top: 13px;
@@ -2686,7 +2672,7 @@ td:last-child {
   gap: 10px;
   padding: 17px 22px;
   border-top: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   line-height: 1.8;
 }
@@ -2717,7 +2703,7 @@ td:last-child {
 }
 .policy-index {
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
   padding-top: 2px;
 }
 .policies > div > div {
@@ -2728,7 +2714,7 @@ td:last-child {
   font-weight: 500;
 }
 .policies p {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   line-height: 1.7;
   margin-top: 6px;
@@ -2742,17 +2728,6 @@ td:last-child {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-}
-.probe-symbol {
-  color: var(--accent);
-  margin-bottom: 25px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  width: 62px;
-  height: 62px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
 }
 .probe-panel h3 {
   font-size: 21px;
@@ -2771,7 +2746,7 @@ td:last-child {
   min-height: 41px;
 }
 .probe-panel small {
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.8;
   color: var(--faint);
   margin-top: 13px;
@@ -2826,7 +2801,7 @@ td:last-child {
 }
 .review-list footer {
   color: var(--faint);
-  font-size: 9px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 .artifact-list {
@@ -2865,7 +2840,7 @@ td:last-child {
   font-weight: 500;
 }
 .artifact-name span {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
   display: block;
   margin-top: 6px;
@@ -2875,7 +2850,7 @@ td:last-child {
   color: var(--accent);
 }
 .artifact-size {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   min-width: 68px;
   text-align: right;
@@ -2923,7 +2898,7 @@ td:last-child {
   display: flex;
   justify-content: space-between;
   gap: 15px;
-  font-size: 10px;
+  font-size: 11px;
   padding-top: 17px;
 }
 .connection-panel dt {
@@ -3062,7 +3037,7 @@ td:last-child {
   align-items: center;
   justify-content: space-between;
   gap: 15px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .detail-tabs {
   display: flex;
@@ -3103,7 +3078,7 @@ td:last-child {
 .detail-stats > div > span {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 .detail-stats strong {
   display: block;
@@ -3156,7 +3131,7 @@ td:last-child {
   overflow-wrap: anywhere;
 }
 .config-list .mono {
-  font-size: 10px;
+  font-size: 11px;
 }
 .predictions article {
   padding: 26px 0;
@@ -3166,7 +3141,7 @@ td:last-child {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
 }
 .predictions h3 {
   font-size: 14px;
@@ -3210,14 +3185,14 @@ td:last-child {
   line-height: 1.8;
 }
 .trajectory-action > .mono {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--accent);
 }
 .trajectory-action p {
   margin-top: 9px;
 }
 .trajectory-action footer {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-top: 12px;
 }
@@ -3258,7 +3233,7 @@ td:last-child {
 }
 .form-model > div > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   display: block;
   margin-top: 6px;
 }
@@ -3277,7 +3252,7 @@ td:last-child {
   font-weight: 400;
 }
 .field-help {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
   font-weight: 400;
 }
@@ -3303,7 +3278,7 @@ td:last-child {
   font-weight: 500;
 }
 .form-boundary p {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.8;
   margin-top: 6px;
   color: var(--muted);
@@ -3313,7 +3288,7 @@ td:last-child {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 0;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.8;
   color: var(--muted);
 }
@@ -3334,7 +3309,7 @@ td:last-child {
   margin-right: auto;
   max-width: 35ch;
   line-height: 1.6;
-  font-size: 9px;
+  font-size: 11px;
 }
 .dialog-copy {
   font-size: 14px;
@@ -3383,13 +3358,13 @@ td:last-child {
   gap: 20px;
 }
 .replay-toolbar > .mono {
-  font-size: 10px;
+  font-size: 11px;
   flex: 1;
 }
 .replay-slider {
   display: block;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
   margin: 25px 0 20px;
 }
 .replay-slider input {
@@ -3408,7 +3383,7 @@ td:last-child {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 17px;
-  font: 10px/1.9 var(--font-mono);
+  font: 11px/1.9 var(--font-mono);
 }
 .trace-terminal > div {
   display: grid;
@@ -3504,7 +3479,7 @@ td:last-child {
     font-size: 12px;
   }
   .graph-node small {
-    font-size: 8px;
+    font-size: 11px;
   }
   .graph-node {
     gap: 10px;
@@ -3524,7 +3499,7 @@ td:last-child {
     font-size: 43px;
   }
   .benchmark-numbers small {
-    font-size: 10px;
+    font-size: 11px;
   }
   .benchmark-inner {
     padding-top: 35px;
@@ -3539,20 +3514,20 @@ td:last-child {
     font-size: 12px;
   }
   .graph-stage {
-    font-size: 10px;
+    font-size: 11px;
   }
   .graph-bottom > span,
   .graph-bottom .text-button {
-    font-size: 10px;
+    font-size: 11px;
   }
   .benchmark-objective p {
     font-size: 14px;
   }
   .benchmark-objective > span:last-child {
-    font-size: 10px;
+    font-size: 11px;
   }
   .graph-route {
-    font-size: 9px;
+    font-size: 11px;
   }
   .page-heading h1 {
     font-size: 35px;
@@ -3567,7 +3542,7 @@ td:last-child {
     font-size: 12px;
   }
   .chart-note {
-    font-size: 10px;
+    font-size: 11px;
   }
 }
 @media (max-width: 1200px) {
@@ -3599,17 +3574,17 @@ td:last-child {
     flex-wrap: wrap;
   }
   .stats-strip strong small {
-    font-size: 8px;
+    font-size: 11px;
   }
   .graph-node {
     padding: 8px;
     gap: 5px;
   }
   .graph-node b {
-    font-size: 9px;
+    font-size: 11px;
   }
   .graph-node small {
-    font-size: 6px;
+    font-size: 11px;
   }
   .node-icon {
     width: 23px;
@@ -3635,10 +3610,10 @@ td:last-child {
     font-size: 29px;
   }
   .benchmark-numbers .eyebrow {
-    font-size: 8px;
+    font-size: 11px;
   }
   .benchmark-numbers small {
-    font-size: 8px;
+    font-size: 11px;
   }
   .benchmark-foot {
     flex-wrap: wrap;
@@ -3647,13 +3622,13 @@ td:last-child {
     padding: 11px 13px;
   }
   .graph-bottom > span {
-    font-size: 7px;
+    font-size: 11px;
   }
   .graph-bottom .text-button {
-    font-size: 7px;
+    font-size: 11px;
   }
   .campaign-meta {
-    font-size: 8px;
+    font-size: 11px;
     gap: 7px;
   }
   .panel-header {
@@ -3663,7 +3638,7 @@ td:last-child {
     font-size: 11px;
   }
   .graph-stage {
-    font-size: 8px;
+    font-size: 11px;
   }
   .environment-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3678,7 +3653,7 @@ td:last-child {
     font-size: 27px;
   }
   .heading-actions .button {
-    font-size: 10px;
+    font-size: 11px;
     padding: 9px 10px;
   }
 }
@@ -3728,7 +3703,7 @@ td:last-child {
   .chart-note {
     grid-column: 2;
     margin-top: 9px;
-    font-size: 8px;
+    font-size: 11px;
   }
   .benchmark-objective {
     display: none;
@@ -3737,10 +3712,10 @@ td:last-child {
     font-size: 35px;
   }
   .benchmark-numbers small {
-    font-size: 9px;
+    font-size: 11px;
   }
   .benchmark-numbers .eyebrow {
-    font-size: 9px;
+    font-size: 11px;
   }
   .research-graph {
     max-height: none;
@@ -3756,7 +3731,7 @@ td:last-child {
     font-size: 11px;
   }
   .graph-node small {
-    font-size: 8px;
+    font-size: 11px;
   }
   .graph-node .node-dot {
     display: block;
@@ -3770,11 +3745,11 @@ td:last-child {
     gap: 8px;
   }
   .graph-stage {
-    font-size: 9px;
+    font-size: 11px;
   }
   .graph-bottom > span,
   .graph-bottom .text-button {
-    font-size: 9px;
+    font-size: 11px;
   }
   .campaign-meta {
     display: none;
@@ -3796,10 +3771,6 @@ td:last-child {
     grid-template-columns: 62px 1fr;
     gap: 0 22px;
   }
-  .probe-symbol {
-    grid-row: 1/3;
-    margin-bottom: 0;
-  }
   .probe-panel h3 {
     max-width: none;
     font-size: 19px;
@@ -3817,7 +3788,7 @@ td:last-child {
   }
   .stats-strip strong small {
     display: block;
-    font-size: 9px;
+    font-size: 11px;
     margin-top: 2px;
   }
   .stat-governance {
@@ -3886,7 +3857,7 @@ td:last-child {
     display: none;
   }
   .system-status {
-    font-size: 9px;
+    font-size: 11px;
   }
   .search-button kbd {
     display: none;
@@ -3898,11 +3869,6 @@ td:last-child {
     align-items: center;
     gap: 12px;
     margin-bottom: 23px;
-  }
-  .page-eyebrow {
-    font-size: 7px;
-    letter-spacing: 1px;
-    margin-bottom: 9px;
   }
   h1 {
     font-size: 27px;
@@ -3921,7 +3887,7 @@ td:last-child {
     min-height: 38px;
   }
   .heading-actions > .button:not(.primary):first-child {
-    font-size: 9px;
+    font-size: 11px;
     min-height: 30px;
     border: 0;
     padding: 5px;
@@ -3939,7 +3905,7 @@ td:last-child {
     padding: 0 13px;
   }
   .stats-strip > div > span {
-    font-size: 9px;
+    font-size: 11px;
     gap: 5px;
   }
   .stats-strip > div > span > svg {
@@ -3950,7 +3916,7 @@ td:last-child {
     font-size: 20px;
   }
   .stats-strip strong small {
-    font-size: 8px;
+    font-size: 11px;
   }
   .stat-governance small {
     max-width: 60px;
@@ -3968,7 +3934,7 @@ td:last-child {
     max-width: 250px;
   }
   .campaign-identity label {
-    font-size: 7px;
+    font-size: 11px;
   }
   .panel-header {
     padding: 17px 19px;
@@ -3983,13 +3949,13 @@ td:last-child {
     font-size: 11px;
   }
   .message-content header {
-    font-size: 10px;
+    font-size: 11px;
   }
   .message-content time {
-    font-size: 9px;
+    font-size: 11px;
   }
   .message-content footer {
-    font-size: 9px;
+    font-size: 11px;
   }
   .relay-panel .message-feed {
     display: block;
@@ -4001,10 +3967,10 @@ td:last-child {
     font-size: 12px;
   }
   .activity-list time {
-    font-size: 9px;
+    font-size: 11px;
   }
   .graph-route {
-    font-size: 8px;
+    font-size: 11px;
   }
   .research-graph {
     aspect-ratio: 710/510;
@@ -4015,10 +3981,10 @@ td:last-child {
     gap: 7px;
   }
   .graph-node b {
-    font-size: 10px;
+    font-size: 11px;
   }
   .graph-node small {
-    font-size: 7px;
+    font-size: 11px;
   }
   .node-icon {
     height: 26px;
@@ -4026,10 +3992,10 @@ td:last-child {
   }
   .graph-bottom > span,
   .graph-bottom .text-button {
-    font-size: 8px;
+    font-size: 11px;
   }
   .page-footer {
-    font-size: 9px;
+    font-size: 11px;
     align-items: flex-start;
     line-height: 1.8;
     gap: 20px;
@@ -4072,7 +4038,7 @@ td:last-child {
     font-size: 13px;
   }
   .sidebar .workspace-selector div span {
-    font-size: 10px;
+    font-size: 11px;
   }
   .sidebar .infra-summary button {
     font-size: 12px;
@@ -4082,7 +4048,7 @@ td:last-child {
     font-size: 12px;
   }
   .sidebar-account div span {
-    font-size: 10px;
+    font-size: 11px;
   }
   .sidebar .docs-link {
     font-size: 12px;
@@ -4127,27 +4093,26 @@ td:last-child {
     gap: 13px;
   }
   .system-status {
-    font-size: 10px;
+    font-size: 11px;
   }
+  /* Title and description get the full width; actions sit on their own row below. */
   .page-heading {
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: stretch;
   }
   .page-heading p {
-    font-size: 16px;
-    max-width: 25ch;
+    font-size: 14px;
+    max-width: 60ch;
+  }
+  .heading-actions {
+    flex-direction: row;
+    align-items: center;
   }
   h1 {
     font-size: 26px;
   }
-  .page-eyebrow {
-    font-size: 6px;
-    letter-spacing: 0.7px;
-  }
-  .page-eyebrow .mini-mark {
-    display: none;
-  }
   .heading-actions .primary {
-    font-size: 10px;
+    font-size: 11px;
     min-height: 42px;
     padding: 9px 10px;
   }
@@ -4156,7 +4121,7 @@ td:last-child {
     height: 15px;
   }
   .heading-actions > .button:not(.primary):first-child {
-    font-size: 9px;
+    font-size: 11px;
   }
   .campaign-bar {
     gap: 8px;
@@ -4172,14 +4137,14 @@ td:last-child {
     font-size: 11px;
   }
   .campaign-identity label {
-    font-size: 6px;
+    font-size: 11px;
     letter-spacing: 0.4px;
   }
   .campaign-status {
     gap: 4px;
   }
   .campaign-status .status {
-    font-size: 8px;
+    font-size: 11px;
     padding: 4px;
   }
   .campaign-status .stop-button {
@@ -4213,7 +4178,7 @@ td:last-child {
     gap: 9px;
   }
   .stats-strip strong small {
-    font-size: 10px;
+    font-size: 11px;
     display: block;
     letter-spacing: 0;
   }
@@ -4239,19 +4204,19 @@ td:last-child {
     font-size: clamp(30px, 9.5vw, 38px);
   }
   .benchmark-numbers .eyebrow {
-    font-size: 10px;
+    font-size: 11px;
   }
   .benchmark-numbers small {
-    font-size: 10px;
+    font-size: 11px;
   }
   .benchmark-divider {
     padding: 8px 0 0;
   }
   .comparison-bars > div {
-    font-size: 10px;
+    font-size: 11px;
   }
   .comparison-bars b {
-    font-size: 10px;
+    font-size: 11px;
   }
   .benchmark-foot {
     margin-top: 22px;
@@ -4259,13 +4224,13 @@ td:last-child {
     flex-wrap: nowrap;
   }
   .benchmark-foot > .mono {
-    font-size: 7px;
+    font-size: 11px;
   }
   .benchmark-inner .chart-note {
-    font-size: 10px;
+    font-size: 11px;
   }
   .graph-stage {
-    font-size: 8px;
+    font-size: 11px;
   }
   .graph-stage .static-dot {
     display: none;
@@ -4277,7 +4242,7 @@ td:last-child {
     font-size: 12px;
   }
   .panel-header .tag {
-    font-size: 8px;
+    font-size: 11px;
   }
   .research-graph {
     aspect-ratio: auto;
@@ -4317,7 +4282,7 @@ td:last-child {
     font-size: 12px;
   }
   .graph-node small {
-    font-size: 10px;
+    font-size: 11px;
     margin-top: 4px;
   }
   .node-icon {
@@ -4339,7 +4304,7 @@ td:last-child {
     gap: 12px;
   }
   .graph-bottom > span {
-    font-size: 9px;
+    font-size: 11px;
     max-width: 24ch;
     line-height: 1.6;
     align-items: flex-start;
@@ -4348,7 +4313,7 @@ td:last-child {
     margin-top: 2px;
   }
   .graph-bottom .text-button {
-    font-size: 9px;
+    font-size: 11px;
     white-space: nowrap;
     margin-top: 0;
   }
@@ -4356,19 +4321,19 @@ td:last-child {
     padding: 20px 18px 0;
   }
   .training-readout .eyebrow {
-    font-size: 10px;
+    font-size: 11px;
   }
   .training-readout strong {
     font-size: 28px;
   }
   .training-readout strong small {
-    font-size: 9px;
+    font-size: 11px;
   }
   .chart-key {
-    font-size: 9px;
+    font-size: 11px;
   }
   .training-readout > div:last-child .mono {
-    font-size: 9px;
+    font-size: 11px;
   }
   .training-progress {
     font-size: 11px;
@@ -4377,7 +4342,7 @@ td:last-child {
     font-size: 12px;
   }
   .chart-empty small {
-    font-size: 10px;
+    font-size: 11px;
   }
   .activity-list {
     padding: 0 18px;
@@ -4386,7 +4351,7 @@ td:last-child {
     font-size: 12px;
   }
   .activity-list time {
-    font-size: 10px;
+    font-size: 11px;
   }
   .activity-list > div {
     padding: 18px 0;
@@ -4405,16 +4370,16 @@ td:last-child {
     font-size: 11px;
   }
   .message-content header > span {
-    font-size: 10px;
+    font-size: 11px;
   }
   .message-content time {
-    font-size: 9px;
+    font-size: 11px;
   }
   .message-content p {
     font-size: 12px;
   }
   .message-content footer {
-    font-size: 8px;
+    font-size: 11px;
   }
   .agent-avatar {
     width: 28px;
@@ -4475,10 +4440,10 @@ td:last-child {
     font-size: 11px;
   }
   th {
-    font-size: 9px;
+    font-size: 11px;
   }
   td small {
-    font-size: 9px;
+    font-size: 11px;
   }
   .table-link {
     min-height: 40px;
@@ -4542,9 +4507,6 @@ td:last-child {
     padding: 25px;
     gap: 0;
   }
-  .probe-symbol {
-    margin-bottom: 22px;
-  }
   .probe-panel h3 {
     font-size: 23px;
     max-width: 20ch;
@@ -4555,7 +4517,7 @@ td:last-child {
     margin: 15px 0 23px;
   }
   .probe-panel small {
-    font-size: 10px;
+    font-size: 11px;
   }
   .probe-panel .button {
     min-height: 46px;
@@ -4574,7 +4536,7 @@ td:last-child {
     font-size: 12px;
   }
   .review-list footer {
-    font-size: 10px;
+    font-size: 11px;
   }
   .artifact-list {
     padding: 0 17px;
@@ -4592,10 +4554,10 @@ td:last-child {
     font-size: 12px;
   }
   .artifact-name span {
-    font-size: 10px;
+    font-size: 11px;
   }
   .artifact-size {
-    font-size: 9px;
+    font-size: 11px;
     min-width: 0;
     max-width: 50px;
   }
@@ -4621,7 +4583,7 @@ td:last-child {
     line-height: 1.7;
   }
   .connection-panel dd.mono {
-    font-size: 10px;
+    font-size: 11px;
   }
   .worker-panel {
     align-items: flex-start;
@@ -4649,7 +4611,7 @@ td:last-child {
     flex-basis: calc(100% - 60px);
   }
   .final-result .eyebrow {
-    font-size: 7px;
+    font-size: 11px;
   }
   .final-result h2 {
     font-size: 18px;
@@ -4667,7 +4629,7 @@ td:last-child {
   .page-footer {
     display: block;
     padding: 25px 0;
-    font-size: 10px;
+    font-size: 11px;
   }
   .page-footer > span:last-child {
     margin-top: 11px;
@@ -4719,12 +4681,12 @@ td:last-child {
     max-height: 100dvh;
   }
   .detail-title {
-    font-size: 9px;
+    font-size: 11px;
     flex-wrap: wrap;
   }
   .detail-title .hash {
     max-width: 100%;
-    font-size: 10px;
+    font-size: 11px;
   }
   .detail-tabs {
     gap: 22px;
@@ -4738,7 +4700,7 @@ td:last-child {
     font-size: 16px;
   }
   .detail-section .eyebrow {
-    font-size: 10px;
+    font-size: 11px;
   }
   .detail-stats {
     gap: 12px;
@@ -4747,11 +4709,11 @@ td:last-child {
     font-size: 24px;
   }
   .detail-stats > div > span {
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.7;
   }
   .detail-stats strong small {
-    font-size: 10px;
+    font-size: 11px;
   }
   .detail-stats > div:first-child {
     min-width: 0;
@@ -4765,7 +4727,7 @@ td:last-child {
     line-height: 1.8;
   }
   .config-list .mono {
-    font-size: 10px;
+    font-size: 11px;
   }
   .predictions h3 {
     font-size: 16px;
@@ -4789,11 +4751,11 @@ td:last-child {
     gap: 10px;
   }
   .replay-controls .button {
-    font-size: 10px;
+    font-size: 11px;
     padding: 9px;
   }
   .replay-controls > .mono {
-    font-size: 10px;
+    font-size: 11px;
   }
   .trajectory-action {
     font-size: 13px;
@@ -4831,7 +4793,7 @@ td:last-child {
     font-size: 12px;
   }
   .form-model > div > span {
-    font-size: 9px;
+    font-size: 11px;
     line-height: 1.7;
   }
   .field-help {
@@ -4878,10 +4840,10 @@ td:last-child {
     flex-wrap: wrap;
   }
   .replay-toolbar > .mono {
-    font-size: 9px;
+    font-size: 11px;
   }
   .replay-toolbar > .button:last-child {
-    font-size: 10px;
+    font-size: 11px;
     min-height: 36px;
   }
   .replay-slider {
@@ -4889,7 +4851,7 @@ td:last-child {
   }
   .trace-terminal {
     padding: 13px;
-    font-size: 10px;
+    font-size: 11px;
     min-height: 330px;
     max-height: 50dvh;
   }
@@ -4944,8 +4906,8 @@ td:last-child {
 }
 .result-eyebrow {
   color: var(--accent);
-  font: 9px var(--font-mono);
-  letter-spacing: 0.7px;
+  font: 11px var(--font-mono);
+  letter-spacing: 0.02em;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5005,7 +4967,7 @@ td:last-child {
   flex-wrap: wrap;
   gap: 23px;
   padding: 22px 2px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .paired-predictions {
@@ -5019,7 +4981,7 @@ td:last-child {
   display: flex;
   justify-content: space-between;
   gap: 15px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .paired-predictions h3 {
   font-size: 15px;
@@ -5113,7 +5075,7 @@ td:last-child {
     font-size: 16px;
   }
   .paired-predictions article > header {
-    font-size: 10px;
+    font-size: 11px;
   }
   .paired-outputs p {
     font-size: 12px;
@@ -5127,10 +5089,10 @@ td:last-child {
   white-space: nowrap;
 }
 .workspace-selector strong {
-  font-size: 10px;
+  font-size: 11px;
 }
 .workspace-selector div span {
-  font-size: 8px;
+  font-size: 11px;
 }
 .workspace-selector {
   gap: 8px;
@@ -5142,9 +5104,6 @@ td:last-child {
 .briefing-view {
   display: grid;
   gap: 18px;
-}
-.briefing-mode .page-eyebrow {
-  display: none;
 }
 .briefing-mode .page-heading {
   margin-bottom: 22px;
@@ -5343,10 +5302,9 @@ td:last-child {
   flex: 1;
 }
 .briefing-checks strong {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted);
-  text-transform: capitalize;
 }
 .briefing-checks strong[data-state="verified"],
 .briefing-checks strong[data-state="approved"] {
@@ -5372,7 +5330,7 @@ td:last-child {
 }
 .briefing-scope {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.65;
   margin-top: 14px;
   max-width: 62ch;
@@ -5415,7 +5373,7 @@ td:last-child {
 }
 .briefing-handoff time {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .briefing-handoff p {
@@ -5432,10 +5390,10 @@ td:last-child {
   display: block;
   color: var(--faint);
   margin-top: 9px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .briefing-timestamp {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .briefing-final {
@@ -5645,7 +5603,7 @@ td:last-child {
 }
 .production-skipped li .mono {
   color: var(--fg);
-  font-size: 10px;
+  font-size: 11px;
   padding-top: 1px;
 }
 .production-view > .production-train {
@@ -5726,7 +5684,7 @@ td:last-child {
   padding: 12px 0 0;
 }
 .audit-counts dt {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .audit-counts dd {
@@ -5736,7 +5694,7 @@ td:last-child {
 }
 .audit-scope {
   margin-top: 16px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.65;
   color: var(--faint);
   max-width: 62ch;
@@ -5805,7 +5763,7 @@ td:last-child {
   align-items: center;
   justify-content: space-between;
   gap: 8px 12px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .finding-tags {
   display: flex;
@@ -5880,7 +5838,7 @@ td:last-child {
   gap: 12px;
   padding: 14px 21px;
   border-top: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .finding-pager > div {
@@ -6362,7 +6320,7 @@ td:last-child {
   place-items: center;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 11px;
 }
 .wizard-steps li.current {
   color: var(--fg);
