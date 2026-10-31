@@ -37,7 +37,12 @@ below), every message addressed to Hephaestus goes to the model. That includes t
 plain requests such as "train the maths task on word problems" or "why wasn't anything kept?". The
 model reads the lab and acts through the same tools, which enforce each person's role and every limit.
 It remembers its last 6 exchanges with that chat (only messages addressed to it, and its replies), so
-follow-ups like "stop that one" work. The memory is saved with its state.
+follow-ups like "stop that one" work. The memory is saved with its state, in plain text, in a file only
+this Mac account can read.
+
+Memory respects roles, because tools only check who is asking now. A person's words reach the model only on
+calls for the same or a lower role, so a look-only member can't plant instructions for an admin's next
+message. Memory is cleared when it moves to another chat.
 
 **The commands above are the fallback.** They answer for free when no model is connected, when the
 model is down, and when the day's model calls (`FORGE_HEPHAESTUS_DAILY_CALLS`) are spent.

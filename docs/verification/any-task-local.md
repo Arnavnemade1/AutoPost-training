@@ -100,7 +100,14 @@ Verified on a complete second lab (its own Terse, Relay, API and web), through t
 The scenario tests in `tests/test_hephaestus.py` use a real database file with the Messages schema and a
 scripted model, including a prompt injection that makes the model call a forbidden tool.
 
-**Not established:** a real training campaign started by Hephaestus, a live iMessage thread (reading one
-needs Full Disk Access), and any real model reply, including a directive changing what the director
-chooses. That campaign was seeded, and no model was connected.
+In a live message-yourself thread, with Full Disk Access granted to Terminal only, a real `status` message
+was read and answered once, though Messages stored it twice. No model was connected, and the state file
+held no message text.
+
+In a live group, it also answered once, with no doubled messages, after being switched there from another chat. That
+run used no model, so nothing it was told was saved.
+
+**Not established:** a real training campaign started by Hephaestus, and any real model reply, including a
+directive changing what the director chooses. The campaign used for the directive was seeded, and no model
+was connected.
 
