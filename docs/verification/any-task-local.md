@@ -54,7 +54,7 @@ the overseer page, at desktop and phone widths with no console errors.
 ## Connected traffic
 
 Verified with the real agent process, the real lab API and command center, and a local source that
-served OpenAI-shaped logs behind a bearer token. No SuperServe account was used.
+served OpenAI-shaped logs behind a bearer token, running as a local process:
 
 - Connecting through the form was the only step. The agent worked out the field mapping and delivered
   61 traces; the free checks flagged them; **Disconnect** stopped the agent and kept those traces.
@@ -63,7 +63,26 @@ served OpenAI-shaped logs behind a bearer token. No SuperServe account was used.
 - The credential was found only in the `0600` secrets file, not in the database, API replies, the
   configuration, the state file or the log.
 
-**Not established:** the behavior of a live SuperServe VM. `tests/test_overseer_connections.py` checks
-what is sent to a double of its SDK (allowlist, secret bindings, auto-pause, clean-up), but not that
-the credential swap, the allowlist or the background process work on a real sandbox. The Langfuse
-preset was checked against Langfuse's published API specification, not a live project.
+### On a live SuperServe VM
+
+A real VM ran the real provisioning code and agent, with fake credentials and public echo services
+as the source and sink:
+
+| Established | Result |
+| --- | --- |
+| Boot | About 2 seconds; default template has Python 3 and curl |
+| The VM holds no real credential | Each variable is a stand-in token, different from the real value |
+| Credential swap | The real value arrived for bearer, Basic (as the Langfuse preset sends it) and the ingest token |
+| Scope | A stand-in sent to an allowed host its secret isn't bound to got a 403; neither it nor the real value reached that host |
+| Allowlist | Allowed hosts reached; other domains and public IPs got 403; the metadata address timed out |
+| Background agent | Kept polling, found the mapping by itself, and wrote its state where the lab reads it |
+| Pause and resume | The same process carried on; pausing took under a second |
+| Starting twice | No second agent |
+| Clean-up | No sandboxes or secrets left |
+
+This run found a defect no double could: binding a secret breaks `urllib`, so the first live agent could
+reach nothing. Requests now go through curl there.
+
+**Not established:** delivery through the real Supabase `ingest` function, because the sink in this run
+was an echo service; the lab's full connect-supervise-disconnect flow against a live VM; and the Langfuse
+preset against a live project, which was checked only against Langfuse's published API specification.

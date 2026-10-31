@@ -75,9 +75,12 @@ Limits to plan around:
   allowlist is strong but not absolute.
 - **Late records:** a filter on an ever-increasing field misses records that appear behind the
   cursor. The Langfuse preset reads five minutes behind for this reason.
-- **Not verified on a live account yet:** tests use a double of the SuperServe SDK. Connect one source
-  with a real key to establish the credential swap (Basic auth especially), the allowlist and the
-  background process on your template.
+- **Template:** the VM needs Python 3 and curl. SuperServe's secrets work through an `https://` proxy,
+  which Python's `urllib` can't use, so the agent makes its requests with curl there. The default
+  template has both.
+- **Blocked hosts answer 403:** with a secret bound, the proxy answers 403 for a host outside the
+  allowlist, so the agent would report a refused credential rather than a blocked host. The allowlist
+  always contains the source and the ingest host, so this should not arise in normal use.
 
 ### Without a VM, or inside a private network
 

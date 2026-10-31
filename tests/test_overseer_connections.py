@@ -392,6 +392,87 @@ def test_page_walks_commit_the_cursor_only_after_the_last_page(tmp_path, servers
         stop_agent(tmp_path, process)
 
 
+# A sandbox's secrets work through an https:// proxy, which urllib can't speak, so curl carries the
+# requests there. Plain http isn't sent to that proxy, so these reach the servers through real curl.
+CURL = {"HTTPS_PROXY": "https://proxy.invalid:9"}
+
+
+def test_the_agent_works_end_to_end_through_curl(tmp_path, servers):
+    received = []
+    source = servers(cursor_source(rows(5)))
+    sink = servers(collecting_sink(received))
+    config = config_for(source, sink, auth={"type": "bearer"})
+    process = run_agent(
+        tmp_path, config, {**CURL, "FORGE_SOURCE_SECRET": SECRET, "FORGE_INGEST_TOKEN": TOKEN}
+    )
+    try:
+        wait_for(lambda: len(received) == 5)
+        wait_for(lambda: state_of(tmp_path).get("cursor") == 5)
+    finally:
+        stop_agent(tmp_path, process)
+    assert source.requests[0]["headers"]["Authorization"] == f"Bearer {SECRET}"
+    assert sink.requests[0]["headers"]["Authorization"] == f"Bearer {TOKEN}"
+    assert sink.requests[0]["headers"]["Content-type"] == "application/json"
+    assert state_of(tmp_path)["accepted"] == 5
+
+
+@pytest.mark.parametrize(
+    ("answer", "status"),
+    [(401, "source_auth_failed"), (403, "source_auth_failed"), (500, "source_error"), (302, "source_error")],
+)
+def test_curl_reports_a_source_the_same_way_urllib_does(tmp_path, servers, answer, status):
+    elsewhere = servers(lambda *_: (200, b"[]", {}))
+    source = servers(lambda *_: (answer, b"", {"Location": f"{elsewhere.url}/stolen"}))
+    sink = servers(collecting_sink([]))
+    process = run_agent(tmp_path, config_for(source, sink, auth={"type": "bearer"}), CURL)
+    try:
+        wait_for(lambda: state_of(tmp_path).get("status") == status)
+    finally:
+        stop_agent(tmp_path, process)
+    assert elsewhere.requests == []
+
+
+def test_curl_holds_the_cursor_when_the_sink_refuses(tmp_path, servers):
+    source = servers(cursor_source(rows(2)))
+    sink = servers(lambda *_: (429, b"{}", {}))
+    process = run_agent(tmp_path, config_for(source, sink), CURL)
+    try:
+        wait_for(lambda: state_of(tmp_path).get("status") == "capped")
+    finally:
+        stop_agent(tmp_path, process)
+    assert state_of(tmp_path)["cursor"] == 0
+
+
+def test_an_unreachable_host_through_curl_is_an_error_not_a_crash(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "https://proxy.invalid:9")
+    request = agent.urllib.request.Request("http://127.0.0.1:9/nothing")
+    with pytest.raises(OSError):
+        agent.http_call(request)
+
+
+def test_curl_never_sees_a_credential_or_url_as_an_argument(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "https://proxy.invalid:9")
+    monkeypatch.setenv("FORGE_SOURCE_SECRET", SECRET)
+    seen = {}
+
+    def fake_run(command, **options):
+        seen["command"] = command
+        return SimpleNamespace(returncode=0, stdout=b"[]\n200")
+
+    monkeypatch.setattr(agent.subprocess, "run", fake_run)
+    url = f"https://x.test/logs?key={SECRET}"
+    request = agent.source_request({"url": url, "auth": {"type": "bearer"}}, None, None)
+    assert agent.http_call(request) == (200, b"[]")
+    assert SECRET not in " ".join(seen["command"])
+    assert "x.test" not in " ".join(seen["command"])
+
+
+def test_header_values_cannot_inject_curl_options():
+    quoted = agent._curl_quote('a"b\\c\nurl = "https://elsewhere.test"')
+    assert "\n" not in quoted
+    assert quoted == '"a\\"b\\\\curl = \\"https://elsewhere.test\\""'
+
+
 # Through the lab: connect once, and traffic arrives.
 
 

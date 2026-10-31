@@ -207,9 +207,11 @@ class SuperServeVM:
             preview_access="private",
         )
         try:
-            probe = vm.commands.run(f"mkdir -p {REMOTE} && python3 --version", timeout_seconds=30)
+            probe = vm.commands.run(
+                f"mkdir -p {REMOTE} && python3 --version && curl --version", timeout_seconds=30
+            )
             if probe.exit_code:
-                raise VMError("The VM's template has no Python 3 for the agent")
+                raise VMError("The VM's template needs Python 3 and curl for the agent")
             vm.files.write(f"{REMOTE}/agent.py", Path(agent_module.__file__).read_bytes(), timeout=30)
             vm.files.write(f"{REMOTE}/config.json", json.dumps(config).encode(), timeout=30)
             self._launch(vm)

@@ -1,7 +1,7 @@
 """The overseer's traffic agent: reads a deployment's logged traffic and ships it to the buffer.
 
-One file, standard library only, so it can be uploaded to a sandbox VM or run by hand inside a
-private network:
+One file, standard library only (plus the curl binary on a VM), so it can be uploaded to a sandbox VM
+or run by hand inside a private network:
 
     FORGE_SOURCE_SECRET=... FORGE_INGEST_TOKEN=... python3 agent.py <directory with config.json>
 
@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 import urllib.error
@@ -358,17 +359,76 @@ def source_request(config, cursor, page):
     return urllib.request.Request(url, headers=headers)
 
 
-def read_source(config, cursor, page):
-    request = source_request(config, cursor, page)
+def _curl_quote(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", "") + '"'
+
+
+def _call_with_curl(request):
+    # The URL and headers go over a private pipe: an argument would be visible to every process.
+    lines = [f"url = {_curl_quote(request.full_url)}", 'header = "Expect:"']
+    lines += [f"header = {_curl_quote(f'{key}: {value}')}" for key, value in request.header_items()]
+    read_end, write_end = os.pipe()
+    try:
+        os.write(write_end, "\n".join(lines).encode())
+        os.close(write_end)
+        command = [
+            "curl",
+            "--silent",
+            "--max-time",
+            "60",
+            "--max-filesize",
+            str(MAX_READ),
+            "--write-out",
+            "\n%{http_code}",
+            "--config",
+            f"/dev/fd/{read_end}",
+        ]
+        if request.data is not None:
+            command += ["--data-binary", "@-"]
+        try:
+            done = subprocess.run(
+                command,
+                input=request.data,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                pass_fds=(read_end,),
+                timeout=70,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise OSError("curl timed out") from error
+    finally:
+        os.close(read_end)
+    if done.returncode:
+        raise OSError(f"curl exited with {done.returncode}")
+    body, _, status = done.stdout.rpartition(b"\n")
+    return int(status), body
+
+
+def http_call(request):
+    """The status and body of a request. Raises OSError when there is no answer at all.
+
+    A sandbox's secrets work through an https:// proxy, which is TLS to the proxy and TLS again inside
+    it. urllib can't speak that (the proxy resets it), so curl carries those requests. Neither follows
+    a redirect.
+    """
+    if (os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or "").startswith("https://"):
+        return _call_with_curl(request)
     try:
         with OPENER.open(request, timeout=60) as reply:
-            raw = reply.read(MAX_READ + 1)
+            return reply.status, reply.read(MAX_READ + 1)
     except urllib.error.HTTPError as error:
-        if error.code in (401, 403):
-            raise Hold("source_auth_failed", f"The source answered {error.code}") from error
-        raise Hold("source_error", f"The source answered {error.code}") from error
+        return error.code, b""
+
+
+def read_source(config, cursor, page):
+    try:
+        status, raw = http_call(source_request(config, cursor, page))
     except OSError as error:
         raise Hold("source_error", f"Could not reach the source ({type(error).__name__})") from error
+    if status in (401, 403):
+        raise Hold("source_auth_failed", f"The source answered {status}")
+    if not 200 <= status < 300:
+        raise Hold("source_error", f"The source answered {status}")
     if len(raw) > MAX_READ:
         raise Hold("source_error", "One reply was over 32 MB; ask for fewer records per page")
     text = raw.decode("utf-8", "replace")
@@ -392,22 +452,24 @@ def post_batch(config, batch):
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(config["sink_url"], data=body, headers=headers)
     try:
-        with OPENER.open(request, timeout=60) as reply:
-            result = json.loads(reply.read(1024 * 1024))
-    except urllib.error.HTTPError as error:
-        if error.code == 413 and len(batch) > 1:
-            middle = len(batch) // 2
-            first, second = post_batch(config, batch[:middle]), post_batch(config, batch[middle:])
-            return {key: first[key] + second[key] for key in first}
-        if error.code in (413, 422):
-            return {"accepted": 0, "duplicates": 0, "rejected": len(batch)}
-        if error.code == 429:
-            raise Hold("capped", "The token's daily ingest cap is reached") from error
-        if error.code in (401, 403):
-            raise Hold("sink_auth_failed", f"The sink answered {error.code}") from error
-        raise Hold("sink_unreachable", f"The sink answered {error.code}") from error
-    except (OSError, ValueError) as error:
+        status, raw = http_call(request)
+    except OSError as error:
         raise Hold("sink_unreachable", f"Could not reach the sink ({type(error).__name__})") from error
+    if status == 413 and len(batch) > 1:
+        middle = len(batch) // 2
+        first, second = post_batch(config, batch[:middle]), post_batch(config, batch[middle:])
+        return {key: first[key] + second[key] for key in first}
+    if status in (413, 422):
+        return {"accepted": 0, "duplicates": 0, "rejected": len(batch)}
+    if status == 429:
+        raise Hold("capped", "The token's daily ingest cap is reached")
+    if status in (401, 403):
+        raise Hold("sink_auth_failed", f"The sink answered {status}")
+    if not 200 <= status < 300:
+        raise Hold("sink_unreachable", f"The sink answered {status}")
+    result = _loads(raw.decode("utf-8", "replace"))
+    if not isinstance(result, dict):
+        raise Hold("sink_unreachable", "The sink's reply is not JSON")
     return {
         "accepted": int(result.get("accepted", 0)),
         "duplicates": int(result.get("duplicates", 0)),
