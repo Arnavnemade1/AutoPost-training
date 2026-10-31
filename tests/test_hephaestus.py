@@ -183,6 +183,45 @@ def test_a_group_found_only_by_its_guid_is_read(world):
     assert imessage.count("any;+;111111112222333344445555", messages.path) == 1
 
 
+def test_a_passing_database_error_does_not_stop_it(world, monkeypatch):
+    service, messages, _ = world
+    real_read, calls = messages.read, []
+
+    def flaky(chat_id, after):
+        calls.append(1)
+        if len(calls) <= 3:
+            raise imessage.MessagesError("busy")
+        return real_read(chat_id, after)
+
+    messages.read = flaky
+
+    class Enough(BaseException):
+        pass
+
+    def sleep(_):
+        if len(calls) == 5:
+            raise Enough
+        if len(calls) == 4:
+            messages.add("@hephaestus help", mine=True)
+
+    with pytest.raises(Enough):
+        service.run(sleep)
+    assert "start <task>" in said(messages)[0]
+
+
+def test_a_lasting_failure_stops_it_and_says_why(world, capsys):
+    service, messages, _ = world
+
+    def refused(*_):
+        raise imessage.MessagesError("access was turned off")
+
+    messages.read = refused
+    assert service.run(lambda _: None) == 2
+    output = capsys.readouterr().out
+    assert output.count("access was turned off") == 1
+    assert "Stopping" in output
+
+
 def test_switching_chats_ignores_what_was_said_there_before(world):
     service, messages, lab = world
     messages.add("@hephaestus start gsm8k", mine=True, chat=2)

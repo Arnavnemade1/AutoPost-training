@@ -12,6 +12,7 @@ LABEL = "⚒️ Hephaestus\n"
 TICK_SECONDS = 5
 WATCH_SECONDS = 30
 MAX_REPLIES_PER_HOUR = 30
+MAX_FAILURES = 60
 ECHO_SECONDS = 60
 ENDED = {
     "completed": "finished",
@@ -174,11 +175,19 @@ class Service:
             self.last_watch = now
             self.watch()
 
-    def run(self):
+    def run(self, sleep=time.sleep):
+        """Keep going through a passing failure, since Messages can briefly hold its database.
+        Only a failure that lasts stops it, such as access being turned off."""
+        failures = 0
         while True:
             try:
                 self.tick()
-            except imessage.MessagesError as error:
-                print(error, flush=True)
-                return 2
-            time.sleep(TICK_SECONDS)
+                failures = 0
+            except Exception as error:
+                failures += 1
+                if failures == 1:
+                    print(f"Can't read new messages, retrying: {error}", flush=True)
+                if failures >= MAX_FAILURES:
+                    print("Stopping: this has failed for 5 minutes.", flush=True)
+                    return 2
+            sleep(TICK_SECONDS)
