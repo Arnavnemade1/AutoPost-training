@@ -10,7 +10,8 @@ export type View =
   | "results"
   | "artifacts"
   | "connections"
-  | "overseer";
+  | "overseer"
+  | "evidence";
 export type ResultFilter = "all" | "improved" | "regressed";
 export type Agent =
   | "director"
@@ -390,4 +391,76 @@ export type CampaignProduction = {
     kinds: DetectorKind[];
     question: string;
   }[];
+};
+
+// GET /evidence: each campaign's recorded results, trust checks and observability.
+export type Claim = "validated" | "uncertain" | "none";
+export type CheckState =
+  | "pass"
+  | "fail"
+  | "partial"
+  | "not_recorded"
+  | "not_applicable";
+export type Count = { correct: number; n: number };
+export type EvidenceCheck = {
+  id: string;
+  label: string;
+  state: CheckState;
+  detail: string;
+};
+export type AgentUsage = {
+  role: string;
+  model: string | null;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  subagents: number;
+};
+export type CampaignEvidence = {
+  id: string;
+  name: string | null;
+  status: string;
+  created_at: string | null;
+  model_id: string | null;
+  director: string | null;
+  hardware: { backend: string | null; name: string | null } | null;
+  elapsed_seconds: number | null;
+  compute_seconds: number | null;
+  experiments: number;
+  sealed: {
+    baseline: Count | null;
+    checkpoint: Count | null;
+    improvement_pp: number | null;
+    interval_pp: [number, number] | null;
+    improved: number | null;
+    regressed: number | null;
+    claim: Claim | null;
+    checkpoint_id: string | null;
+    kept_original: boolean;
+  } | null;
+  production: {
+    baseline: Count | null;
+    checkpoint: Count | null;
+    improvement_pp: number | null;
+    interval_pp: [number, number] | null;
+    claim: Claim | null;
+  } | null;
+  checks: EvidenceCheck[];
+  agents: {
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    subagent_runs: number;
+    subagent_kinds: string[];
+    by_role: AgentUsage[];
+  } | null;
+  relay: { sent: number; delivered: number; readback_verified: number };
+  terse: { state_version: number | null; decisions: number } | null;
+  artifacts: {
+    count: number;
+    verified: number;
+    mismatched: number;
+    missing: number;
+    bytes: number;
+  };
 };

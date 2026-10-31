@@ -6515,3 +6515,453 @@ td:last-child {
     order: 3;
   }
 }
+
+/* Evidence: cross-campaign results, trust checks and observability. */
+.ev {
+  display: grid;
+  gap: 20px;
+}
+.ev-ledger {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ev-ledger > div {
+  padding: 18px 20px;
+  min-width: 0;
+}
+.ev-ledger > div + div {
+  border-left: 1px solid var(--line);
+}
+.ev-ledger span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ev-ledger strong {
+  display: block;
+  margin: 6px 0 6px;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.ev-ledger strong small {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.ev-ledger p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ev-ledger.skeleton-block {
+  height: 132px;
+}
+.skeleton-block {
+  background: var(--surface-raised);
+  border-color: transparent;
+}
+.skeleton-block.tall {
+  height: 420px;
+}
+.ev-table td {
+  vertical-align: top;
+  font-size: 13px;
+}
+.ev-table td small,
+.ev-agents td small {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ev-table tbody tr {
+  cursor: pointer;
+}
+.ev-table tbody tr.selected td {
+  background: var(--surface-hover);
+}
+.ev-table tbody tr.selected td:first-child {
+  box-shadow: inset 2px 0 0 var(--fg);
+}
+.ev-table td:last-child {
+  width: auto;
+  color: inherit;
+}
+.ev-row-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: normal;
+  max-width: 300px;
+}
+.ev-row-button strong {
+  font-weight: 500;
+  line-height: 1.4;
+}
+.ev-row-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+.ev-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+.ev-counts svg {
+  color: var(--faint);
+}
+td.ev-counts small {
+  flex-basis: 100%;
+}
+.ev-axis-head {
+  min-width: 220px;
+}
+.ev-axis {
+  position: relative;
+  display: block;
+  height: 14px;
+  margin: 0 4px;
+}
+.ev-axis i {
+  position: absolute;
+  transform: translateX(-50%);
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.ev-change {
+  min-width: 220px;
+}
+.ev-change > span {
+  font-variant-numeric: tabular-nums;
+}
+.ev-plot {
+  display: block;
+  width: calc(100% - 8px);
+  height: 16px;
+  margin: 8px 4px 2px;
+  overflow: visible;
+}
+.ev-plot line {
+  vector-effect: non-scaling-stroke;
+}
+.ev-zero {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.ev-range {
+  stroke: var(--muted);
+  stroke-width: 2;
+}
+.ev-point {
+  stroke: var(--fg);
+  stroke-width: 3;
+}
+.ev-point.hollow {
+  stroke: var(--faint);
+}
+.ev-claim {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.ev-claim.pass {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.ev-claim.warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.ev-claim.muted {
+  background: none;
+  padding-left: 0;
+  color: var(--faint);
+}
+td .ev-claim + small,
+td .ev-counts + .ev-claim {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+}
+.ev-faint {
+  color: var(--faint);
+}
+.ev-note {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.ev-inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-family: var(--font-mono);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ev-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+}
+.ev-selected h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  min-width: 0;
+}
+.ev-selected h2 span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.ev-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.ev-checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ev-check {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 16px 21px;
+}
+.ev-check + .ev-check {
+  border-top: 1px solid var(--line);
+}
+.ev-check strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ev-check p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.ev-check p.ev-faint {
+  color: var(--faint);
+}
+.ev-check-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.ev-check.pass .ev-check-icon {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.ev-check.fail .ev-check-icon {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.ev-check.partial .ev-check-icon {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.ev-check-state {
+  text-align: right;
+  font-size: 12px;
+}
+.ev-check.fail .ev-check-state span {
+  color: var(--danger);
+}
+.ev-check.partial .ev-check-state span {
+  color: var(--warning);
+}
+.ev-check-state small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.ev-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+.ev-facts > div {
+  padding: 14px 21px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.ev-facts > div:nth-child(odd) {
+  border-right: 1px solid var(--line);
+}
+.ev-facts dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ev-facts dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.ev-agents td {
+  font-size: 13px;
+}
+.ev-agents tbody tr {
+  cursor: default;
+}
+.ev-agents tfoot td {
+  font-weight: 500;
+  border-top: 1px solid var(--line-strong);
+}
+.ev-agents td:last-child {
+  width: auto;
+  color: inherit;
+}
+.ev-detail > .panel > .ev-note {
+  padding: 16px 21px;
+}
+@media (max-width: 1200px) {
+  .ev-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ev-ledger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ev-ledger > div:nth-child(3) {
+    border-left: 0;
+  }
+  .ev-ledger > div:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+}
+@media (max-width: 760px) {
+  .ev-ledger {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ev-ledger > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .ev-ledger strong {
+    font-size: 24px;
+  }
+  .ev-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ev-facts > div:nth-child(odd) {
+    border-right: 0;
+  }
+  .ev-selected {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ev-check {
+    grid-template-columns: 22px minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+  .ev-check-state {
+    grid-column: 2;
+    text-align: left;
+  }
+  /* The results table becomes one block per campaign on a phone. */
+  .ev-table thead {
+    display: none;
+  }
+  .ev-table,
+  .ev-table tbody,
+  .ev-table tr,
+  .ev-table td {
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+  .ev-table tr {
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .ev-table td {
+    border: 0;
+    padding: 4px 0;
+  }
+  .ev-table tbody tr.selected td:first-child {
+    box-shadow: none;
+  }
+  .ev-table tbody tr.selected {
+    box-shadow: inset 2px 0 0 var(--fg);
+  }
+  .ev-change,
+  .ev-axis-head {
+    min-width: 0;
+  }
+}
+.ev-agents th,
+.ev-agents td {
+  padding: 12px 14px;
+}
+.ev-agents th:first-child,
+.ev-agents td:first-child {
+  padding-left: 21px;
+}
+@media (max-width: 760px) {
+  /* Without the header axis a bare plot has no scale; the interval text carries it. */
+  .ev-plot {
+    display: none;
+  }
+  .ev-agents th,
+  .ev-agents td {
+    padding: 10px 6px;
+    font-size: 12px;
+  }
+  .ev-agents th:first-child,
+  .ev-agents td:first-child {
+    padding-left: 16px;
+    white-space: normal;
+  }
+  .ev-agents th:last-child,
+  .ev-agents td:last-child {
+    padding-right: 16px;
+  }
+}
+@media (max-width: 760px) {
+  .ev-agents th {
+    white-space: normal;
+  }
+}

@@ -25,6 +25,7 @@ import { AgentChat } from "./agent-chat";
 import { ProductionView } from "./production";
 import { OverseerView } from "./overseer";
 import { TerseView } from "./terse-view";
+import { EvidenceView } from "./evidence";
 import {
   ArtifactDetail,
   ArtifactsView,
@@ -51,6 +52,7 @@ const navigation: { id: View; label: string; group: string }[] = [
   { id: "environments", label: "Environments", group: "Workspace" },
   { id: "governance", label: "Governance", group: "Workspace" },
   { id: "results", label: "Results", group: "Workspace" },
+  { id: "evidence", label: "Evidence", group: "Workspace" },
   { id: "artifacts", label: "Artifacts", group: "Resources" },
   { id: "connections", label: "Connections", group: "Resources" },
 ];
@@ -70,6 +72,8 @@ const descriptions: Record<View, string> = {
   results:
     "A frozen checkpoint. An independent measurement. The complete evidence.",
   artifacts: "The model, the measurements, and how to reproduce them.",
+  evidence:
+    "Every campaign's sealed result, the checks behind it, and what it cost to run. Read from saved records.",
   connections: "The infrastructure behind the research.",
 };
 
@@ -504,7 +508,9 @@ export function Lab() {
           ) : (
             <>
               {campaign &&
-                !["connections", "production", "overseer"].includes(view) && (
+                !["connections", "production", "overseer", "evidence"].includes(
+                  view,
+                ) && (
                   <section
                     className="campaign-bar"
                     aria-label="Current research campaign"
@@ -911,6 +917,13 @@ export function Lab() {
                 />
               ) : view === "results" ? (
                 <Results campaign={campaign} />
+              ) : view === "evidence" ? (
+                <EvidenceView
+                  onOpen={(id) => {
+                    void selectCampaign(id);
+                    navigate("results");
+                  }}
+                />
               ) : view === "artifacts" ? (
                 <ArtifactsView campaign={campaign} onArtifact={setArtifact} />
               ) : (

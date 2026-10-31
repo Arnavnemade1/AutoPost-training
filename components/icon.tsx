@@ -8,6 +8,12 @@ export function Icon({
   className?: string;
 }) {
   const paths: Record<string, React.ReactNode> = {
+    evidence: (
+      <>
+        <path d="M9 3.5h6v3H9zM7.5 5H5v15.5h14V5h-2.5" />
+        <path d="M8.5 13.5l2.5 2.5 4.5-5" />
+      </>
+    ),
     chat: (
       <>
         <path d="M4 4h16v13H9l-5 4V4zM8 8h8m-8 4h5" />
