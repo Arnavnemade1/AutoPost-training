@@ -114,6 +114,7 @@ so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md
 - [Relay orchestrator setup, tests and demo](services/orchestrator/README.md)
 - [Research command center and recorder](docs/command-center.md)
 - [Production failures into improvements](docs/production-failures.md)
+- [Evidence view: results, trust checks and observability](docs/evidence.md)
 - [Task packs: bring your own data](docs/task-packs.md)
 - [Teacher distillation](docs/distillation.md)
 - [Preference alignment (DPO)](docs/preference-alignment.md)
