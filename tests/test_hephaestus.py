@@ -6,6 +6,7 @@ The Messages app and a live group chat are not exercised here.
 import json
 import os
 import sqlite3
+import stat
 
 import httpx
 import pytest
@@ -487,6 +488,20 @@ def test_memory_does_not_follow_it_into_another_chat(world, monkeypatch):
     moved.read_new()
     assert "PRIVATE" not in json.dumps(sent[1]["input"])
     assert "PRIVATE" not in service.path.read_text()
+
+
+def test_files_holding_chat_text_are_private_even_if_they_already_existed(world, tmp_path):
+    service, _, _ = world
+    service.path.chmod(0o644)
+    service.path.with_suffix(".tmp").write_text("{}")
+    service.path.with_suffix(".tmp").chmod(0o644)
+    service.save()
+    assert stat.S_IMODE(service.path.stat().st_mode) == 0o600
+    (tmp_path / "hephaestus-desk.jsonl").write_text("")
+    (tmp_path / "hephaestus-desk.jsonl").chmod(0o644)
+    desk._append("you", "hello")
+    assert stat.S_IMODE((tmp_path / "hephaestus-desk.jsonl").stat().st_mode) == 0o600
+    assert "hello" in (tmp_path / "hephaestus-desk.jsonl").read_text()
 
 
 def test_without_a_model_it_says_what_it_can_do(world):

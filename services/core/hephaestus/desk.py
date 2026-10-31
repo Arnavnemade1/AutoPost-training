@@ -4,6 +4,7 @@ The lab only answers on this machine, so whoever is typing here is its owner, an
 """
 
 import json
+import os
 import threading
 import uuid
 
@@ -23,7 +24,8 @@ def _path():
 
 def _append(sender, text):
     message = {"id": uuid.uuid4().hex, "sender": sender, "text": text, "at": store.now()}
-    with open(_path(), "a") as handle:
+    with os.fdopen(os.open(_path(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "w") as handle:
+        os.fchmod(handle.fileno(), 0o600)  # Private to this account, as a file from before this was not.
         handle.write(json.dumps(message) + "\n")
     return message
 

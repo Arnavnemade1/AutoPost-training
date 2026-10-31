@@ -71,8 +71,11 @@ class Service:
             return {}
 
     def save(self):
+        # Private to this account: with a model connected, this holds what people said to the bot.
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self.state))
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(json.dumps(self.state))
         temporary.replace(self.path)
 
     def say(self, text):
