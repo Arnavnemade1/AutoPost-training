@@ -11,6 +11,8 @@ const DESCRIPTIONS: Record<string, string> = {
   broad_sft: "Supervised LoRA on the permitted training data",
   targeted_sft: "Supervised LoRA that trains labeled production failures first",
   distill_sft: "Supervised LoRA on verified solutions written by a teacher",
+  hard_sft:
+    "Supervised LoRA focused on the training questions the model misses",
   grpo: "Reward-driven practice graded by Terse math worlds (8 steps)",
   dpo: "Preference alignment: chosen over rejected replies",
 };

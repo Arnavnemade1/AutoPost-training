@@ -18,6 +18,8 @@ const ALGORITHMS: Record<string, string> = {
   broad_sft: "Supervised fine-tuning with LoRA",
   targeted_sft: "Supervised fine-tuning with LoRA, production failures first",
   distill_sft: "Supervised fine-tuning with LoRA on verified teacher solutions",
+  hard_sft:
+    "Supervised fine-tuning with LoRA on the questions the base model misses",
   grpo: "TRL GRPO with Terse world rewards",
   dpo: "TRL DPO preference alignment with LoRA",
 };

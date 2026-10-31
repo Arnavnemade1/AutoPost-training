@@ -296,6 +296,7 @@ const STRATEGY_NAMES: Record<string, string> = {
   broad_sft: "Broad SFT",
   targeted_sft: "Targeted SFT",
   distill_sft: "Teacher distillation",
+  hard_sft: "Hard examples",
   grpo: "GRPO",
   dpo: "DPO alignment",
 };
