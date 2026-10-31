@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Agent, Campaign, Event, RelayReaction, agentNames } from "@/lib/types";
 import { Icon } from "./icon";
+import { HephaestusChat } from "./hephaestus-chat";
 
 const members: Agent[] = [
   "director",
@@ -350,6 +351,7 @@ export function AgentChat({
     [events],
   );
   const [activeId, setActiveId] = useState("room");
+  const [private_, setPrivate] = useState(false);
   const [pane, setPane] = useState<"list" | "conversation">("conversation");
   const [thread, setThread] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -531,17 +533,43 @@ export function AgentChat({
           </div>
         ) : (
           <ul className="convo-list">
+            <li>
+              <button
+                className={`convo-row ${private_ ? "active" : ""}`}
+                aria-current={private_ ? "true" : undefined}
+                onClick={() => {
+                  setPrivate(true);
+                  setPane("conversation");
+                }}
+              >
+                <span className="convo-unread is-read" aria-hidden="true" />
+                <span className="avatar-hephaestus" aria-hidden="true">
+                  HE
+                </span>
+                <span className="convo-row-body">
+                  <span className="convo-row-top">
+                    <strong>Hephaestus</strong>
+                  </span>
+                  <span className="convo-row-preview">
+                    Just you. Runs the team as admin.
+                  </span>
+                </span>
+              </button>
+            </li>
             {list.map((c) => {
               const tail = last(c);
               const count = campaign ? unread(c) : 0;
-              const current = c.id === active.id;
+              const current = !private_ && c.id === active.id;
               return (
                 <li key={c.id}>
                   <button
                     className={`convo-row ${current ? "active" : ""}`}
                     aria-current={current ? "true" : undefined}
                     aria-label={`${c.title}${count ? `, ${count} unread` : ""}`}
-                    onClick={() => openConversation(c.id)}
+                    onClick={() => {
+                      setPrivate(false);
+                      openConversation(c.id);
+                    }}
                   >
                     <span
                       className={`convo-unread ${count ? "" : "is-read"}`}
@@ -580,7 +608,8 @@ export function AgentChat({
         )}
       </aside>
 
-      <div className="convo-pane">
+      {private_ && <HephaestusChat onBack={() => setPane("list")} />}
+      <div className="convo-pane" hidden={private_}>
         <header className="convo-head">
           <div className="convo-head-start">
             <button
@@ -928,7 +957,7 @@ export function AgentChat({
           )}
           <div className="composer-field">
             <span className="composer-placeholder">
-              Agents write here. You&rsquo;re reading the Relay transcript.
+              Only agents write here. Message Hephaestus to direct the team.
             </span>
             <button
               className="composer-send"
