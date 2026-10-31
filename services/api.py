@@ -11,7 +11,7 @@ import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from services.core import agents, compute, distill, packs, production, store, strategies, uploads
+from services.core import agents, compute, distill, evidence, packs, production, store, strategies, uploads
 from services.core.packs import register as pack_register
 from services.core.hephaestus import desk as hephaestus_desk
 from services.core.overseer import (
@@ -145,6 +145,12 @@ def list_campaigns():
         {k: s.get(k) for k in ["id", "name", "status", "created_at", "config", "best", "final"]}
         for s in store.campaigns()
     ]
+
+
+@app.get("/evidence")
+def campaign_evidence():
+    """Each campaign's recorded results, trust checks and observability, newest first."""
+    return evidence.build()
 
 
 @app.get("/models")
