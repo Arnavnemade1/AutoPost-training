@@ -4,6 +4,7 @@ import functools
 import gc
 import hashlib
 import json
+import math
 import random
 import time
 import torch
@@ -23,6 +24,9 @@ from services.core.protocol import (  # noqa: F401  (re-exported for the runner)
     extract,
     sha,
 )
+
+# Records per optimizer step for hard-example training. Every other strategy stays at one.
+HARD_ACCUMULATION = 4
 
 
 def device_name():
@@ -155,6 +159,14 @@ def evaluate(
     )
 
 
+def scheduled_rate(peak, step, steps):
+    """Linear warmup over the first tenth of training, then cosine decay to zero."""
+    warmup = max(1, steps // 10)
+    if step < warmup:
+        return peak * (step + 1) / warmup
+    return peak * 0.5 * (1 + math.cos(math.pi * (step - warmup) / max(1, steps - warmup)))
+
+
 def train(proposal, config, rows, folder, progress, cancelled, task=GSM8K_TASK):
     torch.manual_seed(config["seed"])
     random.seed(config["seed"])
@@ -184,10 +196,13 @@ def train(proposal, config, rows, folder, progress, cancelled, task=GSM8K_TASK):
         # Reweight longer, multi-step worked solutions using training data only.
         sampled.sort(key=lambda r: len(r["answer"]), reverse=True)
         sampled = sampled[: max(32, len(sampled) // 2)]
-    random.Random(config["seed"]).shuffle(sampled)
+    hard = proposal["strategy"] == "hard_sft"
+    # Hard-example rows arrive in their deliberate hard/easy order.
+    if not hard:
+        random.Random(config["seed"]).shuffle(sampled)
     random.Random(config["seed"]).shuffle(production)
     # Each step trains one record, so targeted and distilled runs see production failures first.
-    if proposal["strategy"] in ("targeted_sft", "distill_sft"):
+    if proposal["strategy"] in ("targeted_sft", "distill_sft", "hard_sft"):
         sampled = production + sampled
     else:
         sampled = sampled + production
@@ -204,24 +219,33 @@ def train(proposal, config, rows, folder, progress, cancelled, task=GSM8K_TASK):
             excluded.append(row["id"])
     if not records:
         raise ValueError("No complete training examples fit the sequence limit")
+    accumulation = HARD_ACCUMULATION if hard else 1
     started = time.monotonic()
     for step in range(config["train_steps"]):
         if cancelled():
             raise InterruptedError("Campaign stopped")
-        record = records[step % len(records)]
-        batch = collate_completion([record], tokenizer.pad_token_id, str(model.device))
+        rate = proposal["learning_rate"]
+        if hard:
+            rate = scheduled_rate(rate, step, config["train_steps"])
+            for group in optimizer.param_groups:
+                group["lr"] = rate
         optimizer.zero_grad(set_to_none=True)
-        loss = model(**batch).loss
-        if not torch.isfinite(loss):
-            raise RuntimeError("Nonfinite training loss; experiment quarantined")
-        loss.backward()
+        total = 0.0
+        for part in range(accumulation):
+            record = records[(step * accumulation + part) % len(records)]
+            batch = collate_completion([record], tokenizer.pad_token_id, str(model.device))
+            loss = model(**batch).loss
+            if not torch.isfinite(loss):
+                raise RuntimeError("Nonfinite training loss; experiment quarantined")
+            (loss / accumulation).backward()
+            total += loss.item()
         torch.nn.utils.clip_grad_norm_(params, 1.0, error_if_nonfinite=True)
         optimizer.step()
         metric = {
             "step": step + 1,
-            "loss": round(loss.item(), 5),
+            "loss": round(total / accumulation, 5),
             "elapsed": round(time.monotonic() - started, 2),
-            "learning_rate": proposal["learning_rate"],
+            "learning_rate": rate,
         }
         metrics.append(metric)
         progress(metric)
@@ -241,6 +265,7 @@ def train(proposal, config, rows, folder, progress, cancelled, task=GSM8K_TASK):
                 "train_ids": [r["id"] for r in accepted],
                 "excluded_oversize_ids": excluded,
                 "max_sequence_length": 768,
+                "gradient_accumulation": accumulation,
                 "prompt_version": task.prompt_version,
                 "model_id": spec["id"],
                 "model_revision": spec["revision"],
