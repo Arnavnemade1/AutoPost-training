@@ -1010,6 +1010,8 @@ export function Lab() {
                   "Independently reloads checkpoints, scores predictions, and checks declared regressions.",
                 governance:
                   "Enforces immutable policy, rejects invalid evidence, and gates checkpoint promotion.",
+                hephaestus:
+                  "Runs the research team as admin: starts and stops runs and directs the director. It can't override governance, budgets or test data.",
               }[agent]
             }
           </p>

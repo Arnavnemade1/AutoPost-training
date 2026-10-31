@@ -9,6 +9,7 @@ const members: Agent[] = [
   "trainer",
   "evaluator",
   "governance",
+  "hephaestus",
 ];
 const initials: Record<Agent, string> = {
   director: "RD",
@@ -16,6 +17,7 @@ const initials: Record<Agent, string> = {
   trainer: "TE",
   evaluator: "EV",
   governance: "GC",
+  hephaestus: "HE",
 };
 const shortNames: Record<Agent, string> = {
   director: "Director",
@@ -23,6 +25,7 @@ const shortNames: Record<Agent, string> = {
   trainer: "Trainer",
   evaluator: "Evaluator",
   governance: "Governance",
+  hephaestus: "Hephaestus",
 };
 /** The header cluster: the director in the middle, the team fanned out around it. */
 const cluster: { agent: Agent; size: number }[] = [

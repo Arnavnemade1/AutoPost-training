@@ -17,7 +17,8 @@ export type Agent =
   | "data"
   | "trainer"
   | "evaluator"
-  | "governance";
+  | "governance"
+  | "hephaestus";
 export type Prediction = {
   id: string;
   question: string;
@@ -289,6 +290,7 @@ export const agentNames: Record<Agent, string> = {
   trainer: "Training engineer",
   evaluator: "Experiment evaluator",
   governance: "Governance council",
+  hephaestus: "Hephaestus",
 };
 const STRATEGY_NAMES: Record<string, string> = {
   broad_sft: "Broad SFT",
