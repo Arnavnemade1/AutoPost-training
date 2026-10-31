@@ -171,16 +171,26 @@ def memory(context):
     return context.state.setdefault("memory", [])
 
 
-def remember(context, who, text):
-    """Keep the last few exchanges addressed to Hephaestus, and its replies, in its saved state."""
+def remember(context, who, text, role):
+    """Keep the last few exchanges addressed to Hephaestus, and its replies, in its saved state,
+    with the role of the person who asked."""
     turns = memory(context)
-    turns.append({"role": who, "text": text[:MAX_REPLY]})
+    turns.append({"role": who, "text": text[:MAX_REPLY], "asker": role})
     del turns[:-MEMORY]
 
 
 def conversation(context, role, text):
-    """Earlier turns as chat messages, then this one with the asker's role, which tools enforce."""
-    earlier = [{"role": t["role"], "content": t["text"]} for t in memory(context)]
+    """Earlier turns as chat messages, then this one with the asker's role, which tools enforce.
+
+    Tools check who is asking now, so words from a lower role must never reach a higher role's call,
+    where they could steer the model into using that person's tools. Turns with no recorded asker
+    count as the lowest role.
+    """
+    earlier = [
+        {"role": t["role"], "content": t["text"]}
+        for t in memory(context)
+        if tools.RANK.get(t.get("asker"), 0) >= tools.RANK[role]
+    ]
     return [*earlier, {"role": "user", "content": json.dumps({"asker_role": role, "message": text})}]
 
 
@@ -246,6 +256,6 @@ def answer(context, role, text, post=call_model):
     except Exception as error:
         # Never the provider's own message, which can carry request details.
         return fallback(context, role, text, f"My model isn't answering ({type(error).__name__}).")
-    remember(context, "user", text)
-    remember(context, "assistant", reply)
+    remember(context, "user", text, role)
+    remember(context, "assistant", reply, role)
     return reply
