@@ -12,6 +12,7 @@ LABEL = "⚒️ Hephaestus\n"
 TICK_SECONDS = 5
 WATCH_SECONDS = 30
 MAX_REPLIES_PER_HOUR = 30
+ECHO_SECONDS = 60
 ENDED = {
     "completed": "finished",
     "failed": "failed",
@@ -29,11 +30,15 @@ def operators():
     return {_handle(h) for h in os.environ.get("FORGE_HEPHAESTUS_OPERATORS", "").split(",") if h.strip()}
 
 
+def owners():
+    return {_handle(h) for h in os.environ.get("FORGE_HEPHAESTUS_OWNER", "").split(",") if h.strip()}
+
+
 def role_of(message):
     """Apple's own sender identity decides this. Anything said in a message has no bearing on it."""
-    if message["mine"]:
-        return "admin"
     sender = _handle(message["sender"]) if message["sender"] else None
+    if message["mine"] or sender in owners():
+        return "admin"
     return "operator" if sender in operators() else "viewer"
 
 
@@ -55,6 +60,7 @@ class Service:
         self.state = self._load()
         self.context = SimpleNamespace(lab=lab or tools.Lab(), state=self.state, surface=surface)
         self.max_replies_per_hour = max_replies_per_hour
+        self.recent_texts = {}
         self.last_watch = None
 
     def _load(self):
@@ -86,9 +92,21 @@ class Service:
         said = brain.address(message["text"])
         if said is None:
             return
+        if self._is_echo(said):
+            return
         args = (self.context, role_of(message), said)
         reply = brain.answer(*args, self.post) if self.post else brain.answer(*args)
         self.say(reply)
+
+    def _is_echo(self, said):
+        """Messaging yourself stores each message twice, as sent and as received."""
+        if ";-;" not in self.chat_id:
+            return False
+        now = self.clock()
+        self.recent_texts = {t: at for t, at in self.recent_texts.items() if now - at < ECHO_SECONDS}
+        seen = said in self.recent_texts
+        self.recent_texts[said] = now
+        return seen
 
     def read_new(self):
         if "cursor" not in self.state:

@@ -227,7 +227,9 @@ def test_only_group_chats_are_listed(monkeypatch):
 
 def test_roles_come_from_apples_sender_identity(monkeypatch):
     monkeypatch.setenv("FORGE_HEPHAESTUS_OPERATORS", "+1 (555) 000-1111, Friend@Example.com")
+    monkeypatch.setenv("FORGE_HEPHAESTUS_OWNER", "+15557770000")
     assert role_of({"mine": True, "sender": None}) == "admin"
+    assert role_of({"mine": False, "sender": "+15557770000"}) == "admin"
     assert role_of({"mine": False, "sender": "+15550001111"}) == "operator"
     assert role_of({"mine": False, "sender": "friend@example.com"}) == "operator"
     assert role_of({"mine": False, "sender": "+15559999999"}) == "viewer"
@@ -639,3 +641,39 @@ def test_what_start_sends_is_a_valid_campaign(tmp_path, monkeypatch):
         {"task_pack": "gsm8k", "objective": "Handle multi-step word problems", "strategies": ["broad_sft"]},
     )
     CampaignConfig(**starts(lab)[0][2])
+
+
+# Just you and Hephaestus: messaging yourself on iMessage.
+
+
+def test_messaging_yourself_is_handled_once_as_the_owner(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA", tmp_path)
+    monkeypatch.setattr(tools, "free_memory_percent", lambda: 80)
+    monkeypatch.setenv("FORGE_HEPHAESTUS_OWNER", "+15550001111")
+    messages, lab = Messages(tmp_path / "chat.db"), FakeLab()
+    db = sqlite3.connect(tmp_path / "chat.db")
+    db.execute("insert into chat values (3, 'any;-;+15550001111', '+15550001111')")
+    db.commit()
+    db.close()
+    client = httpx.Client(transport=httpx.MockTransport(lab), base_url="http://127.0.0.1:8000")
+    service = Service(
+        "any;-;+15550001111", lab=tools.Lab(client), messages=messages, path=tmp_path / "state.json"
+    )
+    service.tick()
+    # Messages stores a note to yourself twice: as sent, and as received.
+    messages.add("@hephaestus start gsm8k", mine=True, chat=3)
+    messages.add("@hephaestus start gsm8k", sender=1, chat=3)
+    service.read_new()
+    assert len(starts(lab)) == 1
+    assert len(messages.sent) == 1
+    assert "Started" in said(messages)[0]
+    messages.add(messages.sent[0][1], mine=True, chat=3)
+    messages.add(messages.sent[0][1], sender=1, chat=3)
+    service.read_new()
+    assert len(messages.sent) == 1
+
+
+def test_a_one_to_one_chat_with_someone_else_grants_them_nothing(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_HEPHAESTUS_OWNER", raising=False)
+    monkeypatch.delenv("FORGE_HEPHAESTUS_OPERATORS", raising=False)
+    assert role_of({"mine": False, "sender": "+15550001111"}) == "viewer"
