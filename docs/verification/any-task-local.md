@@ -86,3 +86,21 @@ reach nothing. Requests now go through curl there.
 **Not established:** delivery through the real Supabase `ingest` function, because the sink in this run
 was an echo service; the lab's full connect-supervise-disconnect flow against a live VM; and the Langfuse
 preset against a live project, which was checked only against Langfuse's published API specification.
+
+## Hephaestus
+
+Verified on a complete second lab (its own Terse, Relay, API and web), through the real command center:
+
+- The private conversation answered `status`, `tasks`, `help`, `chat` and a refused `start`.
+- `tell` posted through real Agent Relay as a registered participant. All five other agents acknowledged it,
+  its readback was verified, and it appeared in the research room under Hephaestus's name.
+- `npm run test:relay` passes with Hephaestus as a participant, covering read receipts, duplicates,
+  concurrent sends, restarts and forged copies.
+
+The scenario tests in `tests/test_hephaestus.py` use a real database file with the Messages schema and a
+scripted model, including a prompt injection that makes the model call a forbidden tool.
+
+**Not established:** a real training campaign started by Hephaestus, a live iMessage thread (reading one
+needs Full Disk Access), and any real model reply, including a directive changing what the director
+chooses. That campaign was seeded, and no model was connected.
+
