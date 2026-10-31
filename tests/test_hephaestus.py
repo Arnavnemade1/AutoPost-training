@@ -183,6 +183,20 @@ def test_a_group_found_only_by_its_guid_is_read(world):
     assert imessage.count("any;+;111111112222333344445555", messages.path) == 1
 
 
+def test_switching_chats_ignores_what_was_said_there_before(world):
+    service, messages, lab = world
+    messages.add("@hephaestus start gsm8k", mine=True, chat=2)
+    moved = Service("any;+;chat999", lab=service.context.lab, messages=messages, path=service.path)
+    moved.tick()
+    moved.read_new()
+    assert starts(lab) == []
+    assert messages.sent == []
+    messages.add("@hephaestus status", mine=True, chat=2)
+    moved.read_new()
+    assert messages.sent[0][0] == "any;+;chat999"
+    assert said(messages)[0].startswith("Running:")
+
+
 def test_it_reads_messages_stored_only_as_attributed_text(world):
     service, messages, _ = world
     messages.add(None, body=attributed("@hephaestus tasks"))
