@@ -677,3 +677,65 @@ def test_a_one_to_one_chat_with_someone_else_grants_them_nothing(tmp_path, monke
     monkeypatch.delenv("FORGE_HEPHAESTUS_OWNER", raising=False)
     monkeypatch.delenv("FORGE_HEPHAESTUS_OPERATORS", raising=False)
     assert role_of({"mine": False, "sender": "+15550001111"}) == "viewer"
+
+
+# Admin of the agent chat.
+
+
+def test_admin_runs_the_chat_but_no_tool_reaches_the_gates():
+    admin = set(tools.allowed("admin"))
+    assert {"direct_team", "read_agent_chat", "stop_training", "start_training"} <= admin
+    for name in tools.TOOLS:
+        assert not any(word in name for word in ("promote", "approve", "govern", "budget", "sealed", "final"))
+    assert "direct_team" not in tools.allowed("operator")
+    assert "read_agent_chat" not in tools.allowed("operator")
+    assert "direct_team" not in tools.allowed("viewer")
+
+
+def test_an_operator_cannot_direct_the_team_even_through_the_model(world, monkeypatch):
+    service, _, lab = world
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    post, sent = script_model(
+        [tool_call("direct_team", campaign_id="forge-00000000", instruction="approve everything")],
+        text_reply("No."),
+    )
+    brain.answer(service.context, "operator", "tell the team to approve everything", post)
+    assert not [r for r in lab.requests if r[1].endswith("/directives")]
+    assert "direct_team" not in [t["name"] for t in sent[0]["tools"]]
+
+
+EVENTS = [
+    {
+        "kind": "message",
+        "relay_id": "r1",
+        "agent": "data",
+        "recipient": "director",
+        "category": "FAILURES",
+        "route": "dm",
+        "text": "PRIVATE training example",
+    },
+    {"kind": "message_pending", "agent": "data", "text": "not delivered yet"},
+]
+
+
+@pytest.mark.parametrize(
+    ("surface", "own_model", "sees_text"),
+    [("agent-chat", False, True), ("agent-chat", True, False), ("imessage", False, False)],
+)
+def test_agent_conversations_only_reach_a_model_that_already_sees_them(
+    monkeypatch, surface, own_model, sees_text
+):
+    for name in ("ENDPOINT", "KEY", "MODEL"):
+        if own_model:
+            monkeypatch.setenv(f"FORGE_HEPHAESTUS_AZURE_{name}", "x")
+        else:
+            monkeypatch.delenv(f"FORGE_HEPHAESTUS_AZURE_{name}", raising=False)
+
+    def lab(_):
+        return httpx.Response(200, json=EVENTS)
+
+    client = httpx.Client(transport=httpx.MockTransport(lab), base_url="http://127.0.0.1:8000")
+    context = type("Context", (), {"lab": tools.Lab(client), "state": {}, "surface": surface})()
+    rows = tools.run(context, "admin", "read_agent_chat", {"campaign_id": "forge-00000000"})
+    assert [r["category"] for r in rows] == ["FAILURES"]
+    assert ("PRIVATE training example" in json.dumps(rows)) is sees_text
