@@ -147,23 +147,46 @@ def campaign_report(context, campaign_id):
     campaign = context.lab.call("GET", f"/campaigns/{campaign_id}")
     final = campaign.get("final") or {}
     report = _brief(campaign)
+    baseline = _round((campaign.get("baseline") or {}).get("score"))
+    promoted = (campaign.get("best") or {}).get("id")
+    report["development_baseline"] = baseline
     report["experiments"] = [
         {
+            "id": e.get("id"),
             "strategy": e.get("strategy"),
             "status": e.get("status"),
             "development_score": _round((e.get("evaluation") or {}).get("score")),
+            "promoted": e.get("id") == promoted,
+            "governance": (e.get("review") or {}).get("decision"),
+            "reasons": (e.get("review") or {}).get("reason_codes") or [],
         }
         for e in campaign.get("experiments") or []
     ]
     if final:
+        kept = final.get("checkpoint_id") in (None, "baseline")
         report["final"] = {
             "baseline": _round((final.get("baseline") or {}).get("score")),
             "checkpoint": _round((final.get("checkpoint") or {}).get("score")),
             "interval_95_points": final.get("paired_bootstrap_95_pp"),
             "valid_improvement": final.get("valid_improvement"),
-            "kept_original_model": final.get("checkpoint_id") in (None, "baseline"),
+            "kept_original_model": kept,
         }
+        report["why"] = _why(report, baseline, kept)
     return report
+
+
+def _why(report, baseline, kept):
+    """One plain sentence on how the outcome was decided, read from the evidence, not inferred."""
+    scored = [e["development_score"] for e in report["experiments"] if e["development_score"] is not None]
+    if kept and scored and baseline is not None and max(scored) <= baseline:
+        return (
+            f"No experiment beat the original model on development (best {max(scored)} against "
+            f"{baseline}), so none was promoted, and the final test compared the original model with itself."
+        )
+    if kept:
+        return "No experiment was promoted, so the final test compared the original model with itself."
+    claim = report["improvement_claim"]
+    return f"An experiment was promoted on development and then tested once on sealed questions ({claim})."
 
 
 def is_campaign_id(value):

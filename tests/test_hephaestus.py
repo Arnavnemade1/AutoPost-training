@@ -103,8 +103,11 @@ class FakeLab:
         return httpx.Response(404, json={"detail": "Campaign not found"})
 
 
-@pytest.fixture
-def world(tmp_path, monkeypatch):
+@pytest.fixture(autouse=True)
+def no_real_model(monkeypatch):
+    """Every test starts with no model connected; a test that wants one sets a fake key and a scripted
+    model. With a model connected every message goes to it, so a key left in the environment (from .env)
+    would otherwise make a real call."""
     for name in (
         "AZURE_OPENAI_API_KEY",
         "OPENAI_API_KEY",
@@ -115,6 +118,10 @@ def world(tmp_path, monkeypatch):
         "FORGE_HEPHAESTUS_AZURE_MODEL",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def world(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DATA", tmp_path)
     monkeypatch.setattr(tools, "free_memory_percent", lambda: 80)
     messages, lab = Messages(tmp_path / "chat.db"), FakeLab()
@@ -309,14 +316,19 @@ def test_only_the_addressed_message_goes_to_the_model(world, monkeypatch):
     assert "private news" not in everything
 
 
-def test_plain_commands_spend_no_model_calls(world, monkeypatch):
+def test_with_a_model_every_message_goes_to_it_even_a_plain_command(world, monkeypatch):
     service, _, _ = world
     monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    post, sent = script_model([tool_call("lab_status")], text_reply("Nothing is running right now."))
+    assert brain.answer(service.context, "operator", "status", post) == "Nothing is running right now."
+    assert [t["name"] for t in sent[0]["tools"]] and json.loads(sent[1]["input"][0]["output"])[
+        "active_campaigns"
+    ] == []
 
-    def forbidden(_):
-        raise AssertionError("A plain command reached the model")
 
-    assert brain.answer(service.context, "operator", "status", forbidden).startswith("Running:")
+def test_without_a_model_plain_commands_answer_for_free(world):
+    service, _, _ = world
+    assert brain.answer(service.context, "operator", "status").startswith("Running:")
 
 
 def test_commands_keep_working_when_the_model_is_down(world, monkeypatch):
@@ -330,6 +342,25 @@ def test_commands_keep_working_when_the_model_is_down(world, monkeypatch):
     assert "ConnectError" in reply
     assert "secret-bearing" not in reply
     assert "start <task>" in reply
+    # A plain command still gets its answer from the lab while the model is down.
+    assert brain.answer(service.context, "operator", "status", down).startswith("Running:")
+
+
+def test_it_remembers_its_own_conversation_but_nothing_else(world, monkeypatch):
+    service, messages, _ = world
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    post, sent = script_model(text_reply("You're training gsm8k."), text_reply("Stopping it."))
+    service.post = post
+    messages.add("@hephaestus what am I training?", mine=True)
+    messages.add("unrelated gossip in the group")
+    messages.add("@hephaestus ok stop it", mine=True)
+    service.read_new()
+    second = sent[1]["input"]
+    assert [m["role"] for m in second] == ["user", "assistant", "user"]
+    assert "what am I training" in second[0]["content"] and second[1]["content"] == "You're training gsm8k."
+    assert "gossip" not in json.dumps(sent)
+    # The memory is saved with the bot's state and kept short.
+    assert len(json.loads(service.path.read_text())["memory"]) == 4
 
 
 def test_without_a_model_it_says_what_it_can_do(world):
@@ -386,6 +417,9 @@ def test_the_daily_model_call_limit_holds(world, monkeypatch):
     post, sent = script_model(text_reply("One."), text_reply("Two."))
     assert brain.answer(service.context, "operator", "how are things?", post) == "One."
     assert "limit of model calls" in brain.answer(service.context, "operator", "how are things?", post)
+    assert len(sent) == 1
+    # With the calls spent, plain commands still answer, without the model.
+    assert brain.answer(service.context, "operator", "status", post).startswith("Running:")
     assert len(sent) == 1
 
 
@@ -909,3 +943,46 @@ def test_nothing_anyone_said_is_written_to_disk(world):
     messages.add("@hephaestus PRIVATE question for the bot")
     service.read_new()
     assert "PRIVATE" not in service.path.read_text()
+
+
+def test_a_report_says_why_nothing_was_kept_from_the_evidence(world):
+    # The shape of Qwen3.5-4B campaign forge-20daea85: both experiments fell below the original.
+    service, _, lab = world
+    review = {"decision": "approved", "reason_codes": []}
+    lab.campaigns.append(
+        {
+            "id": "forge-dddddddd",
+            "status": "completed",
+            "config": {"task_pack": "gsm8k"},
+            "baseline": {"score": 0.875},
+            "experiments": [
+                {
+                    "id": "exp-001",
+                    "strategy": "targeted_sft",
+                    "status": "completed",
+                    "evaluation": {"score": 0.8333},
+                    "review": review,
+                },
+                {
+                    "id": "exp-002",
+                    "strategy": "targeted_sft",
+                    "status": "completed",
+                    "evaluation": {"score": 0.8333},
+                    "review": review,
+                },
+            ],
+            "final": {
+                "baseline": {"score": 0.7917},
+                "checkpoint": {"score": 0.7917},
+                "checkpoint_id": "baseline",
+                "improvement_claim": "none",
+            },
+        }
+    )
+    report = tools.run(service.context, "viewer", "campaign_report", {"campaign_id": "forge-dddddddd"})
+    assert report["development_baseline"] == 0.88
+    assert [e["promoted"] for e in report["experiments"]] == [False, False]
+    assert report["why"] == (
+        "No experiment beat the original model on development (best 0.83 against 0.88), so none was "
+        "promoted, and the final test compared the original model with itself."
+    )

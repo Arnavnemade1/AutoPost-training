@@ -32,8 +32,33 @@ admin. This works as soon as the lab is running.
 | `tell <id> <instruction>` | Posts in the research room, for the director | Admin |
 | `chat <id>` | Who the research agents have been messaging, and about what | Admin |
 
-These commands cost nothing and work without a model. Anything else, such as "train the maths task on
-word problems", goes to the connected model, which uses the same tools under the same rules.
+**With a model connected** (Azure OpenAI or OpenAI, the research agents' connection or its own,
+below), every message addressed to Hephaestus goes to the model. That includes the commands above, and
+plain requests such as "train the maths task on word problems" or "why wasn't anything kept?". The
+model reads the lab and acts through the same tools, which enforce each person's role and every limit.
+It remembers its last 6 exchanges with that chat (only messages addressed to it, and its replies), so
+follow-ups like "stop that one" work. The memory is saved with its state.
+
+**The commands above are the fallback.** They answer for free when no model is connected, when the
+model is down, and when the day's model calls (`FORGE_HEPHAESTUS_DAILY_CALLS`) are spent.
+
+`campaign_report` gives the model the evidence that decided an outcome:
+- the original model's development score;
+- each experiment's score, governance decision and reasons, and whether it was promoted;
+- a plain `why` line, for example "No experiment beat the original model on development (best 0.83
+  against 0.88), so none was promoted, and the final test compared the original model with itself."
+
+It explains a result from that evidence instead of guessing.
+
+Measured against Azure gpt-6-luna in the private Agent chat:
+- **Status:** "what's running and what can I train?"
+- **Results:** "how did the qwen 3.5 4b run go?", then "so why wasn't anything kept?". It answered
+  with the 0.83 and 0.88 development scores above.
+- **Start:** "start a short run on the math task to get better at word problems with lots of steps".
+  It started campaign `forge-ce3aac4a` with that objective, within its limits.
+- **Stop:** "actually stop that one". It cancelled that campaign.
+
+Each reply took 7 to 10 seconds.
 
 When a campaign it started ends, it reports the result. It says "validated" only when the 95% interval
 is above zero, and says so plainly when a run kept the original model.
