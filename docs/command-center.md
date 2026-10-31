@@ -43,7 +43,7 @@ out of date. Each step is skipped when its inputs are unchanged (recorded in
 
 1. Checks for Node 24 and finds uv. If uv is missing, it asks before installing it.
 2. Runs `npm ci`.
-3. Runs `uv sync --extra advanced --extra modal`, which installs Python 3.12 if needed and the
+3. Runs `uv sync --extra advanced --extra modal --extra superserve`, which installs Python 3.12 if needed and the
    training core as an editable package, so `forge-distill` and the other training-core
    commands work in a fresh clone.
 4. Generates the durable actors client.

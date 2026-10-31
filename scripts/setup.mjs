@@ -156,18 +156,21 @@ if (
 }
 
 // 3. Python, packages and the training core --------------------------------------------------------
-// Modal is small and lets a campaign train on a cloud GPU without another install step.
+// Every optional extra, so Modal GPUs and SuperServe VMs work with no further install step, and so
+// setup never uninstalls one (uv sync removes extras it is not given).
+const EXTRAS = ["advanced", "modal", "superserve"];
 if (
   needed(
     "python",
-    hash("uv.lock", "pyproject.toml", "services/training-core/pyproject.toml"),
+    hash("uv.lock", "pyproject.toml", "services/training-core/pyproject.toml") +
+      EXTRAS.join(","),
   ) ||
   !existsSync(join(ROOT, ".venv/bin/python"))
 ) {
   step(
     "Installing Python 3.12 and Python packages (uv sync), a few minutes the first time",
   );
-  if (!run(uv, ["sync", "--extra", "advanced", "--extra", "modal"]).ok)
+  if (!run(uv, ["sync", ...EXTRAS.flatMap((extra) => ["--extra", extra])]).ok)
     fail(
       "uv sync failed.",
       "read the error above, then run `npm run setup` again.",
