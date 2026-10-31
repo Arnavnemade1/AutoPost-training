@@ -63,7 +63,7 @@ class CampaignConfig(BaseModel):
     dev_samples: int = Field(default=12, ge=4, le=100)
     final_samples: int = Field(default=12, ge=4, le=100)
     seed: int = Field(default=42, ge=0, le=2147483647)
-    strategies: list[Literal["broad_sft", "targeted_sft", "distill_sft", "grpo", "dpo"]] = Field(
+    strategies: list[Literal["broad_sft", "targeted_sft", "distill_sft", "hard_sft", "grpo", "dpo"]] = Field(
         default_factory=lambda: ["broad_sft", "targeted_sft"], min_length=1
     )
     # A teacher dataset prepared for this task pack (teacher distillation).

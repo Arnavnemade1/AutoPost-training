@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from forge_training.config import Example
 from forge_training.data import question_key, verify_separation
-from services.core import agents, compute, distill, packs, production, store, training
+from services.core import agents, compute, distill, hard_examples, packs, production, store, training
 from services.core.director import propose, build_input
 from services.core.briefing import publish
 from services.core.verdict import SUMMARY as VERDICT_SUMMARY, final_verdict
@@ -328,6 +328,7 @@ def run(cid):
             send(cid, "data", "director", "FAILURES_DIAGNOSED", diagnosis["summary"])
         previous = []
         best = None
+        mined = None
         for index in range(config["max_experiments"]):
             if stop():
                 raise InterruptedError("Campaign budget reached or cancellation requested")
@@ -494,6 +495,26 @@ def run(cid):
                     if proposal["strategy"] == "distill_sft":
                         # Teacher solutions replace the references; labeled production failures stay first.
                         rows = [r for r in train_rows if r["id"].startswith("prod-")] + synthetic_rows
+                    elif proposal["strategy"] == "hard_sft":
+                        labeled = [r for r in train_rows if r["id"].startswith("prod-")]
+                        if mined is None:
+                            plain = [r for r in train_rows if not r["id"].startswith("prod-")]
+                            answers = hard_examples.mine(
+                                backend, config, plain, progress("Training questions"), stop, pack
+                            )
+                            mined = hard_examples.build(plain, answers, config["seed"])
+                            summary = {k: v for k, v in mined.items() if k != "rows"}
+                            (folder / "hard-examples.json").write_text(json.dumps(summary, indent=2))
+                            artifact(cid, folder / "hard-examples.json", "dataset", "Hard training questions")
+                            send(
+                                cid,
+                                "data",
+                                "trainer",
+                                "HARD_EXAMPLES_MINED",
+                                f"The base model missed {mined['hard']} of {mined['mined']} training questions. They train on cleaned references; its {mined['easy']} verified answers hold the rest in place.",
+                                expid,
+                            )
+                        rows = labeled + mined["rows"]
                     result = backend.train(proposal, config, rows, adapter, metric, stop, pack=pack)
             except InterruptedError:
                 raise

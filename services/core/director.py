@@ -9,7 +9,7 @@ FOCUS = ("arithmetic", "multi_step", "formatting", "general", "production_failur
 
 class Proposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    strategy: Literal["broad_sft", "targeted_sft", "distill_sft", "grpo", "dpo"]
+    strategy: Literal["broad_sft", "targeted_sft", "distill_sft", "hard_sft", "grpo", "dpo"]
     learning_rate: float = Field(ge=0.00001, le=0.001)
     lora_rank: Literal[8, 16]
     hypothesis: str = Field(min_length=10, max_length=1000)
@@ -112,6 +112,17 @@ def propose(config, development, previous, context=None):
             "strategy": "targeted_sft",
             "hypothesis": f"Production flagged {production['flagged']} of {production['traces']} answers ({kinds}). Train the {production['labeled_training_rows']} labeled production failures first, then check the held-out production failures and development set.",
             "focus": "production_failures",
+        }
+    if "hard_sft" in config["strategies"]:
+        # A second run must differ: back off after a drop, otherwise push harder.
+        scored = [p["score"] for p in previous if p.get("score") is not None]
+        rate = 0.0001 if not scored else 0.00005 if scored[-1] < development["score"] else 0.0002
+        fallback |= {
+            "strategy": "hard_sft",
+            "learning_rate": rate,
+            "lora_rank": 16,
+            "hypothesis": f"{len(failures)} of {development['n']} development answers are incorrect. Train the training questions the base model misses, holding its verified answers in place, at learning rate {rate}.",
+            "focus": "general",
         }
     if fallback["strategy"] not in config["strategies"]:
         fallback["strategy"] = config["strategies"][0]

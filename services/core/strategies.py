@@ -23,6 +23,12 @@ STRATEGIES = {
         "kinds": ("qa", "extraction"),
         "needs": "synthetic_dataset",
     },
+    "hard_sft": {
+        "label": "Hard examples",
+        "director": "hard_sft first measures the base model on the training questions, then trains the ones it misses (cleaned references) mixed with its own verified answers to the rest, with minibatches and a cosine learning rate.",
+        "backends": ("local", "modal"),
+        "kinds": ("qa",),
+    },
     "grpo": {
         "label": "GRPO",
         "director": "grpo runs 8 TRL steps with deterministic Terse rewards and warm-starts the best approved SFT adapter, so its lora_rank MUST match that candidate's.",
