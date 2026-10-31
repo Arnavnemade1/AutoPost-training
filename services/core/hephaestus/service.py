@@ -112,7 +112,8 @@ class Service:
     def read_new(self):
         if "cursor" not in self.state or self.state.get("chat") != self.chat_id:
             # Start from now, in a new chat too: nothing said before Hephaestus joined is acted on.
-            self.state.update(cursor=self.messages.latest(), chat=self.chat_id)
+            # Its memory stays with the old chat too, so one group's words never reach another's calls.
+            self.state.update(cursor=self.messages.latest(), chat=self.chat_id, memory=[])
             self.save()
             return
         for message in self.messages.read(self.chat_id, self.state["cursor"]):

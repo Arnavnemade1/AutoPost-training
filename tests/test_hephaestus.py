@@ -474,6 +474,21 @@ def test_memory_saved_before_roles_were_recorded_only_reaches_the_lowest_role(wo
     assert "stop_training on" not in json.dumps(sent[0]["input"])
 
 
+def test_memory_does_not_follow_it_into_another_chat(world, monkeypatch):
+    service, messages, _ = world
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    post, sent = script_model(text_reply("Noted."), text_reply("Hello."))
+    service.post = post
+    messages.add("@hephaestus PRIVATE plans from the first group", mine=True)
+    service.read_new()
+    moved = Service("any;+;chat999", lab=service.context.lab, messages=messages, post=post, path=service.path)
+    moved.read_new()
+    messages.add("@hephaestus hello", mine=True, chat=2)
+    moved.read_new()
+    assert "PRIVATE" not in json.dumps(sent[1]["input"])
+    assert "PRIVATE" not in service.path.read_text()
+
+
 def test_without_a_model_it_says_what_it_can_do(world):
     service, _, _ = world
     assert "start <task>" in brain.answer(service.context, "operator", "how are things?")
