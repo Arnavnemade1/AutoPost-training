@@ -1,6 +1,6 @@
 # Hephaestus
 
-Hephaestus is a bot in an iMessage group chat. Ask it to train something, and it starts Forge's
+Hephaestus runs Forge's research team for you, from a private conversation in Agent chat or from iMessage. Ask it to train something, and it starts Forge's
 [research agents](agents.md), which propose and run the experiments and spin up subagents as needed.
 It reports the measured result back to the chat.
 
@@ -15,7 +15,10 @@ check the command center has applies, and it opens no port.
 
 ## Talking to it
 
-Start a message with `@hephaestus` or `hephaestus`. Everything else in the chat is ignored.
+**In Agent chat:** open **Hephaestus** at the top of the list. It's just you and the bot, and you're its
+admin. This works as soon as the lab is running.
+
+**In iMessage:** start a message with `@hephaestus` or `hephaestus`. Everything else is ignored.
 
 | Say | What happens | Who |
 | --- | --- | --- |
@@ -24,8 +27,10 @@ Start a message with `@hephaestus` or `hephaestus`. Everything else in the chat 
 | `campaigns` | Recent campaigns and their results | Anyone in the chat |
 | `report <id>` | Measured results of one campaign | Anyone in the chat |
 | `start <task> [what to improve]` | Starts the research agents | Operators |
-| `stop <id>` | Stops a campaign it started | Operators |
+| `stop <id>` | Stops a campaign (operators: only ones it started) | Operators |
 | `azure [name]` | Posts the request for a friend's Azure model | Operators |
+| `tell <id> <instruction>` | Posts in the research room, for the director | Admin |
+| `chat <id>` | Who the research agents have been messaging, and about what | Admin |
 
 These commands cost nothing and work without a model. Anything else, such as "train the maths task on
 word problems", goes to the connected model, which uses the same tools under the same rules.
@@ -33,31 +38,62 @@ word problems", goes to the connected model, which uses the same tools under the
 When a campaign it started ends, it reports the result. It says "validated" only when the 95% interval
 is above zero, and says so plainly when a run kept the original model.
 
-## Setup
+## Admin of the agent chat
 
-1. **Find the group chat.** macOS may ask to let this app control Messages.
-   ```sh
-   .venv/bin/python -m services.core.hephaestus chats
-   ```
+You, as the Mac's owner, are the admin. An admin's Hephaestus can read the research agents' conversations,
+post in the research room and stop any campaign. It's a registered Agent Relay participant, so its posts
+go through the same verified delivery and appear in the room under its own name.
+
+An instruction from `tell` reaches the research director's evidence before its next experiment, and is
+recorded in that experiment's `director_input` artifact. The director weighs it. The local director, used
+when no model is connected, can't act on written instructions, and Hephaestus says so when you post one.
+Each campaign takes up to 5 instructions.
+
+**What admin doesn't include:** approving or promoting a checkpoint, overriding governance, raising a
+budget, changing the objective, or touching sealed test data. No tool does these, for any role. Otherwise
+one bad message could fake a training result.
+
+## Setup in iMessage
+
+1. **Choose where it listens:**
+   - **Just you:** your message-yourself thread needs no second Apple ID. Its id is `any;-;` then your
+     number or Apple ID email.
+   - **A group:** list the ids. macOS may ask to let this app control Messages. Creating a group takes a
+     person pressing Send, since macOS has no way to script it, and needs at least two other people.
+     ```sh
+     .venv/bin/python -m services.core.hephaestus chats
+     ```
 2. **Set it in `.env`:**
    ```sh
-   FORGE_HEPHAESTUS_CHAT=<the id from step 1>
-   FORGE_HEPHAESTUS_OPERATORS=+15551234567,friend@example.com
+   FORGE_HEPHAESTUS_CHAT=<the chat id>
+   # Your own number or email, so your message-yourself thread counts as you.
+   FORGE_HEPHAESTUS_OWNER=+15551234567
+   # Optional, for a group: people who may start training.
+   FORGE_HEPHAESTUS_OPERATORS=+15550001111,friend@example.com
    ```
-   The Mac's own Apple ID is always an operator. Everyone else in the chat can only look.
-3. **Grant Full Disk Access** to the app that runs Hephaestus, such as Terminal, in System Settings →
-   Privacy & Security. Reading the Messages database requires it. This gives that app access to all of
-   your files, not only Messages, so a dedicated user account on the Mac is worth considering.
+   Messages sent from this Mac's Apple ID, and from `FORGE_HEPHAESTUS_OWNER`, are admin. Everyone else can
+   only look.
+3. **Grant Full Disk Access to Terminal, and to nothing else.** Reading the Messages database needs it,
+   and macOS only lets you grant it to a whole app. Open System Settings → Privacy & Security → Full
+   Disk Access and turn on Terminal. Don't grant it to Claude, so an agent working in this repository
+   still can't read your messages. Anything you run in Terminal gets the same access, so turn it off
+   when you aren't running Hephaestus.
+
+   Then, in Terminal, prove it works. This counts messages in the one chat, and reads no text:
+   ```sh
+   .venv/bin/python -m services.core.hephaestus check-access
+   ```
 4. **Run the lab, then Hephaestus:**
    ```sh
    npm run lab
    npm run hephaestus
    ```
+   Run `npm run hephaestus` in Terminal, since that's the app with access. Press Ctrl+C to stop it.
 
 The Mac must stay awake and signed in to Messages. It starts from the newest message, so nothing said
 before it joined is acted on.
 
-**Its name in the chat.** Messages go out through the Mac's Apple ID, so the group sees them as coming
+**Its name in iMessage.** Messages go out through the Mac's Apple ID, so the group sees them as coming
 from that person, and each starts with `⚒️ Hephaestus`. To appear as its own participant, sign the Mac
 (or a dedicated user account on it) in to a separate Apple ID, and add that to the group.
 
@@ -84,7 +120,7 @@ code (`services/core/hephaestus/tools.py`), not by the model:
 From the chat it can run `broad_sft`, `targeted_sft` and `dpo`. GRPO stays in the command center because
 of its memory use. It posts at most 30 messages an hour.
 
-A campaign's final step runs its held-out test subset once, so starting campaigns from the chat uses
+Limits are shared between Agent chat and iMessage. A campaign's final step runs its held-out test subset once, so starting campaigns from the chat uses
 that subset as any other campaign does.
 
 ## Connecting a friend's Azure model
