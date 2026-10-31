@@ -115,6 +115,7 @@ def world(tmp_path, monkeypatch):
         "FORGE_HEPHAESTUS_AZURE_MODEL",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(store, "DATA", tmp_path)
     monkeypatch.setattr(tools, "free_memory_percent", lambda: 80)
     messages, lab = Messages(tmp_path / "chat.db"), FakeLab()
     client = httpx.Client(transport=httpx.MockTransport(lab), base_url="http://127.0.0.1:8000")
@@ -150,6 +151,7 @@ def test_it_reads_only_its_own_chat_and_only_what_is_addressed_to_it(world):
 
 
 def test_messages_from_before_it_joined_are_never_acted_on(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA", tmp_path)
     monkeypatch.setattr(tools, "free_memory_percent", lambda: 80)
     messages, lab = Messages(tmp_path / "chat.db"), FakeLab()
     messages.add("@hephaestus start gsm8k", mine=True)
@@ -225,7 +227,7 @@ def test_only_group_chats_are_listed(monkeypatch):
 
 def test_roles_come_from_apples_sender_identity(monkeypatch):
     monkeypatch.setenv("FORGE_HEPHAESTUS_OPERATORS", "+1 (555) 000-1111, Friend@Example.com")
-    assert role_of({"mine": True, "sender": None}) == "operator"
+    assert role_of({"mine": True, "sender": None}) == "admin"
     assert role_of({"mine": False, "sender": "+15550001111"}) == "operator"
     assert role_of({"mine": False, "sender": "friend@example.com"}) == "operator"
     assert role_of({"mine": False, "sender": "+15559999999"}) == "viewer"
@@ -405,13 +407,17 @@ def test_it_stops_its_campaign_if_memory_runs_short_and_says_so_once(world, monk
     assert "5%" in said(messages)[0]
 
 
-def test_it_only_stops_campaigns_it_started(world):
+def test_an_operator_only_stops_campaigns_it_started_but_an_admin_can_stop_any(world, monkeypatch):
     service, messages, lab = world
+    monkeypatch.setenv("FORGE_HEPHAESTUS_OPERATORS", "+15550001111")
     lab.campaigns.append({"id": "forge-aaaaaaaa", "status": "running", "config": {}})
+    messages.add("@hephaestus stop forge-aaaaaaaa")
+    service.read_new()
+    assert "Only an admin" in said(messages)[0]
+    assert not [r for r in lab.requests if r[1].endswith("/cancel")]
     messages.add("@hephaestus stop forge-aaaaaaaa", mine=True)
     service.read_new()
-    assert "command center" in said(messages)[0]
-    assert not [r for r in lab.requests if r[1].endswith("/cancel")]
+    assert [r for r in lab.requests if r[1] == "/campaigns/forge-aaaaaaaa/cancel"]
 
 
 def test_a_busy_lab_is_reported_as_the_lab_said_it(world):
@@ -593,7 +599,7 @@ def test_a_partly_filled_connection_is_not_used(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("FORGE_HEPHAESTUS_AZURE_ENDPOINT", "https://friend.test/v1")
     monkeypatch.delenv("FORGE_HEPHAESTUS_AZURE_KEY", raising=False)
-    assert brain.own_connection() is None
+    assert tools.own_connection() is None
     assert not brain.connected()
 
 
@@ -617,8 +623,11 @@ def test_read_tools_work_against_the_real_lab_api(tmp_path, monkeypatch):
         tools.run(context, "viewer", "campaign_report", {"campaign_id": "forge-00000000"})
 
 
-def test_what_start_sends_is_a_valid_campaign():
+def test_what_start_sends_is_a_valid_campaign(tmp_path, monkeypatch):
     from services.core.contracts import CampaignConfig
+
+    monkeypatch.setattr(store, "DATA", tmp_path)
+    monkeypatch.setattr(tools, "free_memory_percent", lambda: 80)
 
     lab = FakeLab()
     client = httpx.Client(transport=httpx.MockTransport(lab), base_url="http://127.0.0.1:8000")

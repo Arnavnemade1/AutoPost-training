@@ -31,18 +31,30 @@ def operators():
 
 def role_of(message):
     """Apple's own sender identity decides this. Anything said in a message has no bearing on it."""
-    if message["mine"] or (message["sender"] and _handle(message["sender"]) in operators()):
-        return "operator"
-    return "viewer"
+    if message["mine"]:
+        return "admin"
+    sender = _handle(message["sender"]) if message["sender"] else None
+    return "operator" if sender in operators() else "viewer"
 
 
 class Service:
-    def __init__(self, chat_id, lab=None, messages=imessage, post=None, path=None, clock=time.monotonic):
+    def __init__(
+        self,
+        chat_id,
+        lab=None,
+        messages=imessage,
+        post=None,
+        path=None,
+        clock=time.monotonic,
+        surface="imessage",
+        max_replies_per_hour=MAX_REPLIES_PER_HOUR,
+    ):
         self.chat_id, self.messages, self.clock = chat_id, messages, clock
         self.post = post
         self.path = path or store.DATA / "hephaestus.json"
         self.state = self._load()
-        self.context = SimpleNamespace(lab=lab or tools.Lab(), state=self.state)
+        self.context = SimpleNamespace(lab=lab or tools.Lab(), state=self.state, surface=surface)
+        self.max_replies_per_hour = max_replies_per_hour
         self.last_watch = None
 
     def _load(self):
@@ -60,7 +72,7 @@ class Service:
         """Post to the chat, under the label, within a limit that stops any runaway loop."""
         now = time.time()
         recent = [t for t in self.state.get("replies", []) if now - t < 3600]
-        if len(recent) >= MAX_REPLIES_PER_HOUR:
+        if len(recent) >= self.max_replies_per_hour:
             print("Reply limit reached; not posting.", flush=True)
             return
         self.state["replies"] = [*recent, now]

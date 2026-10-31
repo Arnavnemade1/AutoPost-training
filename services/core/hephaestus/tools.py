@@ -3,8 +3,14 @@
 A group chat is untrusted input and the model can be talked into anything, so a tool an asker's role
 doesn't allow is neither offered to the model nor run if it is called. Reports hold numbers and names
 only: answers, questions and production text never leave the lab through this file.
+
+Admin means running the agent chat: reading it, posting in it, directing the team and stopping any run.
+It doesn't reach what makes a result trustworthy. No tool promotes a checkpoint, overrides governance,
+raises a budget or touches sealed test data.
 """
 
+import fcntl
+import json
 import os
 import re
 import subprocess
@@ -12,8 +18,11 @@ from datetime import UTC, datetime
 
 import httpx
 
+from services.core import store
+
 TERMINAL = {"completed", "cancelled", "failed", "interrupted"}
 STRATEGIES = {"broad_sft", "targeted_sft", "dpo"}
+RANK = {"viewer": 0, "operator": 1, "admin": 2}
 
 
 class ToolError(Exception):
@@ -22,6 +31,43 @@ class ToolError(Exception):
 
 def _limit(name, default):
     return int(os.environ.get(f"FORGE_HEPHAESTUS_{name}") or default)
+
+
+def own_connection():
+    """Hephaestus's own model, if it has one. Set apart from the research agents' connection, whose
+    evidence includes training examples, so a friend's account can serve it without seeing those."""
+    values = [os.environ.get(f"FORGE_HEPHAESTUS_AZURE_{name}") for name in ("ENDPOINT", "KEY", "MODEL")]
+    return values if all(values) else None
+
+
+def _shared(update):
+    """Change the counters every surface shares, under a lock, since iMessage is another process."""
+    path = store.DATA / "hephaestus-limits.json"
+    with open(store.DATA / "hephaestus-limits.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            values = json.loads(path.read_text())
+        except (OSError, ValueError):
+            values = {}
+        result = update(values)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(values))
+        temporary.replace(path)
+    return result
+
+
+def take(name, limit):
+    """Count one use of something limited per day. False once the limit is reached."""
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+
+    def update(values):
+        used = values.get(name, {}).get(day, 0)
+        if used >= limit:
+            return False
+        values[name] = {day: used + 1}
+        return True
+
+    return _shared(update)
 
 
 def free_memory_percent():
@@ -120,17 +166,17 @@ def campaign_report(context, campaign_id):
     return report
 
 
+def is_campaign_id(value):
+    return bool(re.fullmatch(r"forge-[0-9a-f]{8}", str(value)))
+
+
 def _check_id(campaign_id):
-    if not re.fullmatch(r"forge-[0-9a-f]{8}", str(campaign_id)):
+    if not is_campaign_id(campaign_id):
         raise ToolError("That isn't a campaign id.")
 
 
 def start_training(context, task_pack, objective=None, strategies=None, experiments=None, train_steps=None):
     """Start the research agents on a task, inside limits no message can raise."""
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
-    started_today = context.state.setdefault("campaigns_by_day", {}).get(today, 0)
-    if started_today >= _limit("DAILY_CAMPAIGNS", 3):
-        raise ToolError("I've reached today's limit of campaigns (FORGE_HEPHAESTUS_DAILY_CAMPAIGNS).")
     if runs_here():
         free = free_memory_percent()
         if free is not None and free < _limit("MIN_FREE_MEMORY", 35):
@@ -149,8 +195,10 @@ def start_training(context, task_pack, objective=None, strategies=None, experime
         if unknown:
             raise ToolError(f"I can only run {', '.join(sorted(STRATEGIES))} from the chat.")
         config["strategies"] = list(strategies)
+    if not take("campaigns", _limit("DAILY_CAMPAIGNS", 3)):
+        raise ToolError("I've reached today's limit of campaigns (FORGE_HEPHAESTUS_DAILY_CAMPAIGNS).")
     campaign = context.lab.call("POST", "/campaigns", json=config)
-    context.state["campaigns_by_day"] = {today: started_today + 1}
+    _shared(lambda values: values.setdefault("started", []).append(campaign["id"]))
     context.state.setdefault("watching", {})[campaign["id"]] = campaign.get("status", "initialized")
     return {
         "started": campaign["id"],
@@ -158,12 +206,42 @@ def start_training(context, task_pack, objective=None, strategies=None, experime
     }
 
 
-def stop_training(context, campaign_id):
+def stop_training(context, role, campaign_id):
     _check_id(campaign_id)
-    if campaign_id not in context.state.get("watching", {}):
-        raise ToolError("I only stop campaigns I started. Use the command center for others.")
+    started = _shared(lambda values: list(values.get("started", [])))
+    if RANK[role] < RANK["admin"] and campaign_id not in started:
+        raise ToolError("Only an admin can stop a campaign I didn't start.")
     context.lab.call("POST", f"/campaigns/{campaign_id}/cancel")
     return {"stopping": campaign_id}
+
+
+def direct_team(context, campaign_id, instruction):
+    """Post in the research room, as a verified participant. The director reads it before its next
+    experiment. It can steer the research, but gates still decide what counts."""
+    _check_id(campaign_id)
+    return context.lab.call(
+        "POST", f"/campaigns/{campaign_id}/directives", json={"text": str(instruction).strip()[:500]}
+    )
+
+
+def read_agent_chat(context, campaign_id, limit=20):
+    """Who said what to whom. The words themselves can quote training examples, so they stay in the lab
+    unless this is the lab's own screen and the model is the one the research agents already use."""
+    _check_id(campaign_id)
+    events = context.lab.call("GET", f"/campaigns/{campaign_id}/events")
+    with_text = getattr(context, "surface", None) == "agent-chat" and not own_connection()
+    delivered = [e for e in events if e.get("kind") == "message" and e.get("relay_id")]
+    return [
+        {
+            "from": e.get("agent"),
+            "to": e.get("recipient"),
+            "category": e.get("category"),
+            "where": e.get("route"),
+            "experiment": e.get("experiment_id"),
+            **({"text": str(e.get("text"))[:400]} if with_text else {}),
+        }
+        for e in delivered[-max(1, min(int(limit), 40)) :]
+    ]
 
 
 def request_azure_link(context, recipient=None):
@@ -191,13 +269,18 @@ ID_ARG = {
     "additionalProperties": False,
 }
 TOOLS = {
-    "lab_status": (lab_status, False, "Whether a campaign is running, and the Mac's free memory.", NO_ARGS),
-    "list_tasks": (list_tasks, False, "The tasks that can be trained.", NO_ARGS),
-    "list_campaigns": (list_campaigns, False, "The most recent campaigns and their results.", NO_ARGS),
-    "campaign_report": (campaign_report, False, "Measured results of one campaign.", ID_ARG),
+    "lab_status": (
+        lab_status,
+        "viewer",
+        "Whether a campaign is running, and the Mac's free memory.",
+        NO_ARGS,
+    ),
+    "list_tasks": (list_tasks, "viewer", "The tasks that can be trained.", NO_ARGS),
+    "list_campaigns": (list_campaigns, "viewer", "The most recent campaigns and their results.", NO_ARGS),
+    "campaign_report": (campaign_report, "viewer", "Measured results of one campaign.", ID_ARG),
     "start_training": (
         start_training,
-        True,
+        "operator",
         "Start the research agents on a task. They choose and run experiments; gates decide the outcome.",
         {
             "type": "object",
@@ -212,10 +295,10 @@ TOOLS = {
             "additionalProperties": False,
         },
     ),
-    "stop_training": (stop_training, True, "Stop a campaign you started.", ID_ARG),
+    "stop_training": (stop_training, "operator", "Stop a running campaign.", ID_ARG),
     "request_azure_link": (
         request_azure_link,
-        True,
+        "operator",
         "Get the request asking a friend to connect their Azure model.",
         {
             "type": "object",
@@ -223,11 +306,35 @@ TOOLS = {
             "additionalProperties": False,
         },
     ),
+    "direct_team": (
+        direct_team,
+        "admin",
+        "Post an instruction in a running campaign's research room. The research director reads it "
+        "before its next experiment. It can't change gates, budgets or the objective.",
+        {
+            "type": "object",
+            "properties": {"campaign_id": {"type": "string"}, "instruction": {"type": "string"}},
+            "required": ["campaign_id", "instruction"],
+            "additionalProperties": False,
+        },
+    ),
+    "read_agent_chat": (
+        read_agent_chat,
+        "admin",
+        "See the latest messages between the research agents in a campaign.",
+        {
+            "type": "object",
+            "properties": {"campaign_id": {"type": "string"}, "limit": {"type": "integer"}},
+            "required": ["campaign_id"],
+            "additionalProperties": False,
+        },
+    ),
 }
+ROLE_AWARE = {"stop_training"}
 
 
 def allowed(role):
-    return [name for name, tool in TOOLS.items() if role == "operator" or not tool[1]]
+    return [name for name, tool in TOOLS.items() if RANK[role] >= RANK[tool[1]]]
 
 
 def run(context, role, name, arguments):
@@ -235,8 +342,10 @@ def run(context, role, name, arguments):
     if name not in TOOLS:
         raise ToolError(f"I have no tool called {name}.")
     if name not in allowed(role):
-        raise ToolError("Only an operator can do that.")
+        raise ToolError(f"Only an {TOOLS[name][1]} can do that.")
     try:
+        if name in ROLE_AWARE:
+            return TOOLS[name][0](context, role, **arguments)
         return TOOLS[name][0](context, **arguments)
     except (TypeError, ValueError) as error:
         raise ToolError(f"Those aren't valid details for {name}.") from error

@@ -7,7 +7,6 @@ never the rest of the group's conversation.
 import json
 import os
 import re
-from datetime import UTC, datetime
 
 import httpx
 
@@ -19,7 +18,7 @@ MAX_ROUNDS = 6
 MAX_REPLY = 1500
 HELP = (
     "I run the research agents on training tasks. Say: status, tasks, campaigns, report <id>, "
-    "start <task> [what to improve], stop <id>, azure [name]."
+    "start <task> [what to improve], stop <id>, tell <id> <instruction>, chat <id>, azure [name]."
 )
 INSTRUCTIONS = (
     "You are Hephaestus, who manages Forge's research agents from an iMessage group chat. Use your tools to "
@@ -30,28 +29,21 @@ INSTRUCTIONS = (
 )
 
 
-def own_connection():
-    """Hephaestus's own model, if it has one. Set apart from the research agents' connection, whose
-    evidence includes training examples, so a friend's account can serve it without seeing those."""
-    values = [os.environ.get(f"FORGE_HEPHAESTUS_AZURE_{name}") for name in ("ENDPOINT", "KEY", "MODEL")]
-    return values if all(values) else None
-
-
 def connected():
-    return bool(own_connection()) or agents.configured()
+    return bool(tools.own_connection()) or agents.configured()
 
 
 def model_name():
-    own = own_connection()
+    own = tools.own_connection()
     return own[2] if own else agents.model("hephaestus")
 
 
 def provider():
-    return "Its own Azure connection" if own_connection() else agents.provider()
+    return "Its own Azure connection" if tools.own_connection() else agents.provider()
 
 
 def call_model(payload):
-    own = own_connection()
+    own = tools.own_connection()
     if not own:
         return agents._post(payload)
     endpoint, key, _ = own
@@ -119,11 +111,27 @@ def command(context, role, text):
         return _tasks(tools.run(context, role, "list_tasks", {}))
     if verb == "campaigns" and len(words) == 1:
         return _campaigns(tools.run(context, role, "list_campaigns", {}))
-    if verb == "report" and len(words) == 2:
+    # Anything without a campaign id is a request in words, for the model to read.
+    named = len(words) >= 2 and tools.is_campaign_id(words[1])
+    if verb == "report" and len(words) == 2 and named:
         return _report(tools.run(context, role, "campaign_report", {"campaign_id": words[1]}))
-    if verb == "stop" and len(words) == 2:
+    if verb == "stop" and len(words) == 2 and named:
         tools.run(context, role, "stop_training", {"campaign_id": words[1]})
         return f"Stopping {words[1]}. It finishes at the next safe point."
+    if verb == "tell" and len(words) >= 3 and named:
+        instruction = text.split(None, 2)[2]
+        told = tools.run(context, role, "direct_team", {"campaign_id": words[1], "instruction": instruction})
+        return (
+            f"Posted in the research room for {words[1]}. The director reads it before its next experiment."
+            if told["read_by_model"]
+            else f"Posted in the research room for {words[1]}, but no model is connected, "
+            "so the local director can't act on written instructions."
+        )
+    if verb == "chat" and len(words) == 2 and named:
+        rows = tools.run(context, role, "read_agent_chat", {"campaign_id": words[1], "limit": 8})
+        return (
+            "\n".join(f"{r['from']} to {r['to'] or 'room'}: {r['category']}" for r in rows) or "Nothing yet."
+        )
     if verb == "azure" and len(words) <= 3:
         return tools.run(context, role, "request_azure_link", {"recipient": rest or None})[
             "post_this_exactly"
@@ -139,14 +147,8 @@ def command(context, role, text):
     return None
 
 
-def _spend(context):
-    """Count one model call against today's limit. False once the limit is reached."""
-    day = datetime.now(UTC).strftime("%Y-%m-%d")
-    used = context.state.setdefault("model_calls", {}).get(day, 0)
-    if used >= int(os.environ.get("FORGE_HEPHAESTUS_DAILY_CALLS") or 200):
-        return False
-    context.state["model_calls"] = {day: used + 1}
-    return True
+def _spend():
+    return tools.take("model_calls", int(os.environ.get("FORGE_HEPHAESTUS_DAILY_CALLS") or 200))
 
 
 def think(context, role, text, post=call_model):
@@ -159,7 +161,7 @@ def think(context, role, text, post=call_model):
         "tools": tools.definitions(role),
     }
     for _round in range(MAX_ROUNDS):
-        if not _spend(context):
+        if not _spend():
             return f"I've reached today's limit of model calls. {HELP}"
         raw = post(payload)
         calls = [o for o in raw.get("output", []) if o.get("type") == "function_call"]
