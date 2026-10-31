@@ -72,6 +72,7 @@ so the release gate refused it ([record](docs/verification/azure-cpu-campaign.md
 - [Teacher distillation](docs/distillation.md)
 - [Preference alignment (DPO)](docs/preference-alignment.md)
 - [Production overseer](docs/overseer.md)
+- [Hephaestus, the iMessage group chat bot](docs/hephaestus.md)
 - [Research agents and subagents](docs/agents.md)
 - [Any-task, distillation, DPO and overseer verification](docs/verification/any-task-local.md)
 - [Training on a Modal H100](docs/remote-gpu.md)

@@ -14,6 +14,7 @@
     "test": ".venv/bin/python -m pytest tests -q",
     "lab": ".venv/bin/python scripts/lab.py",
     "harness": ".venv/bin/python -m services.harness",
+    "hephaestus": ".venv/bin/python -m services.core.hephaestus run",
     "format:check": "prettier --check 'app/**/*.{ts,tsx,css}' 'components/**/*.{ts,tsx}' 'lib/**/*.ts' next.config.ts"
   },
   "dependencies": {
